@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.layout.NodeSeparationProjectionShould" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:59:03.494Z" hostname="Arch-MSSD0" time="0.005">
+  <properties/>
+  <testcase name="reportsTheGapPredicateKeysAndMatchesTheProjectedResidualCount" classname="org.freeplane.plugin.graph.layout.NodeSeparationProjectionShould" time="0.001"/>
+  <testcase name="rejectsNonFiniteInputCoordinates" classname="org.freeplane.plugin.graph.layout.NodeSeparationProjectionShould" time="0.001"/>
+  <testcase name="delegateTheUnboundedPredicateToTheCountedVariant" classname="org.freeplane.plugin.graph.layout.NodeSeparationProjectionShould" time="0.0"/>
+  <testcase name="leavesPinnedPinnedOverlapUntouchedAndCounted" classname="org.freeplane.plugin.graph.layout.NodeSeparationProjectionShould" time="0.0"/>
+  <testcase name="ignoresPinnedKeysThatAreNotInThePositions" classname="org.freeplane.plugin.graph.layout.NodeSeparationProjectionShould" time="0.0"/>
+  <testcase name="returnsAlreadySatisfiedProminentPositionsUnchanged" classname="org.freeplane.plugin.graph.layout.NodeSeparationProjectionShould" time="0.001"/>
+  <testcase name="separatesTwoProminentNodesAndClearsTheResidual" classname="org.freeplane.plugin.graph.layout.NodeSeparationProjectionShould" time="0.0"/>
+  <testcase name="convergesASolvablePairToTheMinimumDistance" classname="org.freeplane.plugin.graph.layout.NodeSeparationProjectionShould" time="0.0"/>
+  <testcase name="countTheViolatingPairsAgainstThePairBudget" classname="org.freeplane.plugin.graph.layout.NodeSeparationProjectionShould" time="0.001"/>
+  <testcase name="copiesAnchorsThroughUnchanged" classname="org.freeplane.plugin.graph.layout.NodeSeparationProjectionShould" time="0.0"/>
+  <testcase name="reportsTheNonConvergingSandwichAtThePassCap" classname="org.freeplane.plugin.graph.layout.NodeSeparationProjectionShould" time="0.001"/>
+  <testcase name="separatesCoincidentParticlesDeterministically" classname="org.freeplane.plugin.graph.layout.NodeSeparationProjectionShould" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

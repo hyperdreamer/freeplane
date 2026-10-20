@@ -1,0 +1,303 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" tests="49" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:26.027Z" hostname="Arch-MSSD0" time="0.855">
+  <properties/>
+  <testcase name="reloadsOneCleanManagerOwnedViewlessModelAfterAnExternalChange" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.173"/>
+  <testcase name="coalescesConcurrentLoadsAndReusesTheCanonicalViewlessModel" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.009"/>
+  <testcase name="keepsTheDirtyModelWhenALoadingListenerDirtiesItDuringExternalReload" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.007"/>
+  <testcase name="keepsTheOtherCoalescedAcquireWhenOnePendingAcquireIsCancelled" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.006"/>
+  <testcase name="removesAllListenersAndPendingChecksOnCloseAndNeverPublishesAfterward" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.007"/>
+  <testcase name="rejectsAReentrantAcquireWhenManagerCloseWinsDuringSettlement" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.007"/>
+  <testcase name="serializesModelNullRetryWithLeaseDelivery" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.011"/>
+  <testcase name="keepsAnEditorVisibleManagerOwnedModelAndReportsReloadRequired" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.004"/>
+  <testcase name="loadsTheRealFixtureThroughMapLoaderOnTheSuppliedEdtWithoutCreatingAView" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.115"/>
+  <testcase name="completesExternalReloadCallbackCloseWithoutBlockingTheDetectingEdt" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.014"/>
+  <testcase name="retriesDeferredExternalReloadWhenRetrySchedulerRejects" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.013"/>
+  <testcase name="doesNotCancelAPendingAcquireWhenReleaseIsCalledBeforeItsLeaseIsReturned" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.005"/>
+  <testcase name="ordersListenerEventsAndAllowsSelfRemovalWithoutBlockingOtherListeners" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.005"/>
+  <testcase name="completesExceptionalPendingFutureCallbacksOutsideTheManagerMonitor" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.006"/>
+  <testcase name="removesNodeChangeListenerOnClose" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.004"/>
+  <testcase name="completesAReentrantAcquireWhenTheLastLeaseIsReleasedDuringExternalReload" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.006"/>
+  <testcase name="reusesAVisibleCleanEditorModelAsAuthoritativeAndNeverReplacesIt" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.005"/>
+  <testcase name="retriesDeferredExternalReloadAfterATransientEdtDrainRejection" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.006"/>
+  <testcase name="revalidatesDeferredExternalReloadBeforeAdvancingGeneration" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.007"/>
+  <testcase name="cancelsAnInFlightAcquireWhenTheManagerCloses" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.004"/>
+  <testcase name="publishesLoadingThenMissingAndStillReturnsARecoverableLease" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.005"/>
+  <testcase name="ignoresDeferredExternalReloadWhenCloseFollowsRetrySchedulerRejection" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.015"/>
+  <testcase name="checksExternalChangesThroughTheScheduledPath" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.152"/>
+  <testcase name="retriesDeferredLifecycleRemovalAfterATransientEdtDrainRejection" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.007"/>
+  <testcase name="publishesPasswordRequiredWithoutPromptingWhenTheLoadedRootIsLocked" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.004"/>
+  <testcase name="keepsDirtyManagerOwnedModelAndReportsReloadRequiredInsteadOfClosingIt" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.003"/>
+  <testcase name="doesNotCloseTheModelWhenALoadingListenerClosesTheManagerDuringExternalReload" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.005"/>
+  <testcase name="ignoresNodeChangesForUnleasedAndInactiveModels" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.005"/>
+  <testcase name="schedulesDeferredLifecycleOnlyAfterTheOutermostSettlementRelease" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.007"/>
+  <testcase name="retriesDeferredDrainAfterRepeatedRetrySchedulerRejectionsWithoutRecursion" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.01"/>
+  <testcase name="preservesMixedDeferredOperationsWhenRetriedDrainMeetsRenewedSettlementContention" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.015"/>
+  <testcase name="serializesExternalReloadWithImmediateLeaseDelivery" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.005"/>
+  <testcase name="keepsAnUnsavedEditorModelAsAuthoritativeAndNeverReplacesIt" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.003"/>
+  <testcase name="rebasesRelativeMapResolutionAfterTheWorkspaceMoves" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.005"/>
+  <testcase name="schedulesDeferredLifecycleAfterTheSettlementOwnerReleasesBeforeRegistration" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.01"/>
+  <testcase name="completesLifecycleCallbackCloseWithoutBlockingTheDetectingEdt" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.009"/>
+  <testcase name="serializesLifecycleInvalidationWithImmediateLeaseDelivery" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.007"/>
+  <testcase name="keepsTheEditorVisibleModelWhenALoadingListenerOpensItDuringExternalReload" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.004"/>
+  <testcase name="discardsTheQueuedLoadWhenItsOnlyPendingAcquireIsCancelled" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.004"/>
+  <testcase name="releasesEachIndependentLeaseAndDetachesTheFinalModelListenerWithoutClosingTheMap" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.003"/>
+  <testcase name="rollsBackTheReservedLeaseCountWhenCompletionLosesToCancellation" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.004"/>
+  <testcase name="doesNotCloseTheModelWhenALoadingListenerReleasesTheLastLeaseDuringExternalReload" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.005"/>
+  <testcase name="rollsBackAnImmediateAcquireInvalidatedWhileWaitingForSettlement" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.011"/>
+  <testcase name="ignoresDeferredExternalReloadWhenCloseFollowsARejectedDrainSubmission" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.008"/>
+  <testcase name="completesPendingFutureCallbacksOutsideTheManagerMonitor" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.005"/>
+  <testcase name="reacquiresViewlesslyAfterTheLastEditorViewCloses" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.005"/>
+  <testcase name="retriesDeferredLifecycleRemovalWhenRetrySchedulerRejects" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.108"/>
+  <testcase name="publishesLoadingThenUnreadableForAReadableFileThatCannotBeParsed" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.006"/>
+  <testcase name="publishesAdapterEventForNodeChangesOnLeasedModels" classname="org.freeplane.plugin.graph.adapter.MapLeaseManagerShould" time="0.006"/>
+  <system-out><![CDATA[Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils info
+INFO: Loaded properties from file:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane_plugin_graph/build/resources/test/freeplane.properties
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils info
+INFO: Loaded properties from jar:file:/data/home/henry-arch/.local/state/pi/project-manager/worktrees/0233ff88d3cc54bbd61550c61fa917d6e2a5717f8a03be4e9aa63dcd47dd1cfa/pm-run-20261020-041612-a868d395/lanes/spacing/epoch-2/attempt-3/freeplane/build/libs/freeplane-1.13.4.jar!/org/freeplane/main/application/
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils info
+INFO: language resources for en found
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils info
+INFO: freeplane_version = 1.13.4; freeplane_xml_version = freeplane 1.12.15
+java_version = 21.0.8; os_name = Linux; os_version = 6.18.57-1-lts
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils warn
+WARNING: Exception in org.freeplane.core.ui.components.OneTouchCollapseResizer.setExpanded(enabled): java.lang.RuntimeException: Method not implemented
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils warn
+WARNING: 
+java.io.FileNotFoundException: /data/home/henry-arch/.freeplane/1.12.x/templates/standard-1.6.mm (No such file or directory)
+	at java.base/java.io.FileInputStream.open0(Native Method)
+	at java.base/java.io.FileInputStream.open(FileInputStream.java:213)
+	at java.base/java.io.FileInputStream.<init>(FileInputStream.java:152)
+	at java.base/java.io.FileInputStream.<init>(FileInputStream.java:106)
+	at java.base/sun.net.www.protocol.file.FileURLConnection.connect(FileURLConnection.java:84)
+	at java.base/sun.net.www.protocol.file.FileURLConnection.getInputStream(FileURLConnection.java:186)
+	at java.base/java.net.URL.openStream(URL.java:1325)
+	at org.freeplane.features.url.UrlManager.load(UrlManager.java:269)
+	at org.freeplane.features.styles.MapStyle.createDefaultStyleMap(MapStyle.java:557)
+	at org.freeplane.features.styles.MapStyle.onCreate(MapStyle.java:547)
+	at org.freeplane.features.map.MapController.fireMapCreated(MapController.java:712)
+	at org.freeplane.features.url.mindmapmode.MapLoader.loadMap(MapLoader.java:259)
+	at org.freeplane.features.url.mindmapmode.MapLoader.getMap(MapLoader.java:134)
+	at org.freeplane.plugin.graph.adapter.MapLeaseManagerShould.lambda$loadsTheRealFixtureThroughMapLoaderOnTheSuppliedEdtWithoutCreatingAView$100(MapLeaseManagerShould.java:1780)
+	at org.freeplane.plugin.graph.adapter.MapLeaseManager.loadOnEdt(MapLeaseManager.java:1050)
+	at org.freeplane.plugin.graph.adapter.MapLeaseManager.access$4700(MapLeaseManager.java:47)
+	at org.freeplane.plugin.graph.adapter.MapLeaseManager$14.run(MapLeaseManager.java:1262)
+	at org.freeplane.plugin.graph.adapter.MapLeaseManagerShould$TestEdt.lambda$runAll$0(MapLeaseManagerShould.java:3108)
+	at org.freeplane.plugin.graph.adapter.MapLeaseManagerShould$TestEdt.call(MapLeaseManagerShould.java:3054)
+	at org.freeplane.plugin.graph.adapter.MapLeaseManagerShould$TestEdt.runAll(MapLeaseManagerShould.java:3107)
+	at org.freeplane.plugin.graph.adapter.MapLeaseManagerShould$TestEdt.access$300(MapLeaseManagerShould.java:3038)
+	at org.freeplane.plugin.graph.adapter.MapLeaseManagerShould.acquire(MapLeaseManagerShould.java:2647)
+	at org.freeplane.plugin.graph.adapter.MapLeaseManagerShould.loadsTheRealFixtureThroughMapLoaderOnTheSuppliedEdtWithoutCreatingAView(MapLeaseManagerShould.java:1784)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.rules.ExternalResource$1.evaluate(ExternalResource.java:54)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.gradle.api.internal.tasks.testing.junit.JUnitTestClassExecutor.runTestClass(JUnitTestClassExecutor.java:122)
+	at org.gradle.api.internal.tasks.testing.junit.JUnitTestClassExecutor.execute(JUnitTestClassExecutor.java:68)
+	at org.gradle.api.internal.tasks.testing.junit.JUnitTestClassExecutor.execute(JUnitTestClassExecutor.java:43)
+	at org.gradle.api.internal.tasks.testing.junit.AbstractJUnitTestClassProcessor.processTestClass(AbstractJUnitTestClassProcessor.java:61)
+	at org.gradle.api.internal.tasks.testing.SuiteTestClassProcessor.processTestClass(SuiteTestClassProcessor.java:54)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:36)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:24)
+	at org.gradle.internal.dispatch.ContextClassLoaderDispatch.dispatch(ContextClassLoaderDispatch.java:33)
+	at org.gradle.internal.dispatch.ProxyDispatchAdapter$DispatchingInvocationHandler.invoke(ProxyDispatchAdapter.java:92)
+	at jdk.proxy1/jdk.proxy1.$Proxy4.processTestClass(Unknown Source)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker$2.run(TestWorker.java:183)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.executeAndMaintainThreadName(TestWorker.java:132)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:103)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:63)
+	at org.gradle.process.internal.worker.child.ActionExecutionWorker.execute(ActionExecutionWorker.java:56)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:122)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74)
+
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils warn
+WARNING: Errors in default map template /data/home/henry-arch/.freeplane/1.12.x/templates/standard-1.6.mm. Try to remove this file.
+]]></system-out>
+  <system-err><![CDATA[User properties not found, new file created
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/editcut.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/editpaste.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/copy_id.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/NewSiblingAction.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/NewChild.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/NewSummary.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/editdelete.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/fileopen.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/new_map_.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/filesave.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/filesaveas.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/remove_first_icon.svg'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/remove_last_icon.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/remove_icon_if_exists.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/AutomaticEdgeColorHookAction.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/Cloud24.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/Colors24.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/EditNoteInDialogAction.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/RemoveNoteAction.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/edit_node.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/edit_long_node.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/edit_details.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/EditDetailsInDialogAction.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/DeleteDetailsAction.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/SetLinkByTextFieldAction.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/AddMenuItemLinkAction.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/ExtractLinkFromTextAction.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/addConnectorStyle.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/Bold16.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/uline.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/StrikeThrough.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/Italic16.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/colorpicker.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/algnLft16.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/algnCtr16.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/algnRt16.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/leftToRight.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/rightToLeft.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/IncreaseNodeFontAction.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/DecreaseNodeFontAction.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/NodeColorBlendAction.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/NodeBackgroundColorAction.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/newUserStyleFromSelection.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/manageMapConditionalStyle.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/manageNodeConditionalStyle.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/MapBackgroundImageAction.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/MapBackgroundImageSize.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/AssignAttributesAction.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/EditAttributesAction.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/export.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: 
+java.lang.NullPointerException: Cannot invoke "java.net.URL.openStream()" because "resource" is null
+	at org.freeplane.features.export.mindmapmode.ExportController.createXSLTExportActions(ExportController.java:91)
+	at org.freeplane.features.export.mindmapmode.ExportController.<init>(ExportController.java:64)
+	at org.freeplane.main.headlessmode.HeadlessMModeControllerFactory.createStandardControllers(HeadlessMModeControllerFactory.java:145)
+	at org.freeplane.main.headlessmode.HeadlessMModeControllerFactory.createModeControllerImpl(HeadlessMModeControllerFactory.java:109)
+	at org.freeplane.main.headlessmode.HeadlessMModeControllerFactory.createModeController(HeadlessMModeControllerFactory.java:79)
+	at org.freeplane.main.headlessmode.FreeplaneHeadlessStarter.createModeControllers(FreeplaneHeadlessStarter.java:104)
+	at org.freeplane.plugin.graph.adapter.MapLeaseManagerShould.loadsTheRealFixtureThroughMapLoaderOnTheSuppliedEdtWithoutCreatingAView(MapLeaseManagerShould.java:1763)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.rules.ExternalResource$1.evaluate(ExternalResource.java:54)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.gradle.api.internal.tasks.testing.junit.JUnitTestClassExecutor.runTestClass(JUnitTestClassExecutor.java:122)
+	at org.gradle.api.internal.tasks.testing.junit.JUnitTestClassExecutor.execute(JUnitTestClassExecutor.java:68)
+	at org.gradle.api.internal.tasks.testing.junit.JUnitTestClassExecutor.execute(JUnitTestClassExecutor.java:43)
+	at org.gradle.api.internal.tasks.testing.junit.AbstractJUnitTestClassProcessor.processTestClass(AbstractJUnitTestClassProcessor.java:61)
+	at org.gradle.api.internal.tasks.testing.SuiteTestClassProcessor.processTestClass(SuiteTestClassProcessor.java:54)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:36)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:24)
+	at org.gradle.internal.dispatch.ContextClassLoaderDispatch.dispatch(ContextClassLoaderDispatch.java:33)
+	at org.gradle.internal.dispatch.ProxyDispatchAdapter$DispatchingInvocationHandler.invoke(ProxyDispatchAdapter.java:92)
+	at jdk.proxy1/jdk.proxy1.$Proxy4.processTestClass(Unknown Source)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker$2.run(TestWorker.java:183)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.executeAndMaintainThreadName(TestWorker.java:132)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:103)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:63)
+	at org.gradle.process.internal.worker.child.ActionExecutionWorker.execute(ActionExecutionWorker.java:56)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:122)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74)
+
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/RevisionPluginAction.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/IconIntersectionHierarchy.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/IconUnionHierarchyAction.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/xeyes.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/RemoveEncryption.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/MoveTo_PrevNode.svg?useAccentColor=true'
+Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: can not load icon '/images/MoveTo_NextNode.svg?useAccentColor=true'
+]]></system-err>
+</testsuite>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.window.OpenGraphWorkspaceActionShould" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:49.419Z" hostname="Arch-MSSD0" time="0.025">
+  <properties/>
+  <testcase name="reportsAndFallsBackWhenTheRecentOpenThrowsGraphWorkspaceOpenException" classname="org.freeplane.plugin.graph.window.OpenGraphWorkspaceActionShould" time="0.009"/>
+  <testcase name="constructsWithTheLazyDefaultMessageSink" classname="org.freeplane.plugin.graph.window.OpenGraphWorkspaceActionShould" time="0.002"/>
+  <testcase name="reportsAndFallsBackWhenTheRecentOpenThrowsIllegalArgumentException" classname="org.freeplane.plugin.graph.window.OpenGraphWorkspaceActionShould" time="0.004"/>
+  <testcase name="fallsThroughToTheNextExistingEntryWhenTheNewestIsMissing" classname="org.freeplane.plugin.graph.window.OpenGraphWorkspaceActionShould" time="0.003"/>
+  <testcase name="fallsBackToTheChooserWhenNoStoredEntryIsUsable" classname="org.freeplane.plugin.graph.window.OpenGraphWorkspaceActionShould" time="0.002"/>
+  <testcase name="opensTheMostRecentExistingEntryWithOpenExisting" classname="org.freeplane.plugin.graph.window.OpenGraphWorkspaceActionShould" time="0.001"/>
+  <testcase name="reportsAndFallsBackWhenTheRecentOpenThrowsIllegalStateException" classname="org.freeplane.plugin.graph.window.OpenGraphWorkspaceActionShould" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

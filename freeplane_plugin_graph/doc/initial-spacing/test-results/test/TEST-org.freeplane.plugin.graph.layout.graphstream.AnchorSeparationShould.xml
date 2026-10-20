@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.layout.graphstream.AnchorSeparationShould" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:04:02.809Z" hostname="Arch-MSSD0" time="0.003">
+  <properties/>
+  <testcase name="configuredExtentsUseTheNegativeFootprintAnchorOffset" classname="org.freeplane.plugin.graph.layout.graphstream.AnchorSeparationShould" time="0.002"/>
+  <testcase name="displacementFollowsTheBoxCentresNotTheAnchorsAlongX" classname="org.freeplane.plugin.graph.layout.graphstream.AnchorSeparationShould" time="0.0"/>
+  <testcase name="displacementFollowsTheBoxCentresNotTheAnchorsAlongY" classname="org.freeplane.plugin.graph.layout.graphstream.AnchorSeparationShould" time="0.0"/>
+  <testcase name="packedPositionsProduceNoSeparationDisplacement" classname="org.freeplane.plugin.graph.layout.graphstream.AnchorSeparationShould" time="0.001"/>
+  <testcase name="packedPairWithPositiveForceGapProducesNoDisplacement" classname="org.freeplane.plugin.graph.layout.graphstream.AnchorSeparationShould" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

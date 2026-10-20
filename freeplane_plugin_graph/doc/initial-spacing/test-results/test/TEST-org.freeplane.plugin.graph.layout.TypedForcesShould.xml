@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.layout.TypedForcesShould" tests="16" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:59:03.506Z" hostname="Arch-MSSD0" time="299.301">
+  <properties/>
+  <testcase name="nativeRepulsionDisplacementsSumToZeroWithoutDrift" classname="org.freeplane.plugin.graph.layout.TypedForcesShould" time="0.001"/>
+  <testcase name="aTopologyChangeDoesNotTeleportRetainedParticles" classname="org.freeplane.plugin.graph.layout.TypedForcesShould" time="0.002"/>
+  <testcase name="acceptRelationshipAndHierarchyEdgesBetweenTheSameAnchors" classname="org.freeplane.plugin.graph.layout.TypedForcesShould" time="0.002"/>
+  <testcase name="returnToBaselineCoverageAfterOneHundredAddRemoveCycles" classname="org.freeplane.plugin.graph.layout.TypedForcesShould" time="0.034"/>
+  <testcase name="settleRelationshipFreeNestedBoundaryProjectionToIdle" classname="org.freeplane.plugin.graph.layout.TypedForcesShould" time="0.48"/>
+  <testcase name="twoMapWorkspaceSettlesToIdle" classname="org.freeplane.plugin.graph.layout.TypedForcesShould" time="298.485"/>
+  <testcase name="firstStepDoesNotTeleportSeededParticlesOntoTheirNeighbours" classname="org.freeplane.plugin.graph.layout.TypedForcesShould" time="0.001"/>
+  <testcase name="observeDirectNodeContainmentInfluenceOnEnclosureAnchorCoordinates" classname="org.freeplane.plugin.graph.layout.TypedForcesShould" time="0.001"/>
+  <testcase name="largerWorkspacesSeedWiderThanTheMinimumSpread" classname="org.freeplane.plugin.graph.layout.TypedForcesShould" time="0.289"/>
+  <testcase name="capAggregateCrossMapFanOutDisplacementOncePerParticle" classname="org.freeplane.plugin.graph.layout.TypedForcesShould" time="0.002"/>
+  <testcase name="hierarchyAnchorsSeedOnTheGroupRing" classname="org.freeplane.plugin.graph.layout.TypedForcesShould" time="0.0"/>
+  <testcase name="retainHierarchyAnchorsAcrossSteps" classname="org.freeplane.plugin.graph.layout.TypedForcesShould" time="0.001"/>
+  <testcase name="hierarchyLinksPullNestedAnchorsTowardTheHierarchyRestLength" classname="org.freeplane.plugin.graph.layout.TypedForcesShould" time="0.002"/>
+  <testcase name="exposeEveryEnclosureAnchor" classname="org.freeplane.plugin.graph.layout.TypedForcesShould" time="0.0"/>
+  <testcase name="smallWorkspaceInitialPositionsAreNotCollapsedIntoTheOrigin" classname="org.freeplane.plugin.graph.layout.TypedForcesShould" time="0.001"/>
+  <testcase name="produceIdenticalFramesForEqualRequests" classname="org.freeplane.plugin.graph.layout.TypedForcesShould" time="0.0"/>
+  <system-out><![CDATA[FIRST_IDLE_REGRESSION false 37 474397719
+FIRST_IDLE_REGRESSION true 3455 287745008061
+largerWorkspacesSeedWiderThanTheMinimumSpread packedSpread=28520.0 seededSpread=28520.0
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.adapter.AdapterArchitectureShould" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:19.771Z" hostname="Arch-MSSD0" time="4.397">
+  <properties/>
+  <testcase name="pureGraphPackagesDoNotDependOnMutableFreeplaneTypes" classname="org.freeplane.plugin.graph.adapter.AdapterArchitectureShould" time="4.234"/>
+  <testcase name="productionCodeDoesNotUseFlatLookupIdentityCreationOrConvenienceTargets" classname="org.freeplane.plugin.graph.adapter.AdapterArchitectureShould" time="0.163"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[SLF4J(W): No SLF4J providers were found.
+SLF4J(W): Defaulting to no-operation (NOP) logger implementation
+SLF4J(W): See https://www.slf4j.org/codes.html#noProviders for further details.
+]]></system-err>
+</testsuite>

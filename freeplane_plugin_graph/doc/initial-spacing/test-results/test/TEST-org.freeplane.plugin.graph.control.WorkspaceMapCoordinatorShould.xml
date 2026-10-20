@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.control.WorkspaceMapCoordinatorShould" tests="19" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:38.205Z" hostname="Arch-MSSD0" time="0.194">
+  <properties/>
+  <testcase name="closeReleasesListenersAndLeasesWithoutFurtherCallbacks" classname="org.freeplane.plugin.graph.control.WorkspaceMapCoordinatorShould" time="0.006"/>
+  <testcase name="documentChangeClosesStaleLeasesIgnoresOldCompletionsAndRetainsUnchangedLease" classname="org.freeplane.plugin.graph.control.WorkspaceMapCoordinatorShould" time="0.003"/>
+  <testcase name="captureRetriesSnapshotAfterTransientFailure" classname="org.freeplane.plugin.graph.control.WorkspaceMapCoordinatorShould" time="0.001"/>
+  <testcase name="retriesPendingAcquireOnceAfterStaleLeaseSettlesAndInstallsReplacement" classname="org.freeplane.plugin.graph.control.WorkspaceMapCoordinatorShould" time="0.002"/>
+  <testcase name="rejectsStaleOrInactiveRetryReferencesWithoutChangingTheInstalledRegistration" classname="org.freeplane.plugin.graph.control.WorkspaceMapCoordinatorShould" time="0.002"/>
+  <testcase name="adapterEventUpdatesOnlyTheMatchingRegistrationBeforeCapture" classname="org.freeplane.plugin.graph.control.WorkspaceMapCoordinatorShould" time="0.002"/>
+  <testcase name="captureDoesNotSnapshotInactiveOrUnavailableMaps" classname="org.freeplane.plugin.graph.control.WorkspaceMapCoordinatorShould" time="0.001"/>
+  <testcase name="rebasesLeaseResolutionBeforeInstallingSaveAsReferences" classname="org.freeplane.plugin.graph.control.WorkspaceMapCoordinatorShould" time="0.074"/>
+  <testcase name="captureReadsWorkspaceAndSnapshotsOnlyThroughTheEdt" classname="org.freeplane.plugin.graph.control.WorkspaceMapCoordinatorShould" time="0.002"/>
+  <testcase name="exposesTheCurrentLeaseWithoutTransferringItsOwnership" classname="org.freeplane.plugin.graph.control.WorkspaceMapCoordinatorShould" time="0.001"/>
+  <testcase name="replacementAfterRemovalWaitsForOlderLoadToSettle" classname="org.freeplane.plugin.graph.control.WorkspaceMapCoordinatorShould" time="0.002"/>
+  <testcase name="replacementAfterDeactivationWaitsForOlderLoadToSettle" classname="org.freeplane.plugin.graph.control.WorkspaceMapCoordinatorShould" time="0.003"/>
+  <testcase name="stopsLeaseAttachmentDeliveryAfterAnEarlierListenerClosesTheCoordinator" classname="org.freeplane.plugin.graph.control.WorkspaceMapCoordinatorShould" time="0.001"/>
+  <testcase name="notifiesLeaseAttachmentListenersAfterInstallingTheLease" classname="org.freeplane.plugin.graph.control.WorkspaceMapCoordinatorShould" time="0.001"/>
+  <testcase name="replacementAcquireWaitsForOlderSameIdLoadToSettle" classname="org.freeplane.plugin.graph.control.WorkspaceMapCoordinatorShould" time="0.002"/>
+  <testcase name="replacementAfterRemovalAndInactivityWaitsForOlderLoadToSettle" classname="org.freeplane.plugin.graph.control.WorkspaceMapCoordinatorShould" time="0.003"/>
+  <testcase name="captureOrdersMultipleSnapshotsByWorkspaceRegistration" classname="org.freeplane.plugin.graph.control.WorkspaceMapCoordinatorShould" time="0.084"/>
+  <testcase name="stopsLeaseAttachmentDeliveryAfterAnEarlierListenerUnregistersTheNextListener" classname="org.freeplane.plugin.graph.control.WorkspaceMapCoordinatorShould" time="0.002"/>
+  <testcase name="captureIncludesEveryRegistrationAndMapsOperationalStates" classname="org.freeplane.plugin.graph.control.WorkspaceMapCoordinatorShould" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

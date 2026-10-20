@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.projection.EndpointResolutionShould" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:37.504Z" hostname="Arch-MSSD0" time="0.025">
+  <properties/>
+  <testcase name="activateOnlyPinsWhoseNodesAreGroupMarked" classname="org.freeplane.plugin.graph.projection.EndpointResolutionShould" time="0.003"/>
+  <testcase name="retainRecoverableUncertaintyForExcludedAndInaccessibleAbsenceUntilFullyAccessible" classname="org.freeplane.plugin.graph.projection.EndpointResolutionShould" time="0.005"/>
+  <testcase name="connectorsToPlainNodesDoNotResolve" classname="org.freeplane.plugin.graph.projection.EndpointResolutionShould" time="0.001"/>
+  <testcase name="connectorsInsideAGroupDoNotCreateSelfLoops" classname="org.freeplane.plugin.graph.projection.EndpointResolutionShould" time="0.0"/>
+  <testcase name="letRecoverableUncertaintyDominateAnEndpointMissingFromAnotherFullyAccessibleMap" classname="org.freeplane.plugin.graph.projection.EndpointResolutionShould" time="0.001"/>
+  <testcase name="retainAResolvedSourceWhenTheTargetIsRecoverablyUnavailable" classname="org.freeplane.plugin.graph.projection.EndpointResolutionShould" time="0.0"/>
+  <testcase name="connectorsToGroupDescendantsFoldToTheNodeEndpoint" classname="org.freeplane.plugin.graph.projection.EndpointResolutionShould" time="0.001"/>
+  <testcase name="resolveLeafGroupMarkerAndDescendantInAUnaryChain" classname="org.freeplane.plugin.graph.projection.EndpointResolutionShould" time="0.001"/>
+  <testcase name="resolveGroupNodesExactlyAndFoldPlainDescendantsToTheirOuterGroup" classname="org.freeplane.plugin.graph.projection.EndpointResolutionShould" time="0.0"/>
+  <testcase name="ignoreAMarkedMapRootWhenResolvingItsPlainChildrenAndMarkedDescendants" classname="org.freeplane.plugin.graph.projection.EndpointResolutionShould" time="0.002"/>
+  <testcase name="aggregateDistinctSourceAndTargetRecoverableReasonsInDeclarationOrder" classname="org.freeplane.plugin.graph.projection.EndpointResolutionShould" time="0.004"/>
+  <testcase name="treatAllUnavailableStatesAndTheirStaleSnapshotsAsRecoverable" classname="org.freeplane.plugin.graph.projection.EndpointResolutionShould" time="0.004"/>
+  <testcase name="keepFormerGroupEndpointsUnresolvedAfterUngrouping" classname="org.freeplane.plugin.graph.projection.EndpointResolutionShould" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

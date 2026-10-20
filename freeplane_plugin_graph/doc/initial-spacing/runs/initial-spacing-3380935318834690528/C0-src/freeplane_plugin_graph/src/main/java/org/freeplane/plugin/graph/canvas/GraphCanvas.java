@@ -1,0 +1,684 @@
+package org.freeplane.plugin.graph.canvas;
+
+import java.awt.Dimension;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Point;
+import java.awt.geom.Point2D;
+import java.awt.geom.Rectangle2D;
+import java.lang.reflect.InvocationTargetException;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+
+import javax.accessibility.Accessible;
+import javax.accessibility.AccessibleContext;
+import javax.swing.JComponent;
+import javax.swing.JViewport;
+import javax.swing.SwingUtilities;
+
+import org.freeplane.plugin.graph.control.CanvasState;
+import org.freeplane.plugin.graph.control.OperationalStatus;
+import org.freeplane.plugin.graph.geometry.GraphGeometry;
+import org.freeplane.plugin.graph.geometry.HullGeometry;
+import org.freeplane.plugin.graph.geometry.LayoutPoint;
+import org.freeplane.plugin.graph.geometry.NodeGeometry;
+import org.freeplane.plugin.graph.projection.BoundaryTier;
+import org.freeplane.plugin.graph.projection.EnclosureHullKey;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
+import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
+import org.freeplane.plugin.graph.projection.ProjectedNode;
+import org.freeplane.plugin.graph.workspace.model.DisplaySettings.CanvasTheme;
+import org.freeplane.plugin.graph.workspace.model.Viewport;
+
+public final class GraphCanvas extends JComponent implements Accessible {
+    private static final long serialVersionUID = 1L;
+    private static final int MIN_SURFACE_WIDTH = 800;
+    private static final int MIN_SURFACE_HEIGHT = 560;
+    private static final double WORLD_MARGIN = 80.0;
+
+    private final AdaptiveRenderingPolicy renderingPolicy = new AdaptiveRenderingPolicy();
+    private final GraphPainter painter = new GraphPainter();
+    private final ScreenLabelPlacementCache labelPlacementCache = new ScreenLabelPlacementCache();
+    private volatile CanvasState canvasState;
+    private volatile GraphPaintState paintState;
+    private volatile GraphViewport viewport;
+    private volatile GraphTheme theme;
+    private volatile GraphInteractionController interactionController;
+    private volatile boolean showArrowheads;
+    private volatile boolean dimUnrelated;
+    private volatile int viewportPositioningDepth;
+    private volatile int pendingViewportClamps;
+    private Runnable pendingViewportSettledCallback;
+    private volatile Runnable userViewportChangeListener;
+    private boolean userPanGestureActive;
+    private boolean userPanPending;
+
+    public GraphCanvas() {
+        paintState = GraphPaintState.empty();
+        viewport = GraphViewport.of(0.0, 0.0, 1.0);
+        theme = GraphTheme.resolve(CanvasTheme.FOLLOW_FREEPLANE);
+        showArrowheads = true;
+        dimUnrelated = true;
+        userViewportChangeListener = () -> { };
+        setOpaque(true);
+        setFocusable(true);
+        setDoubleBuffered(true);
+    }
+
+    public void setCanvasState(final CanvasState state) {
+        final CanvasState value = Objects.requireNonNull(state, "state");
+        onEdt(new Runnable() {
+            @Override
+            public void run() {
+                canvasState = value;
+                final GraphInteractionController controller = interactionController;
+                if (controller != null) {
+                    controller.canvasStateChanged(value);
+                }
+                resizeSurface(value);
+                repaint();
+            }
+        });
+    }
+
+    public void setPaintState(final GraphPaintState state) {
+        final GraphPaintState value = Objects.requireNonNull(state, "state");
+        onEdt(new Runnable() {
+            @Override
+            public void run() {
+                paintState = value;
+                repaint();
+            }
+        });
+    }
+
+    public void setViewport(final GraphViewport value) {
+        final GraphViewport next = Objects.requireNonNull(value, "viewport");
+        onEdt(new Runnable() {
+            @Override
+            public void run() {
+                viewport = next;
+                final CanvasState state = canvasState;
+                if (state != null) {
+                    resizeSurface(state);
+                }
+                centerScrollView();
+                repaint();
+            }
+        });
+    }
+
+    public GraphViewport viewport() {
+        return viewport;
+    }
+
+    public GraphViewport visibleViewport() {
+        final JViewport scrollViewport = containingViewport();
+        final GraphViewport anchor = viewport;
+        if (scrollViewport == null) {
+            return anchor;
+        }
+        final Point viewPosition = scrollViewport.getViewPosition();
+        final Dimension extent = scrollViewport.getExtentSize();
+        final double visibleCenterX = viewPosition.getX() + extent.getWidth() * 0.5;
+        final double visibleCenterY = viewPosition.getY() + extent.getHeight() * 0.5;
+        final double centerX = anchor.centerX()
+            + (visibleCenterX - getWidth() * 0.5) / anchor.zoom();
+        final double centerY = anchor.centerY()
+            + (visibleCenterY - getHeight() * 0.5) / anchor.zoom();
+        return GraphViewport.from(Viewport.of(centerX, centerY, anchor.zoom(),
+            anchor.toPersisted().unknownXml()));
+    }
+
+    public boolean isViewportPositioningActive() {
+        return viewportPositioningDepth > 0;
+    }
+
+    public void runWhenViewportSettled(final Runnable callback) {
+        final Runnable value = Objects.requireNonNull(callback, "callback");
+        onEdt(() -> {
+            pendingViewportSettledCallback = value;
+            drainViewportSettledCallback();
+        });
+    }
+
+    private void drainViewportSettledCallback() {
+        if (viewportPositioningDepth != 0 || pendingViewportClamps != 0) {
+            return;
+        }
+        final Runnable callback = pendingViewportSettledCallback;
+        pendingViewportSettledCallback = null;
+        if (callback == null) {
+            return;
+        }
+        try {
+            callback.run();
+        }
+        catch (RuntimeException | Error failure) {
+            try {
+                java.util.logging.Logger.getLogger(GraphCanvas.class.getName()).log(
+                    java.util.logging.Level.WARNING, "Viewport settle callback failed", failure);
+            }
+            catch (RuntimeException | Error loggingFailure) {
+                // A diagnostic failure must not escape the canvas completion path.
+            }
+        }
+    }
+
+    public boolean isProgrammaticViewportChange() {
+        return viewportPositioningDepth > 0 || pendingViewportClamps > 0;
+    }
+
+    @Override
+    public synchronized AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) {
+            accessibleContext = new AccessibleGraphCanvas(this);
+        }
+        return accessibleContext;
+    }
+
+    boolean activateAccessible(final org.freeplane.plugin.graph.projection.ProjectedEndpointKey endpoint,
+            final boolean open) {
+        final GraphInteractionController controller = interactionController;
+        return controller != null && controller.activateAccessible(endpoint, open);
+    }
+
+    public void fitGraph() {
+        onEdt(new Runnable() {
+            @Override
+            public void run() {
+                final CanvasState state = canvasState;
+                final Dimension size = fitSize();
+                if (state == null || size.width <= 0 || size.height <= 0) {
+                    return;
+                }
+                final Bounds bounds = visibleBounds(state);
+                if (bounds == null) {
+                    return;
+                }
+                final double spanX = bounds.spanX();
+                final double spanY = bounds.spanY();
+                final double fitWidth = Math.max(spanX, Double.MIN_VALUE);
+                final double fitHeight = Math.max(spanY, Double.MIN_VALUE);
+                final double horizontalZoom = size.getWidth() * 0.8 / fitWidth;
+                final double verticalZoom = size.getHeight() * 0.8 / fitHeight;
+                double zoom = Math.min(horizontalZoom, verticalZoom);
+                if (!Double.isFinite(zoom) || !(zoom > 0.0)) {
+                    zoom = viewport.zoom();
+                }
+                if (!Double.isFinite(zoom) || !(zoom > 0.0)) {
+                    zoom = 1.0;
+                }
+                final double centerX = bounds.centerX();
+                final double centerY = bounds.centerY();
+                if (!Double.isFinite(centerX) || !Double.isFinite(centerY)) {
+                    return;
+                }
+                viewport = GraphViewport.from(Viewport.of(centerX, centerY, zoom,
+                    viewport.toPersisted().unknownXml()));
+                resizeSurface(state);
+                centerScrollView();
+                repaint();
+            }
+        });
+    }
+
+    public void resetZoom() {
+        onEdt(new Runnable() {
+            @Override
+            public void run() {
+                viewport = GraphViewport.from(Viewport.of(0.0, 0.0, 1.0,
+                    viewport.toPersisted().unknownXml()));
+                final CanvasState state = canvasState;
+                if (state != null) {
+                    resizeSurface(state);
+                }
+                centerScrollView();
+                repaint();
+            }
+        });
+    }
+
+    void setInteractionController(final GraphInteractionController controller) {
+        interactionController = controller;
+    }
+
+    public void setUserViewportChangeListener(final Runnable listener) {
+        userViewportChangeListener = Objects.requireNonNull(listener, "listener");
+    }
+
+    CanvasState canvasState() {
+        return canvasState;
+    }
+
+    GraphPaintState paintState() {
+        return paintState;
+    }
+
+    GraphHitIndex hitIndex() {
+        final CanvasState state = canvasState;
+        return state == null ? GraphHitIndex.empty() : GraphHitIndex.from(state);
+    }
+
+    LayoutPoint worldAt(final Point point) {
+        return viewport.toWorld(Objects.requireNonNull(point, "point"),
+            new Dimension(getWidth(), getHeight()));
+    }
+
+    /**
+     * Returns the component point expressed in viewport coordinates, which are
+     * independent of the view's current scroll position. AWT computes
+     * MouseEvent component coordinates against the component's current on-screen
+     * location, so this space is what keeps gesture deltas equal to physical
+     * pointer movement while the viewport scrolls the canvas under the pointer.
+     * Returns the given point unchanged when the canvas has no JViewport ancestor.
+     */
+    Point viewportPoint(final Point componentPoint) {
+        final Point value = Objects.requireNonNull(componentPoint, "componentPoint");
+        final JViewport scrollViewport = containingViewport();
+        if (scrollViewport == null) {
+            return value;
+        }
+        final Point viewPosition = scrollViewport.getViewPosition();
+        return new Point(value.x - viewPosition.x, value.y - viewPosition.y);
+    }
+
+    void updateTooltip(final org.freeplane.plugin.graph.projection.ProjectedEndpointKey endpoint) {
+        final CanvasState state = canvasState;
+        final String text = state == null || endpoint == null
+            ? null : GraphSearchModel.tooltip(state, endpoint);
+        onEdt(new Runnable() {
+            @Override
+            public void run() {
+                setToolTipText(text);
+            }
+        });
+    }
+
+    void resetInteractionCursor() {
+        onEdt(new Runnable() {
+            @Override
+            public void run() {
+                setCursor(java.awt.Cursor.getDefaultCursor());
+            }
+        });
+    }
+
+    void repaintCanvas() {
+        repaint();
+    }
+
+    public void setTheme(final GraphTheme value) {
+        final GraphTheme next = Objects.requireNonNull(value, "theme");
+        onEdt(new Runnable() {
+            @Override
+            public void run() {
+                theme = next;
+                repaint();
+            }
+        });
+    }
+
+    public void setShowArrowheads(final boolean value) {
+        onEdt(new Runnable() {
+            @Override
+            public void run() {
+                showArrowheads = value;
+                repaint();
+            }
+        });
+    }
+
+    public void setDimUnrelated(final boolean value) {
+        onEdt(new Runnable() {
+            @Override
+            public void run() {
+                dimUnrelated = value;
+                repaint();
+            }
+        });
+    }
+
+    GraphTheme theme() {
+        return theme;
+    }
+
+    boolean showArrowheads() {
+        return showArrowheads;
+    }
+
+    boolean dimUnrelated() {
+        return dimUnrelated;
+    }
+
+    void panByPixels(final double dx, final double dy) {
+        onEdt(new Runnable() {
+            @Override
+            public void run() {
+                viewport = viewport.panPixels(dx, dy);
+                final CanvasState state = canvasState;
+                if (state != null) {
+                    resizeSurface(state);
+                }
+                if (userPanGestureActive) {
+                    userPanPending = true;
+                }
+                else {
+                    userViewportChangeListener.run();
+                }
+                repaint();
+            }
+        });
+    }
+
+    void zoomAround(final Point2D pointer, final double factor) {
+        final Point2D value = Objects.requireNonNull(pointer, "pointer");
+        onEdt(new Runnable() {
+            @Override
+            public void run() {
+                viewport = viewport.zoomAround(value, factor, new Dimension(getWidth(), getHeight()));
+                final CanvasState state = canvasState;
+                if (state != null) {
+                    resizeSurface(state);
+                }
+                userViewportChangeListener.run();
+                repaint();
+            }
+        });
+    }
+
+    void zoomAround(final double x, final double y, final double factor) {
+        zoomAround(new Point2D.Double(x, y), factor);
+    }
+
+    @Override
+    protected void processMouseEvent(final java.awt.event.MouseEvent event) {
+        if (event.getID() == java.awt.event.MouseEvent.MOUSE_PRESSED
+                && event.getButton() == java.awt.event.MouseEvent.BUTTON1) {
+            userPanGestureActive = true;
+            userPanPending = false;
+        }
+        super.processMouseEvent(event);
+        if (event.getID() == java.awt.event.MouseEvent.MOUSE_RELEASED
+                && userPanGestureActive) {
+            final boolean pending = userPanPending;
+            userPanGestureActive = false;
+            userPanPending = false;
+            if (pending) {
+                userViewportChangeListener.run();
+            }
+        }
+    }
+
+    @Override
+    protected void paintComponent(final Graphics graphics) {
+        super.paintComponent(graphics);
+        final Dimension size = new Dimension(getWidth(), getHeight());
+        final CanvasState state = canvasState;
+        final int nodeCount = state == null ? 0 : state.projection().projectedNodeCount();
+        final int edgeCount = state == null ? 0 : state.projection().edges().size();
+        final RenderingLevel level = renderingPolicy.forCounts(nodeCount, edgeCount);
+        final List<PlacedLabel> labels = state == null
+            ? Collections.<PlacedLabel>emptyList() : labelsFor(state, size, level);
+        painter.paint((Graphics2D) graphics, state, paintState, viewport, size, theme, labels,
+            showArrowheads, dimUnrelated);
+    }
+
+    private List<PlacedLabel> labelsFor(final CanvasState state, final Dimension size,
+            final RenderingLevel level) {
+        final Set<ProjectedEndpointKey> forced = new LinkedHashSet<ProjectedEndpointKey>();
+        if (paintState.selection().isPresent()) {
+            forced.add(paintState.selection().get());
+        }
+        if (paintState.hover().isPresent()) {
+            forced.add(paintState.hover().get());
+        }
+        forced.addAll(paintState.searchMatches());
+        final LabelPlacementRequest request = LabelPlacementRequest.of(state.projection(), state.geometry(),
+            state.layout().positions(), viewport.zoom(), viewport.centerX(), viewport.centerY(),
+            new Rectangle2D.Double(0.0, 0.0, size.width, size.height), forced, level);
+        return labelPlacementCache.place(request, LabelFonts.from(theme));
+    }
+
+    private Bounds visibleBounds(final CanvasState state) {
+        final GraphGeometry geometry = state.geometry();
+        final Bounds bounds = new Bounds();
+        for (final ProjectedNode node : state.projection().nodes()) {
+            final NodeGeometry nodeGeometry = geometry.nodes().get(node.key());
+            if (nodeGeometry != null) {
+                bounds.include(nodeGeometry.minX(), nodeGeometry.minY(), nodeGeometry.maxX(),
+                    nodeGeometry.maxY());
+            }
+        }
+        final Set<EnclosureHullKey> includedHulls = new HashSet<EnclosureHullKey>();
+        for (final ProjectedEnclosure enclosure : state.projection().enclosures()) {
+            if (enclosure.boundaryTier() == BoundaryTier.SUPPRESSED
+                    || !includedHulls.add(enclosure.hullKey())) {
+                continue;
+            }
+            final HullGeometry hull = geometry.hulls().get(enclosure.hullKey());
+            if (hull != null) {
+                bounds.include(hull.minX(), hull.minY(), hull.maxX(), hull.maxY());
+            }
+        }
+        return bounds.isEmpty() ? null : bounds;
+    }
+
+    private void resizeSurface(final CanvasState state) {
+        final Bounds bounds = visibleBounds(state);
+        if (bounds == null || !Double.isFinite(viewport.zoom()) || !(viewport.zoom() > 0.0)) {
+            return;
+        }
+        final JViewport scrollViewport = containingViewport();
+        final Dimension available = scrollViewport == null ? null : scrollViewport.getExtentSize();
+        final Dimension oldPreferred = getPreferredSize();
+        final Dimension oldSize = getSize();
+        final int oldWidth = oldSize.width > 0 ? oldSize.width : oldPreferred.width;
+        final int oldHeight = oldSize.height > 0 ? oldSize.height : oldPreferred.height;
+        final int requestedWidth = surfacePixels(bounds.minX, bounds.maxX, viewport.centerX(), viewport.zoom(),
+            MIN_SURFACE_WIDTH, available == null ? 0 : available.width);
+        final int requestedHeight = surfacePixels(bounds.minY, bounds.maxY, viewport.centerY(), viewport.zoom(),
+            MIN_SURFACE_HEIGHT, available == null ? 0 : available.height);
+        final boolean settling = state.status() == OperationalStatus.SETTLING;
+        final int width = settling
+            ? Math.max(requestedWidth, Math.max(oldPreferred.width, oldWidth)) : requestedWidth;
+        final int height = settling
+            ? Math.max(requestedHeight, Math.max(oldPreferred.height, oldHeight)) : requestedHeight;
+        if (oldPreferred.width == width && oldPreferred.height == height
+                && (scrollViewport == null || oldSize.width == width && oldSize.height == height)) {
+            return;
+        }
+        final Point oldPosition = scrollViewport == null ? null : scrollViewport.getViewPosition();
+        final Dimension nextSize = new Dimension(width, height);
+        beginViewportPositioning();
+        try {
+            setPreferredSize(nextSize);
+            if (scrollViewport != null) {
+                setSize(nextSize);
+                final int nextX = oldPosition == null ? 0
+                    : oldPosition.x + (width - oldWidth) / 2;
+                final int nextY = oldPosition == null ? 0
+                    : oldPosition.y + (height - oldHeight) / 2;
+                scrollViewport.setViewPosition(clampedPosition(scrollViewport, nextX, nextY));
+            }
+            revalidate();
+            if (scrollViewport != null) {
+                scheduleViewportClamp(scrollViewport);
+            }
+        }
+        finally {
+            endViewportPositioning();
+        }
+    }
+
+    private static int surfacePixels(final double minWorld, final double maxWorld,
+            final double anchor, final double zoom, final int minimum, final int available) {
+        final double leftWorld = Math.max(0.0, anchor - minWorld + WORLD_MARGIN);
+        final double rightWorld = Math.max(0.0, maxWorld - anchor + WORLD_MARGIN);
+        final double requested = 2.0 * Math.max(leftWorld, rightWorld) * zoom;
+        final double finiteRequested = Double.isFinite(requested) && requested > 0.0
+            ? requested : minimum;
+        final double bounded = Math.min(finiteRequested, Integer.MAX_VALUE - 1.0);
+        return Math.max(minimum, Math.max(available, (int) Math.ceil(bounded)));
+    }
+
+    private Dimension fitSize() {
+        final JViewport scrollViewport = containingViewport();
+        if (scrollViewport != null) {
+            final Dimension extent = scrollViewport.getExtentSize();
+            if (extent.width > 0 && extent.height > 0) {
+                return extent;
+            }
+        }
+        final Dimension size = getSize();
+        if (size.width > 0 && size.height > 0) {
+            return size;
+        }
+        return getPreferredSize();
+    }
+
+    private void centerScrollView() {
+        final JViewport scrollViewport = containingViewport();
+        if (scrollViewport == null) {
+            return;
+        }
+        final Dimension extent = scrollViewport.getExtentSize();
+        final int centerX = (getWidth() - extent.width) / 2;
+        final int centerY = (getHeight() - extent.height) / 2;
+        setViewPositionProgrammatically(scrollViewport, centerX, centerY);
+    }
+
+    private JViewport containingViewport() {
+        return (JViewport) SwingUtilities.getAncestorOfClass(JViewport.class, this);
+    }
+
+    private void setViewPositionProgrammatically(final JViewport scrollViewport, final int x,
+            final int y) {
+        beginViewportPositioning();
+        try {
+            scrollViewport.setViewPosition(clampedPosition(scrollViewport, x, y));
+        }
+        finally {
+            endViewportPositioning();
+        }
+    }
+
+    private void scheduleViewportClamp(final JViewport scrollViewport) {
+        pendingViewportClamps++;
+        try {
+            SwingUtilities.invokeLater(new Runnable() {
+                @Override
+                public void run() {
+                    beginViewportPositioning();
+                    try {
+                        if (containingViewport() == scrollViewport) {
+                            final Point position = scrollViewport.getViewPosition();
+                            scrollViewport.setViewPosition(clampedPosition(scrollViewport,
+                                position.x, position.y));
+                        }
+                    }
+                    finally {
+                        endViewportPositioning();
+                        pendingViewportClamps--;
+                        drainViewportSettledCallback();
+                    }
+                }
+            });
+        }
+        catch (final RuntimeException exception) {
+            pendingViewportClamps--;
+            drainViewportSettledCallback();
+            throw exception;
+        }
+    }
+
+    private void beginViewportPositioning() {
+        viewportPositioningDepth++;
+    }
+
+    private void endViewportPositioning() {
+        viewportPositioningDepth--;
+        drainViewportSettledCallback();
+    }
+
+    private static Point clampedPosition(final JViewport scrollViewport, final int x, final int y) {
+        final java.awt.Component view = scrollViewport.getView();
+        final Dimension viewSize = view == null ? new Dimension() : view.getSize();
+        final Dimension extent = scrollViewport.getExtentSize();
+        final int maxX = Math.max(0, viewSize.width - extent.width);
+        final int maxY = Math.max(0, viewSize.height - extent.height);
+        return new Point(clamp(x, 0, maxX), clamp(y, 0, maxY));
+    }
+
+    private static int clamp(final int value, final int minimum, final int maximum) {
+        return Math.max(minimum, Math.min(maximum, value));
+    }
+    private static void onEdt(final Runnable action) {
+        Objects.requireNonNull(action, "action");
+        if (SwingUtilities.isEventDispatchThread()) {
+            action.run();
+            return;
+        }
+        try {
+            SwingUtilities.invokeAndWait(action);
+        }
+        catch (final InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while updating GraphCanvas", exception);
+        }
+        catch (final InvocationTargetException exception) {
+            final Throwable cause = exception.getCause();
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            if (cause instanceof Error) {
+                throw (Error) cause;
+            }
+            throw new IllegalStateException("GraphCanvas update failed", cause);
+        }
+    }
+
+    private static final class Bounds {
+        private double minX = Double.POSITIVE_INFINITY;
+        private double minY = Double.POSITIVE_INFINITY;
+        private double maxX = Double.NEGATIVE_INFINITY;
+        private double maxY = Double.NEGATIVE_INFINITY;
+
+        private void include(final double firstX, final double firstY, final double secondX,
+                final double secondY) {
+            if (!Double.isFinite(firstX) || !Double.isFinite(firstY)
+                    || !Double.isFinite(secondX) || !Double.isFinite(secondY)
+                    || firstX > secondX || firstY > secondY) {
+                return;
+            }
+            minX = Math.min(minX, firstX);
+            minY = Math.min(minY, firstY);
+            maxX = Math.max(maxX, secondX);
+            maxY = Math.max(maxY, secondY);
+        }
+
+        private boolean isEmpty() {
+            return minX == Double.POSITIVE_INFINITY;
+        }
+
+        private double spanX() {
+            return maxX - minX;
+        }
+
+        private double spanY() {
+            return maxY - minY;
+        }
+
+        private double centerX() {
+            return minX + (maxX - minX) * 0.5;
+        }
+
+        private double centerY() {
+            return minY + (maxY - minY) * 0.5;
+        }
+    }
+}

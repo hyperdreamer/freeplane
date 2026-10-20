@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.projection.StructuralProjectionShould" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:37.721Z" hostname="Arch-MSSD0" time="0.014">
+  <properties/>
+  <testcase name="projectGroupMarkedLeavesAsNodesBeforePlainLeavesVanish" classname="org.freeplane.plugin.graph.projection.StructuralProjectionShould" time="0.001"/>
+  <testcase name="useDistinctPersistentKeysForClonedNodes" classname="org.freeplane.plugin.graph.projection.StructuralProjectionShould" time="0.001"/>
+  <testcase name="projectMarkedGroupWithHiddenChildAsNode" classname="org.freeplane.plugin.graph.projection.StructuralProjectionShould" time="0.001"/>
+  <testcase name="excludedSubtreesNeverProjectLabels" classname="org.freeplane.plugin.graph.projection.StructuralProjectionShould" time="0.0"/>
+  <testcase name="atomizeOuterBranchingGroup" classname="org.freeplane.plugin.graph.projection.StructuralProjectionShould" time="0.001"/>
+  <testcase name="atomizeOuterGroupAndOmitDescendants" classname="org.freeplane.plugin.graph.projection.StructuralProjectionShould" time="0.0"/>
+  <testcase name="orderSelectedMapsByWorkspaceOrderIndependentlyOfInputIteration" classname="org.freeplane.plugin.graph.projection.StructuralProjectionShould" time="0.001"/>
+  <testcase name="copyInputCollectionsAndExposeImmutableOrderedValues" classname="org.freeplane.plugin.graph.projection.StructuralProjectionShould" time="0.004"/>
+  <testcase name="keepTheMapRootFrameAloneAndAtomizeGroupAtDepthOne" classname="org.freeplane.plugin.graph.projection.StructuralProjectionShould" time="0.0"/>
+  <testcase name="ignoreInactiveSnapshotsAndRejectUnregisteredDuplicateOrConflictingSnapshots" classname="org.freeplane.plugin.graph.projection.StructuralProjectionShould" time="0.004"/>
+  <testcase name="countGroupMarkedNodesAsNodesButNeverMapRootFrames" classname="org.freeplane.plugin.graph.projection.StructuralProjectionShould" time="0.001"/>
+  <testcase name="projectLockedLeavesAndVisibleSummaryAndFreeNodesAsNodes" classname="org.freeplane.plugin.graph.projection.StructuralProjectionShould" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

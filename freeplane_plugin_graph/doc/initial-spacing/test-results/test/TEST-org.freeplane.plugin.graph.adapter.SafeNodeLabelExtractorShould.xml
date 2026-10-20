@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.adapter.SafeNodeLabelExtractorShould" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:27.064Z" hostname="Arch-MSSD0" time="0.01">
+  <properties/>
+  <testcase name="usesLiteralLinkWithoutDereferencingItsHiddenTarget" classname="org.freeplane.plugin.graph.adapter.SafeNodeLabelExtractorShould" time="0.002"/>
+  <testcase name="keepsFormulaLatexAndMarkdownAsNormalizedUnevaluatedSource" classname="org.freeplane.plugin.graph.adapter.SafeNodeLabelExtractorShould" time="0.001"/>
+  <testcase name="doesNotEnterTransformersForAFormulaReferencingALockedSentinel" classname="org.freeplane.plugin.graph.adapter.SafeNodeLabelExtractorShould" time="0.001"/>
+  <testcase name="productionSourceContainsNoTransformationResolutionOrIdentityCalls" classname="org.freeplane.plugin.graph.adapter.SafeNodeLabelExtractorShould" time="0.001"/>
+  <testcase name="doesNotEnterTransformersForALocalLinkReferencingALockedSentinel" classname="org.freeplane.plugin.graph.adapter.SafeNodeLabelExtractorShould" time="0.001"/>
+  <testcase name="fallsBackToDirectIconAndAttachmentDescriptions" classname="org.freeplane.plugin.graph.adapter.SafeNodeLabelExtractorShould" time="0.001"/>
+  <testcase name="extractsDirectPlainAndHtmlTextFromTheRealFixture" classname="org.freeplane.plugin.graph.adapter.SafeNodeLabelExtractorShould" time="0.001"/>
+  <testcase name="collapsesWhitespaceAndSplitsFullFromCodePointBoundedDisplayText" classname="org.freeplane.plugin.graph.adapter.SafeNodeLabelExtractorShould" time="0.001"/>
+  <testcase name="doesNotAssignAnIdToANumberedIdlessNode" classname="org.freeplane.plugin.graph.adapter.SafeNodeLabelExtractorShould" time="0.0"/>
+  <system-out><![CDATA[Oct 21, 2026 12:57:27 AM org.freeplane.core.util.LogUtils warn
+WARNING: 
+java.io.FileNotFoundException: /data/home/henry-arch/.freeplane/1.12.x/templates/standard-1.6.mm (No such file or directory)
+	at java.base/java.io.FileInputStream.open0(Native Method)
+	at java.base/java.io.FileInputStream.open(FileInputStream.java:213)
+	at java.base/java.io.FileInputStream.<init>(FileInputStream.java:152)
+	at java.base/java.io.FileInputStream.<init>(FileInputStream.java:106)
+	at java.base/sun.net.www.protocol.file.FileURLConnection.connect(FileURLConnection.java:84)
+	at java.base/sun.net.www.protocol.file.FileURLConnection.getInputStream(FileURLConnection.java:186)
+	at java.base/java.net.URL.openStream(URL.java:1325)
+	at org.freeplane.features.url.UrlManager.load(UrlManager.java:269)
+	at org.freeplane.features.styles.MapStyle.createDefaultStyleMap(MapStyle.java:557)
+	at org.freeplane.features.styles.MapStyle.onCreate(MapStyle.java:547)
+	at org.freeplane.features.map.MapController.fireMapCreated(MapController.java:712)
+	at org.freeplane.features.url.mindmapmode.MapLoader.loadMap(MapLoader.java:259)
+	at org.freeplane.features.url.mindmapmode.MapLoader.getMap(MapLoader.java:134)
+	at org.freeplane.plugin.graph.adapter.SafeNodeLabelExtractorShould$FixtureScope.<init>(SafeNodeLabelExtractorShould.java:444)
+	at org.freeplane.plugin.graph.adapter.SafeNodeLabelExtractorShould$FixtureScope.<init>(SafeNodeLabelExtractorShould.java:404)
+	at org.freeplane.plugin.graph.adapter.SafeNodeLabelExtractorShould.loadFixture(SafeNodeLabelExtractorShould.java:61)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.RunBefores.invokeMethod(RunBefores.java:33)
+	at org.junit.internal.runners.statements.RunBefores.evaluate(RunBefores.java:24)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.gradle.api.internal.tasks.testing.junit.JUnitTestClassExecutor.runTestClass(JUnitTestClassExecutor.java:122)
+	at org.gradle.api.internal.tasks.testing.junit.JUnitTestClassExecutor.execute(JUnitTestClassExecutor.java:68)
+	at org.gradle.api.internal.tasks.testing.junit.JUnitTestClassExecutor.execute(JUnitTestClassExecutor.java:43)
+	at org.gradle.api.internal.tasks.testing.junit.AbstractJUnitTestClassProcessor.processTestClass(AbstractJUnitTestClassProcessor.java:61)
+	at org.gradle.api.internal.tasks.testing.SuiteTestClassProcessor.processTestClass(SuiteTestClassProcessor.java:54)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:36)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:24)
+	at org.gradle.internal.dispatch.ContextClassLoaderDispatch.dispatch(ContextClassLoaderDispatch.java:33)
+	at org.gradle.internal.dispatch.ProxyDispatchAdapter$DispatchingInvocationHandler.invoke(ProxyDispatchAdapter.java:92)
+	at jdk.proxy1/jdk.proxy1.$Proxy4.processTestClass(Unknown Source)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker$2.run(TestWorker.java:183)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.executeAndMaintainThreadName(TestWorker.java:132)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:103)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:63)
+	at org.gradle.process.internal.worker.child.ActionExecutionWorker.execute(ActionExecutionWorker.java:56)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:122)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74)
+
+Oct 21, 2026 12:57:27 AM org.freeplane.core.util.LogUtils warn
+WARNING: Errors in default map template /data/home/henry-arch/.freeplane/1.12.x/templates/standard-1.6.mm. Try to remove this file.
+]]></system-out>
+  <system-err><![CDATA[Oct 21, 2026 12:57:26 AM org.freeplane.core.util.LogUtils severe
+SEVERE: 
+java.lang.NullPointerException: Cannot invoke "java.net.URL.openStream()" because the return value of "org.freeplane.core.resources.ResourceController.getResource(String)" is null
+	at org.freeplane.features.url.MapVersionInterpreter.values(MapVersionInterpreter.java:81)
+	at org.freeplane.features.url.MapVersionInterpreter.addMapVersionInterpreter(MapVersionInterpreter.java:111)
+	at org.freeplane.plugin.graph.adapter.SafeNodeLabelExtractorShould$FixtureScope.<init>(SafeNodeLabelExtractorShould.java:442)
+	at org.freeplane.plugin.graph.adapter.SafeNodeLabelExtractorShould$FixtureScope.<init>(SafeNodeLabelExtractorShould.java:404)
+	at org.freeplane.plugin.graph.adapter.SafeNodeLabelExtractorShould.loadFixture(SafeNodeLabelExtractorShould.java:61)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.RunBefores.invokeMethod(RunBefores.java:33)
+	at org.junit.internal.runners.statements.RunBefores.evaluate(RunBefores.java:24)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.gradle.api.internal.tasks.testing.junit.JUnitTestClassExecutor.runTestClass(JUnitTestClassExecutor.java:122)
+	at org.gradle.api.internal.tasks.testing.junit.JUnitTestClassExecutor.execute(JUnitTestClassExecutor.java:68)
+	at org.gradle.api.internal.tasks.testing.junit.JUnitTestClassExecutor.execute(JUnitTestClassExecutor.java:43)
+	at org.gradle.api.internal.tasks.testing.junit.AbstractJUnitTestClassProcessor.processTestClass(AbstractJUnitTestClassProcessor.java:61)
+	at org.gradle.api.internal.tasks.testing.SuiteTestClassProcessor.processTestClass(SuiteTestClassProcessor.java:54)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:36)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:24)
+	at org.gradle.internal.dispatch.ContextClassLoaderDispatch.dispatch(ContextClassLoaderDispatch.java:33)
+	at org.gradle.internal.dispatch.ProxyDispatchAdapter$DispatchingInvocationHandler.invoke(ProxyDispatchAdapter.java:92)
+	at jdk.proxy1/jdk.proxy1.$Proxy4.processTestClass(Unknown Source)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker$2.run(TestWorker.java:183)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.executeAndMaintainThreadName(TestWorker.java:132)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:103)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:63)
+	at org.gradle.process.internal.worker.child.ActionExecutionWorker.execute(ActionExecutionWorker.java:56)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:122)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74)
+
+]]></system-err>
+</testsuite>

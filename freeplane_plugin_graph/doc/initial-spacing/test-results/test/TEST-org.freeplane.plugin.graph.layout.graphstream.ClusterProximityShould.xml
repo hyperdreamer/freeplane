@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.layout.graphstream.ClusterProximityShould" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:04:04.052Z" hostname="Arch-MSSD0" time="311.654">
+  <properties/>
+  <testcase name="initialFrameThroughWorkerPreservesPinsAndChecksCorrectedGeometry" classname="org.freeplane.plugin.graph.layout.graphstream.ClusterProximityShould" time="0.034"/>
+  <testcase name="settledEvidenceIsRecorded" classname="org.freeplane.plugin.graph.layout.graphstream.ClusterProximityShould" time="136.752"/>
+  <testcase name="generatedProjectionsComposeIdenticallyAndDoNotOverlap" classname="org.freeplane.plugin.graph.layout.graphstream.ClusterProximityShould" time="72.019"/>
+  <testcase name="initialFrameThroughWorkerPublishesTheCompleteCorrectionPipeline" classname="org.freeplane.plugin.graph.layout.graphstream.ClusterProximityShould" time="0.16"/>
+  <testcase name="settledFixturesReachIdleWithinBudgetAndDoNotCross" classname="org.freeplane.plugin.graph.layout.graphstream.ClusterProximityShould" time="102.683"/>
+  <testcase name="initialFrameEqualsTheDeterministicPacking" classname="org.freeplane.plugin.graph.layout.graphstream.ClusterProximityShould" time="0.006"/>
+  <system-out><![CDATA[EVIDENCE fixture=A idle=37 endpointStep=236 packed=95.1 settled=94.9 windowMaxHoldDeviation=0.2 paintedGap=45.8 minSeparation=45.75 containmentOverflow=6.3 containmentHull=ZFC marginalOverlap=-0.2 marginalOverlapCount=1
+EVIDENCE-PAIR fixture=A pair=Axioms <-> Basic Definitions and Theorems packed=95.1 settled=94.9 windowMaxHoldDeviation=0.2 paintedGap=45.8 idle=37 endpointStep=236 minSeparation=45.75 containmentOverflow=6.3 marginalOverlap=-0.2
+EVIDENCE fixture=B idle=33 endpointStep=232 packed=164.0 settled=164.0 windowMaxHoldDeviation=7.6 paintedGap=39.3 minSeparation=39.28 containmentOverflow=2.5 containmentHull=Map a marginalOverlap=-0.0 marginalOverlapCount=1
+EVIDENCE-PAIR fixture=B pair=TOP Map a <-> Map b packed=164.0 settled=164.0 windowMaxHoldDeviation=7.6 paintedGap=39.3 idle=33 endpointStep=232 minSeparation=39.28 containmentOverflow=2.5 marginalOverlap=-0.0
+EVIDENCE fixture=C idle=855 endpointStep=1054 packed=160.6 settled=168.6 windowMaxHoldDeviation=8.0 paintedGap=0.0 minSeparation=0.00 containmentOverflow=12.5 containmentHull=Map a marginalOverlap=0.0 marginalOverlapCount=0
+EVIDENCE-PAIR fixture=C pair=TOP Map a <-> Map b packed=160.6 settled=168.6 windowMaxHoldDeviation=8.0 paintedGap=0.0 idle=855 endpointStep=1054 minSeparation=0.00 containmentOverflow=12.5 marginalOverlap=0.0
+EVIDENCE fixture=D idle=61 endpointStep=260 packed=160.6 settled=171.1 windowMaxHoldDeviation=17.5 paintedGap=36.0 minSeparation=36.03 containmentOverflow=0.0 containmentHull=- marginalOverlap=0.0 marginalOverlapCount=0
+EVIDENCE-PAIR fixture=D pair=TOP Map a <-> Map b packed=160.6 settled=171.1 windowMaxHoldDeviation=17.5 paintedGap=36.0 idle=61 endpointStep=260 minSeparation=36.03 containmentOverflow=0.0 marginalOverlap=0.0
+EVIDENCE fixture=E idle=7 endpointStep=206 packed=99.1 settled=100.2 windowMaxHoldDeviation=1.4 paintedGap=nested minSeparation=- containmentOverflow=0.0 containmentHull=- marginalOverlap=0.0 marginalOverlapCount=0
+EVIDENCE-PAIR fixture=E pair=child group <-> parent anchor packed=99.1 settled=100.2 windowMaxHoldDeviation=1.4 paintedGap=nested idle=7 endpointStep=206 minSeparation=- containmentOverflow=0.0 marginalOverlap=0.0
+EVIDENCE fixture=F idle=31 endpointStep=230 packed=166.3 settled=173.1 windowMaxHoldDeviation=13.9 paintedGap=34.7 minSeparation=25.42 containmentOverflow=2.5 containmentHull=Map m3 marginalOverlap=0.0 marginalOverlapCount=0
+EVIDENCE-PAIR fixture=F pair=TOP Map m3 <-> Map m2 packed=166.3 settled=173.1 windowMaxHoldDeviation=13.9 paintedGap=34.7 idle=31 endpointStep=230 minSeparation=25.42 containmentOverflow=2.5 marginalOverlap=0.0
+EVIDENCE-PAIR fixture=F pair=TOP Map m3 <-> Map m1 packed=161.1 settled=170.6 windowMaxHoldDeviation=9.7 paintedGap=26.4 idle=31 endpointStep=230 minSeparation=25.42 containmentOverflow=2.5 marginalOverlap=0.0
+EVIDENCE-PAIR fixture=F pair=TOP Map m1 <-> Map m0 packed=147.1 settled=151.3 windowMaxHoldDeviation=10.6 paintedGap=25.4 idle=31 endpointStep=230 minSeparation=25.42 containmentOverflow=2.5 marginalOverlap=0.0
+EVIDENCE fixture=G idle=27 endpointStep=226 packed=112.0 settled=111.6 windowMaxHoldDeviation=7.9 paintedGap=21.5 minSeparation=21.54 containmentOverflow=0.0 containmentHull=- marginalOverlap=-0.4 marginalOverlapCount=2
+EVIDENCE-PAIR fixture=G pair=group 0 <-> group 1 packed=112.0 settled=111.6 windowMaxHoldDeviation=0.7 paintedGap=21.5 idle=27 endpointStep=226 minSeparation=21.54 containmentOverflow=0.0 marginalOverlap=-0.4
+EVIDENCE-PAIR fixture=G pair=group 0 <-> group 2 packed=112.0 settled=118.5 windowMaxHoldDeviation=7.9 paintedGap=27.4 idle=27 endpointStep=226 minSeparation=21.54 containmentOverflow=0.0 marginalOverlap=-0.4
+EVIDENCE-PAIR fixture=G pair=group 1 <-> group 3 packed=112.0 settled=111.8 windowMaxHoldDeviation=1.0 paintedGap=22.2 idle=27 endpointStep=226 minSeparation=21.54 containmentOverflow=0.0 marginalOverlap=-0.4
+EVIDENCE fixture=H idle=7 endpointStep=206 packed=96.0 settled=96.9 windowMaxHoldDeviation=1.6 paintedGap=nested minSeparation=103.62 containmentOverflow=0.0 containmentHull=- marginalOverlap=0.0 marginalOverlapCount=0
+EVIDENCE-PAIR fixture=H pair=grandchild group <-> parent anchor packed=96.0 settled=96.9 windowMaxHoldDeviation=1.5 paintedGap=nested idle=7 endpointStep=206 minSeparation=103.62 containmentOverflow=0.0 marginalOverlap=0.0
+EVIDENCE-PAIR fixture=H pair=child one group <-> parent anchor packed=96.0 settled=96.4 windowMaxHoldDeviation=1.3 paintedGap=nested idle=7 endpointStep=206 minSeparation=103.62 containmentOverflow=0.0 marginalOverlap=0.0
+EVIDENCE-PAIR fixture=H pair=child two group <-> parent anchor packed=96.0 settled=96.9 windowMaxHoldDeviation=1.6 paintedGap=nested idle=7 endpointStep=206 minSeparation=103.62 containmentOverflow=0.0 marginalOverlap=0.0
+EVIDENCE-REORDER retained=m0 fundamentals apply=188.9 nextStep=0.2
+EVIDENCE-REORDER retained=Map m0 apply=188.9 nextStep=0.1
+EVIDENCE-REORDER retained=m1 fundamentals apply=85.8 nextStep=4.0
+EVIDENCE-REORDER retained=Map m1 apply=85.8 nextStep=7.3
+EVIDENCE-REORDER retained=m2 fundamentals apply=48.7 nextStep=1.3
+EVIDENCE-REORDER retained=Map m2 apply=48.7 nextStep=3.7
+EVIDENCE-REORDER retained=m3 fundamentals apply=17.2 nextStep=163.7
+EVIDENCE-REORDER retained=Map m3 apply=17.2 nextStep=177.6
+EVIDENCE-REORDER totals applyMax=188.9 applySum=681.3 stepMax=177.6
+EVIDENCE-REORDER postReorderIdle=- retainedDrift=376.2
+STAGES A raw=LayoutPositions{nodeCount=4, anchorCount=4} boundary=LayoutPositions{nodeCount=4, anchorCount=4} edge=LayoutPositions{nodeCount=4, anchorCount=4} diagnostics=org.freeplane.plugin.graph.layout.EdgeConflictDiagnostics@f9469d96
+STAGES B raw=LayoutPositions{nodeCount=8, anchorCount=4} boundary=LayoutPositions{nodeCount=8, anchorCount=4} edge=LayoutPositions{nodeCount=8, anchorCount=4} diagnostics=org.freeplane.plugin.graph.layout.EdgeConflictDiagnostics@f9469d96
+STAGES D raw=LayoutPositions{nodeCount=8, anchorCount=4} boundary=LayoutPositions{nodeCount=8, anchorCount=4} edge=LayoutPositions{nodeCount=8, anchorCount=4} diagnostics=org.freeplane.plugin.graph.layout.EdgeConflictDiagnostics@6f6eb62e
+STAGES E raw=LayoutPositions{nodeCount=5, anchorCount=2} boundary=LayoutPositions{nodeCount=5, anchorCount=2} edge=LayoutPositions{nodeCount=5, anchorCount=2} diagnostics=org.freeplane.plugin.graph.layout.EdgeConflictDiagnostics@f9469d96
+STAGES F raw=LayoutPositions{nodeCount=14, anchorCount=8} boundary=LayoutPositions{nodeCount=14, anchorCount=8} edge=LayoutPositions{nodeCount=14, anchorCount=8} diagnostics=org.freeplane.plugin.graph.layout.EdgeConflictDiagnostics@f9469d96
+STAGES G raw=LayoutPositions{nodeCount=8, anchorCount=5} boundary=LayoutPositions{nodeCount=8, anchorCount=5} edge=LayoutPositions{nodeCount=8, anchorCount=5} diagnostics=org.freeplane.plugin.graph.layout.EdgeConflictDiagnostics@f9469d96
+STAGES H raw=LayoutPositions{nodeCount=8, anchorCount=4} boundary=LayoutPositions{nodeCount=8, anchorCount=4} edge=LayoutPositions{nodeCount=8, anchorCount=4} diagnostics=org.freeplane.plugin.graph.layout.EdgeConflictDiagnostics@f9469d96
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

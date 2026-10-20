@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.geometry.HullIntersectionShould" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:43.143Z" hostname="Arch-MSSD0" time="0.035">
+  <properties/>
+  <testcase name="translatedHullHasNoPositiveAreaIntersectionAndReverseOrderNegatesTheVector" classname="org.freeplane.plugin.graph.geometry.HullIntersectionShould" time="0.004"/>
+  <testcase name="returnsZeroForDisjointOrMerelyTouchingHulls" classname="org.freeplane.plugin.graph.geometry.HullIntersectionShould" time="0.002"/>
+  <testcase name="keepsMinimumTranslationInvariantUnderACommonLargeOffset" classname="org.freeplane.plugin.graph.geometry.HullIntersectionShould" time="0.003"/>
+  <testcase name="usesAxesFromBothConvexPolygons" classname="org.freeplane.plugin.graph.geometry.HullIntersectionShould" time="0.002"/>
+  <testcase name="separatesHugeFiniteOverlappingHulls" classname="org.freeplane.plugin.graph.geometry.HullIntersectionShould" time="0.001"/>
+  <testcase name="resolvesCoincidentAndEqualOverlapTiesDeterministically" classname="org.freeplane.plugin.graph.geometry.HullIntersectionShould" time="0.001"/>
+  <testcase name="siblingOverlapPredicateRejectsNestedContainment" classname="org.freeplane.plugin.graph.geometry.HullIntersectionShould" time="0.021"/>
+  <testcase name="returnsTheExactMinimumTranslationAppliedToTheSecondHull" classname="org.freeplane.plugin.graph.geometry.HullIntersectionShould" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

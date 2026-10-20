@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.workspace.model.WorkspaceDomainShould" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:51.970Z" hostname="Arch-MSSD0" time="0.014">
+  <properties/>
+  <testcase name="provideVersionOneDefaults" classname="org.freeplane.plugin.graph.workspace.model.WorkspaceDomainShould" time="0.0"/>
+  <testcase name="includesTheMapSidebarFieldsInEqualityHashCodeAndToString" classname="org.freeplane.plugin.graph.workspace.model.WorkspaceDomainShould" time="0.0"/>
+  <testcase name="normalizeDocumentRecordsAndCollectionsDeterministically" classname="org.freeplane.plugin.graph.workspace.model.WorkspaceDomainShould" time="0.003"/>
+  <testcase name="rejectDuplicateUnknownXmlKeysAndWrongRecordOwners" classname="org.freeplane.plugin.graph.workspace.model.WorkspaceDomainShould" time="0.001"/>
+  <testcase name="preserveValueIdentityWithoutNormalizingPersistedNodeIds" classname="org.freeplane.plugin.graph.workspace.model.WorkspaceDomainShould" time="0.001"/>
+  <testcase name="acceptExactlyTheApprovedMapPalette" classname="org.freeplane.plugin.graph.workspace.model.WorkspaceDomainShould" time="0.001"/>
+  <testcase name="rejectInvalidNumericUriColorAndUnknownXmlValues" classname="org.freeplane.plugin.graph.workspace.model.WorkspaceDomainShould" time="0.002"/>
+  <testcase name="defaultsTheMapSidebarPresentationState" classname="org.freeplane.plugin.graph.workspace.model.WorkspaceDomainShould" time="0.0"/>
+  <testcase name="defensivelyCopyUnknownXmlAndExposeCanonicalOrder" classname="org.freeplane.plugin.graph.workspace.model.WorkspaceDomainShould" time="0.001"/>
+  <testcase name="copyBuilderInputsBeforeBuildingAnImmutableDocument" classname="org.freeplane.plugin.graph.workspace.model.WorkspaceDomainShould" time="0.001"/>
+  <testcase name="rejectInvalidReferencesSequencesAndCompatibility" classname="org.freeplane.plugin.graph.workspace.model.WorkspaceDomainShould" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

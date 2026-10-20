@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" tests="50" skipped="0" failures="1" errors="0" timestamp="2026-10-20T16:57:29.011Z" hostname="Arch-MSSD0" time="0.332">
+  <properties/>
+  <testcase name="viewportSettledCallbackRunsImmediatelyOnEdt" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.005"/>
+  <testcase name="hitTestARoutedDoglegAtItsSampledNearestPoint" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.002"/>
+  <testcase name="openAHitEndpointOnDoubleClickAndRejectSecondInstallation" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.006"/>
+  <testcase name="escapeFallbackRunsWhenPressStartsWithNoPreviewAndNoSelection" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.006"/>
+  <testcase name="rejectFiniteDistanceWhenRoundedCrossProductsCancel" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.011"/>
+  <testcase name="viewportSettledCallbackWaitsForPositioningAndPendingClamps" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.006"/>
+  <testcase name="escapeIsConsumedForPreviewSelectionAndFallbackCases" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.012"/>
+  <testcase name="translateSelectionConnectionZoomPanAndUninstallGestures" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.008"/>
+  <testcase name="trackTheCursorOneToOneWhenDraggingEmptyCanvasLeftAtZoomOne" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.018"/>
+  <testcase name="hitAnEnclosureEdgeAtItsLayoutAnchoredPaintedSegment" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.002"/>
+  <testcase name="escapeFallbackDoesNotRunWhenPressStartsWithSelection" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.003"/>
+  <testcase name="hitNodeEndpointsFirstAndPreserveHullHitOrdering" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.001"/>
+  <testcase name="hitAnOnSegmentQueryWithMixedMagnitudeCoordinates" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.001"/>
+  <testcase name="keepNodeConnectionPreviewWhenOnlyABoundaryIsSuppressed" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.004"/>
+  <testcase name="cancelConnectionPreviewWhenANodeSourceLosesCurrentGeometry" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.003"/>
+  <testcase name="trackTheCursorOneToOneWhenDraggingEmptyCanvasRightAtZoomOnePointFive" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.028"/>
+  <testcase name="cancelSelfConnectWithoutEmittingAConnectIntent" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.004"/>
+  <testcase name="boundariesStaySelectableButNeverBecomeConnectOrPinEndpoints" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.003"/>
+  <testcase name="dispatchesAtMostOneContextActionPerGesture" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.002"/>
+  <testcase name="revealHitEndpointSourceOnSingleClickWhileEmptySpaceOnlyClearsSelection" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.003"/>
+  <testcase name="hitTestARoutedBowAtItsSampledNearestPoint" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.001"/>
+  <testcase name="keepAFiniteInteriorProjectionNearTheLargeEndpoint" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.002"/>
+  <testcase name="viewportSettledCallbackExceptionDoesNotEscapeCompletion" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.008"/>
+  <testcase name="doNotPanWhenAProgrammaticScrollMovesTheViewportUnderAStationaryPointer" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.019">
+    <failure message="org.junit.ComparisonFailure: expected:&lt;java.awt.Point[x=[201,y=3]1]&gt; but was:&lt;java.awt.Point[x=[161,y=1]1]&gt;" type="org.junit.ComparisonFailure">org.junit.ComparisonFailure: expected:&lt;java.awt.Point[x=[201,y=3]1]&gt; but was:&lt;java.awt.Point[x=[161,y=1]1]&gt;
+	at app//org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould.doNotPanWhenAProgrammaticScrollMovesTheViewportUnderAStationaryPointer(GraphInteractionControllerShould.java:744)
+	at java.base@21.0.8/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base@21.0.8/java.lang.reflect.Method.invoke(Method.java:580)
+	at app//org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at app//org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at app//org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at app//org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at app//org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at app//org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at app//org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at app//org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at app//org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at app//org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at app//org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at app//org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at app//org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at app//org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at app//org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at app//org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.gradle.api.internal.tasks.testing.junit.JUnitTestClassExecutor.runTestClass(JUnitTestClassExecutor.java:122)
+	at org.gradle.api.internal.tasks.testing.junit.JUnitTestClassExecutor.execute(JUnitTestClassExecutor.java:68)
+	at org.gradle.api.internal.tasks.testing.junit.JUnitTestClassExecutor.execute(JUnitTestClassExecutor.java:43)
+	at org.gradle.api.internal.tasks.testing.junit.AbstractJUnitTestClassProcessor.processTestClass(AbstractJUnitTestClassProcessor.java:61)
+	at org.gradle.api.internal.tasks.testing.SuiteTestClassProcessor.processTestClass(SuiteTestClassProcessor.java:54)
+	at java.base@21.0.8/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base@21.0.8/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:36)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:24)
+	at org.gradle.internal.dispatch.ContextClassLoaderDispatch.dispatch(ContextClassLoaderDispatch.java:33)
+	at org.gradle.internal.dispatch.ProxyDispatchAdapter$DispatchingInvocationHandler.invoke(ProxyDispatchAdapter.java:92)
+	at jdk.proxy1/jdk.proxy1.$Proxy4.processTestClass(Unknown Source)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker$2.run(TestWorker.java:183)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.executeAndMaintainThreadName(TestWorker.java:132)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:103)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:63)
+	at org.gradle.process.internal.worker.child.ActionExecutionWorker.execute(ActionExecutionWorker.java:56)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:122)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72)
+	at app//worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69)
+	at app//worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74)
+</failure>
+  </testcase>
+  <testcase name="trackTheCursorOneToOneWhenDraggingEmptyCanvasLeftAtZoomFive" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.019"/>
+  <testcase name="viewportPositioningAccessorExcludesPendingClamps" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.002"/>
+  <testcase name="panWhenDraggingEmptyCanvas" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.005"/>
+  <testcase name="useStableSharedHullEndpointOrderAndExcludeSuppressedHulls" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.003"/>
+  <testcase name="trackTheCursorOneToOneWhenDraggingEmptyCanvasDiagonallyAtZoomOnePointFive" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.028"/>
+  <testcase name="trackTheCursorOneToOneWhenDraggingEmptyCanvasRightAtZoomFive" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.018"/>
+  <testcase name="viewportSettledCallbackCanRegisterAReplacementReentrantly" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.003"/>
+  <testcase name="rejectANullComponentPoint" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.001"/>
+  <testcase name="viewportSettledCallbackRejectsNull" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.0"/>
+  <testcase name="cancelConnectionPreviewBeforeClearingSelection" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.004"/>
+  <testcase name="cancelConnectionPreviewWhenANodeIsRemovedFromCurrentCanvasState" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.005"/>
+  <testcase name="rejectPositiveSubnormalDistanceAtZeroTolerance" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.004"/>
+  <testcase name="togglesPinOnTheNodeUnderTheContextClickAtItsCentre" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.004"/>
+  <testcase name="viewportSettledRegistrationReplacesEarlierCallback" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.003"/>
+  <testcase name="returnTheSamePointWhenConvertingWithoutAViewportAncestor" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.0"/>
+  <testcase name="hitTheEndpointUnderThePointerWhenTheViewportIsScrolled" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.007"/>
+  <testcase name="rejectConnectCompletionUnlessBothEndpointsAreNodes" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.004"/>
+  <testcase name="trackTheCursorOneToOneWhenDraggingEmptyCanvasRightAtZoomOne" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.009"/>
+  <testcase name="emitTheConfiguredRelationshipDirectionForConnections" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.004"/>
+  <testcase name="applyTheViewPositionWhenConvertingComponentPointToViewportCoordinates" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.005"/>
+  <testcase name="escapeFallbackDoesNotRunWhenPressStartsWithPreview" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.002"/>
+  <testcase name="translateHoverPinAndContextActions" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.005"/>
+  <testcase name="trackTheCursorOneToOneWhenDraggingEmptyCanvasLeftAtZoomOnePointFive" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.012"/>
+  <testcase name="omitSuppressedEdgesFromHitTestingWhileRetainingVisibleEnclosureEdges" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.015"/>
+  <testcase name="resolveFiniteExtremeSpanEdgesWithoutAcceptingAnOffSegmentPoint" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.004"/>
+  <testcase name="rejectATinyOffsetFromAnExtremeSpanEdge" classname="org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould" time="0.001"/>
+  <system-out><![CDATA[Oct 21, 2026 12:57:29 AM org.freeplane.plugin.graph.canvas.GraphCanvas drainViewportSettledCallback
+WARNING: Viewport settle callback failed
+java.lang.RuntimeException: callback runtime
+	at org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould.viewportSettledCallbackExceptionDoesNotEscapeCompletion(GraphInteractionControllerShould.java:162)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.gradle.api.internal.tasks.testing.junit.JUnitTestClassExecutor.runTestClass(JUnitTestClassExecutor.java:122)
+	at org.gradle.api.internal.tasks.testing.junit.JUnitTestClassExecutor.execute(JUnitTestClassExecutor.java:68)
+	at org.gradle.api.internal.tasks.testing.junit.JUnitTestClassExecutor.execute(JUnitTestClassExecutor.java:43)
+	at org.gradle.api.internal.tasks.testing.junit.AbstractJUnitTestClassProcessor.processTestClass(AbstractJUnitTestClassProcessor.java:61)
+	at org.gradle.api.internal.tasks.testing.SuiteTestClassProcessor.processTestClass(SuiteTestClassProcessor.java:54)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:36)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:24)
+	at org.gradle.internal.dispatch.ContextClassLoaderDispatch.dispatch(ContextClassLoaderDispatch.java:33)
+	at org.gradle.internal.dispatch.ProxyDispatchAdapter$DispatchingInvocationHandler.invoke(ProxyDispatchAdapter.java:92)
+	at jdk.proxy1/jdk.proxy1.$Proxy4.processTestClass(Unknown Source)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker$2.run(TestWorker.java:183)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.executeAndMaintainThreadName(TestWorker.java:132)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:103)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:63)
+	at org.gradle.process.internal.worker.child.ActionExecutionWorker.execute(ActionExecutionWorker.java:56)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:122)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74)
+
+Oct 21, 2026 12:57:29 AM org.freeplane.plugin.graph.canvas.GraphCanvas drainViewportSettledCallback
+WARNING: Viewport settle callback failed
+java.lang.AssertionError: callback error
+	at org.freeplane.plugin.graph.canvas.GraphInteractionControllerShould.viewportSettledCallbackExceptionDoesNotEscapeCompletion(GraphInteractionControllerShould.java:162)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.gradle.api.internal.tasks.testing.junit.JUnitTestClassExecutor.runTestClass(JUnitTestClassExecutor.java:122)
+	at org.gradle.api.internal.tasks.testing.junit.JUnitTestClassExecutor.execute(JUnitTestClassExecutor.java:68)
+	at org.gradle.api.internal.tasks.testing.junit.JUnitTestClassExecutor.execute(JUnitTestClassExecutor.java:43)
+	at org.gradle.api.internal.tasks.testing.junit.AbstractJUnitTestClassProcessor.processTestClass(AbstractJUnitTestClassProcessor.java:61)
+	at org.gradle.api.internal.tasks.testing.SuiteTestClassProcessor.processTestClass(SuiteTestClassProcessor.java:54)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:36)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:24)
+	at org.gradle.internal.dispatch.ContextClassLoaderDispatch.dispatch(ContextClassLoaderDispatch.java:33)
+	at org.gradle.internal.dispatch.ProxyDispatchAdapter$DispatchingInvocationHandler.invoke(ProxyDispatchAdapter.java:92)
+	at jdk.proxy1/jdk.proxy1.$Proxy4.processTestClass(Unknown Source)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker$2.run(TestWorker.java:183)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.executeAndMaintainThreadName(TestWorker.java:132)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:103)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:63)
+	at org.gradle.process.internal.worker.child.ActionExecutionWorker.execute(ActionExecutionWorker.java:56)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:122)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:72)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74)
+
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

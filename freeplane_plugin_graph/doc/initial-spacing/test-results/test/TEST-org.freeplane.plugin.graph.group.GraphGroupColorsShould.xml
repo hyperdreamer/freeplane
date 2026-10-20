@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.group.GraphGroupColorsShould" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:44.695Z" hostname="Arch-MSSD0" time="0.009">
+  <properties/>
+  <testcase name="returnsTheDefaultCoralWhenThePropertyIsMissing" classname="org.freeplane.plugin.graph.group.GraphGroupColorsShould" time="0.001"/>
+  <testcase name="returnsTheDefaultCoralWhenThePropertyIsInvalid" classname="org.freeplane.plugin.graph.group.GraphGroupColorsShould" time="0.006"/>
+  <testcase name="returnsTheConfiguredColorWhenThePropertyIsSet" classname="org.freeplane.plugin.graph.group.GraphGroupColorsShould" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

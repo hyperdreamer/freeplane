@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.command.SourceNavigationShould" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:32.640Z" hostname="Arch-MSSD0" time="0.013">
+  <properties/>
+  <testcase name="rejectsUnavailableOrUnreachableSourcesWithoutSelectingAnything" classname="org.freeplane.plugin.graph.command.SourceNavigationShould" time="0.006"/>
+  <testcase name="switchesToAnAlreadyOpenViewOfTheSameFileInsteadOfMaterializingADuplicate" classname="org.freeplane.plugin.graph.command.SourceNavigationShould" time="0.001"/>
+  <testcase name="navigatesToAnIdlessSourceWithoutAssigningAnId" classname="org.freeplane.plugin.graph.command.SourceNavigationShould" time="0.001"/>
+  <testcase name="materializesTheMapViewBeforeSelectingWhenTheSourceMapHasNoView" classname="org.freeplane.plugin.graph.command.SourceNavigationShould" time="0.002"/>
+  <testcase name="selectsAReachableSourceThroughTheTraversalResolver" classname="org.freeplane.plugin.graph.command.SourceNavigationShould" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

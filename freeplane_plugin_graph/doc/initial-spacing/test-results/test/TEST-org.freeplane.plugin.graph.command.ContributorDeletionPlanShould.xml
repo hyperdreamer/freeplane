@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.command.ContributorDeletionPlanShould" tests="20" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:30.795Z" hostname="Arch-MSSD0" time="0.652">
+  <properties/>
+  <testcase name="requiresDeleteAllToPrevalidateEveryContributorBeforeBeginningTheTransaction" classname="org.freeplane.plugin.graph.command.ContributorDeletionPlanShould" time="0.283"/>
+  <testcase name="retriesRecoveryBeforeASecondCommandAndClearsItAfterSuccess" classname="org.freeplane.plugin.graph.command.ContributorDeletionPlanShould" time="0.264"/>
+  <testcase name="rollsBackNativeTransactionWhenTheSingleWorkspaceTransitionIsRejected" classname="org.freeplane.plugin.graph.command.ContributorDeletionPlanShould" time="0.006"/>
+  <testcase name="reportsNativeCommitFailureAfterBothPhasesAreCompensated" classname="org.freeplane.plugin.graph.command.ContributorDeletionPlanShould" time="0.009"/>
+  <testcase name="returnsNativeMapIdsInDeterministicOrder" classname="org.freeplane.plugin.graph.command.ContributorDeletionPlanShould" time="0.0"/>
+  <testcase name="requiresDeleteAllToPrevalidateEveryNonemptyContributorBeforeBeginningTheTransaction" classname="org.freeplane.plugin.graph.command.ContributorDeletionPlanShould" time="0.003"/>
+  <testcase name="retainsIncompleteRecoveryAcrossHandlerInvocationsBeforeStartingNewWork" classname="org.freeplane.plugin.graph.command.ContributorDeletionPlanShould" time="0.006"/>
+  <testcase name="rejectsAnUnavailableCoordinatorBeforeReadingContributors" classname="org.freeplane.plugin.graph.command.ContributorDeletionPlanShould" time="0.004"/>
+  <testcase name="reportsIncompleteRecoveryWhenWorkspaceCompensationFails" classname="org.freeplane.plugin.graph.command.ContributorDeletionPlanShould" time="0.011"/>
+  <testcase name="reportsIncompleteRecoveryWhenNativeRollbackFailsAfterWorkspaceRejection" classname="org.freeplane.plugin.graph.command.ContributorDeletionPlanShould" time="0.01"/>
+  <testcase name="publishesOneExactWorkspacePurgeForAWorkspaceContributor" classname="org.freeplane.plugin.graph.command.ContributorDeletionPlanShould" time="0.003"/>
+  <testcase name="rejectsDuplicateNativeKeysAndInconsistentMapSourceDescriptors" classname="org.freeplane.plugin.graph.command.ContributorDeletionPlanShould" time="0.001"/>
+  <testcase name="rejectsPendingChangesBeforeBeginningEitherDeletionPhase" classname="org.freeplane.plugin.graph.command.ContributorDeletionPlanShould" time="0.002"/>
+  <testcase name="retriesWorkspaceCompensationBeforeStartingLaterDeletionAndRetainsItUntilSuccess" classname="org.freeplane.plugin.graph.command.ContributorDeletionPlanShould" time="0.013"/>
+  <testcase name="compensatesPublishedWorkspaceTransitionWhenNativeCommitFails" classname="org.freeplane.plugin.graph.command.ContributorDeletionPlanShould" time="0.008"/>
+  <testcase name="rejectsAConnectorThatChangesBetweenTheTwoProjectionValidations" classname="org.freeplane.plugin.graph.command.ContributorDeletionPlanShould" time="0.001"/>
+  <testcase name="keepsNativeGroupsAndWorkspaceIdsImmutable" classname="org.freeplane.plugin.graph.command.ContributorDeletionPlanShould" time="0.002"/>
+  <testcase name="retainsExactWorkspaceCompensationWhenRealStoreCommitInterposesUnrelatedCommand" classname="org.freeplane.plugin.graph.command.ContributorDeletionPlanShould" time="0.015"/>
+  <testcase name="completesMixedDeletionWithOneWorkspacePurgeAndOneNativeCommit" classname="org.freeplane.plugin.graph.command.ContributorDeletionPlanShould" time="0.005"/>
+  <testcase name="rejectsStaleGenerationBeforeBeginningNativeOrWorkspaceWork" classname="org.freeplane.plugin.graph.command.ContributorDeletionPlanShould" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

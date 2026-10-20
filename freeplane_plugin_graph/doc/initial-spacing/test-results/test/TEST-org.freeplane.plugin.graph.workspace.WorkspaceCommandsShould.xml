@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.workspace.WorkspaceCommandsShould" tests="16" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:51.542Z" hostname="Arch-MSSD0" time="0.015">
+  <properties/>
+  <testcase name="addMapsWithMonotonicSequencesAcrossGapsAndCycleThePalette" classname="org.freeplane.plugin.graph.workspace.WorkspaceCommandsShould" time="0.001"/>
+  <testcase name="rejectNullFactoryArgumentsImmediately" classname="org.freeplane.plugin.graph.workspace.WorkspaceCommandsShould" time="0.004"/>
+  <testcase name="deleteMapIsUndoableAndRedoableWithAllCascadedEntities" classname="org.freeplane.plugin.graph.workspace.WorkspaceCommandsShould" time="0.002"/>
+  <testcase name="removeAndReactivateMapsWithoutCascadingRelationshipsOrPins" classname="org.freeplane.plugin.graph.workspace.WorkspaceCommandsShould" time="0.0"/>
+  <testcase name="createRelationshipsWithCanonicalBidirectionalAndUndirectedEndpointsAndDetectDuplicates" classname="org.freeplane.plugin.graph.workspace.WorkspaceCommandsShould" time="0.001"/>
+  <testcase name="locateMapsOnlyByExplicitlyRebindingUris" classname="org.freeplane.plugin.graph.workspace.WorkspaceCommandsShould" time="0.0"/>
+  <testcase name="reactivateAnExactUriWithoutChangingItsRegistrationAndRejectConflictingProposedIds" classname="org.freeplane.plugin.graph.workspace.WorkspaceCommandsShould" time="0.0"/>
+  <testcase name="purgeOnlyExactRelationshipsAtomicallyAndCopyTheRequestedIds" classname="org.freeplane.plugin.graph.workspace.WorkspaceCommandsShould" time="0.002"/>
+  <testcase name="setAndRemovePinsWhilePreservingExistingUnknownXml" classname="org.freeplane.plugin.graph.workspace.WorkspaceCommandsShould" time="0.0"/>
+  <testcase name="rejectInvalidPinsAndRemoveAllExistingPins" classname="org.freeplane.plugin.graph.workspace.WorkspaceCommandsShould" time="0.0"/>
+  <testcase name="deleteRelationshipsAndRejectMissingOrInvalidRelationshipRequests" classname="org.freeplane.plugin.graph.workspace.WorkspaceCommandsShould" time="0.0"/>
+  <testcase name="deleteMapPurgesMapAndCascadesRelationshipsAndPinsBothSourceAndTarget" classname="org.freeplane.plugin.graph.workspace.WorkspaceCommandsShould" time="0.002"/>
+  <testcase name="updateRelationshipsWithoutChangingTheirIdentitySequenceOrUnknownXml" classname="org.freeplane.plugin.graph.workspace.WorkspaceCommandsShould" time="0.0"/>
+  <testcase name="replaceCompleteDisplaySettingsAndTreatEqualSettingsAsNoChange" classname="org.freeplane.plugin.graph.workspace.WorkspaceCommandsShould" time="0.001"/>
+  <testcase name="rejectSequenceOverflowAndInvalidModelValuesWithoutMutatingTheDocument" classname="org.freeplane.plugin.graph.workspace.WorkspaceCommandsShould" time="0.0"/>
+  <testcase name="deleteMapRejectsUnknownMapId" classname="org.freeplane.plugin.graph.workspace.WorkspaceCommandsShould" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.window.MapListPanelShould" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:48.747Z" hostname="Arch-MSSD0" time="0.319">
+  <properties/>
+  <testcase name="resolvesTheCollapseChevronIconAndFallsBackToText" classname="org.freeplane.plugin.graph.window.MapListPanelShould" time="0.005"/>
+  <testcase name="tracksTheListWidthWithThePanelContentWidthOnSetRows" classname="org.freeplane.plugin.graph.window.MapListPanelShould" time="0.003"/>
+  <testcase name="hostsTheHeadingLabelAndTheNamedCollapseButton" classname="org.freeplane.plugin.graph.window.MapListPanelShould" time="0.002"/>
+  <testcase name="tracksTheListWidthOnAPanelResizeWithoutSetRows" classname="org.freeplane.plugin.graph.window.MapListPanelShould" time="0.006"/>
+  <testcase name="promptConfirmationBeforeDeleteAndClearSelectionOnDelete" classname="org.freeplane.plugin.graph.window.MapListPanelShould" time="0.144"/>
+  <testcase name="dispatchReactivateAndPreserveSelectionInActiveListOnNextUpdate" classname="org.freeplane.plugin.graph.window.MapListPanelShould" time="0.073"/>
+  <testcase name="partitionActiveAndInactiveRowsIntoSeparateLists" classname="org.freeplane.plugin.graph.window.MapListPanelShould" time="0.004"/>
+  <testcase name="swapButtonLabelsAndEnablementBasedOnSelectionPartition" classname="org.freeplane.plugin.graph.window.MapListPanelShould" time="0.005"/>
+  <testcase name="derivesTheRowRendererCellWidthFromTheListWidth" classname="org.freeplane.plugin.graph.window.MapListPanelShould" time="0.003"/>
+  <testcase name="maintainMutuallyExclusiveSelectionBetweenLists" classname="org.freeplane.plugin.graph.window.MapListPanelShould" time="0.002"/>
+  <testcase name="dispatchDeactivateAndPreserveSelectionInInactiveListOnNextUpdate" classname="org.freeplane.plugin.graph.window.MapListPanelShould" time="0.072"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

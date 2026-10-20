@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.window.GraphWindowChromeShould" tests="58" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:39.042Z" hostname="Arch-MSSD0" time="3.228">
+  <properties/>
+  <testcase name="holdReleasesAtFiveSecondCapAndLogsSettlementFailure" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.096"/>
+  <testcase name="settleCallbackRunsImmediatelyWhenAlreadySettled" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.065"/>
+  <testcase name="scrollbarPressPublishesOnceBeforeUiAdjustmentOnEitherAxis" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.129"/>
+  <testcase name="lateViewportEventsIndependentlyDelayQuietWindowAndHitCap" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.072"/>
+  <testcase name="automaticRefreshLayoutAndFocusLossCannotOverwriteSidebarOverride" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.091"/>
+  <testcase name="logsClampResidualAndPinsContentEdge" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.054"/>
+  <testcase name="newTransitionCancelsPreviousQuietWindowGeneration" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.047"/>
+  <testcase name="ignoresActiveProgrammaticPositioningAndKeepsHoldArmed" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.038"/>
+  <testcase name="presentationEnterAndExitEmitNoWorkspaceCommandInReadOnlyMode" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.043"/>
+  <testcase name="toolbarPublicationPublishesBeforeDisarm" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.037"/>
+  <testcase name="preservesScrolledCenterWhenTransitionExhaustsScrollRange" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.203"/>
+  <testcase name="settleCallbackRegistrationIsIdempotentPerGeneration" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.041"/>
+  <testcase name="closeCancelsQuietWindowGeneration" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.041"/>
+  <testcase name="dividerDoubleClickReleasesOverrideBeforeReset" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.055"/>
+  <testcase name="compensatesPositionOnlyLayoutEventWithoutPublishingOrDisarming" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.031"/>
+  <testcase name="closeWithPendingClampCancelsSettleCorrectionAndQuietWork" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.03"/>
+  <testcase name="noGestureFocusLossDoesNotReleaseOverrideOrCommit" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.036"/>
+  <testcase name="unchangedCanvasDeliveryDoesNotPublishOrMoveCenter" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.038"/>
+  <testcase name="changedStoredSidebarSettingsReleaseOverrideButIdenticalRefreshDoesNot" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.081"/>
+  <testcase name="preservesCenterForOddCanvasAndOddExtentGeometry" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.023"/>
+  <testcase name="settleCallbackCorrectsAfterClampWithoutFinalViewportEvent" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.03"/>
+  <testcase name="compensatesLateExtentChangeAfterTransitionReturns" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.04"/>
+  <testcase name="keyboardPaneNavigationPublishesOnceOnlyWhenPaneHasFocus" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.775"/>
+  <testcase name="classifiesPaneWheelScrollAsUserAndClearsTransientMarker" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.018"/>
+  <testcase name="hideMakesAllChromeInvisibleAndRemovesDividerSize" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.016"/>
+  <testcase name="classifiesKeyboardScrollAsUserWhenPendingClampExistsWithoutActivePositioning" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.024"/>
+  <testcase name="preservesCenterForOddCanvasAndEvenExtentGeometry" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.02"/>
+  <testcase name="sidebarMutationGuardsReturnBeforeAnyFieldOrComponentChange" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.041"/>
+  <testcase name="closeCancelsSettleCallbackAndIgnoresLateGeneration" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.024"/>
+  <testcase name="zeroWidthSplitPaneRestoresOnFirstLayout" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.021"/>
+  <testcase name="keyboardDividerActionReleasesOverrideBeforeMutation" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.198"/>
+  <testcase name="quietWindowFloorRestartsAfterLastTransitionGeometry" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.031"/>
+  <testcase name="collapsedRailRestoreButtonReleasesOverrideAndCommitsOnce" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.076"/>
+  <testcase name="publishedViewportIsNotSwallowedByReconcileBeforeDisarm" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.025"/>
+  <testcase name="disarmReconcilesWithoutPublishing" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.037"/>
+  <testcase name="recomputesAbsolutelyAfterOddShrinkWithoutCompounding" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.026"/>
+  <testcase name="preservesCenterForEvenCanvasAndOddExtentGeometry" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.031"/>
+  <testcase name="classifiesAnchorChangeAsUserBeforePositioningMarker" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.023"/>
+  <testcase name="presentationEnterAndExitEmitNoWorkspaceCommandInWritableMode" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.021"/>
+  <testcase name="exitRecapturesCurrentViewAfterEntryHoldDisarmed" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.027"/>
+  <testcase name="userDisarmCancelsSettleCallback" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.029"/>
+  <testcase name="captureUsesEffectiveStateWhenSettingsDifferFromDisplaySettings" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.019"/>
+  <testcase name="holdDisarmsOnFirstQuietWindowAtOrAfterPlatformHorizon" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.019"/>
+  <testcase name="newGenerationReplacesPendingSettleCallbackAndRunsCorrectionOnce" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.021"/>
+  <testcase name="dividerPropertyChangeDoesNotReleaseOverride" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.026"/>
+  <testcase name="expandedCollapseButtonReleasesOverrideAndCommitsOnce" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.045"/>
+  <testcase name="canvasPublicationPublishesBeforeDedupeReconcileAndDisarm" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.017"/>
+  <testcase name="classifiesScrollbarDragAsUserWhenExtentAndSurfaceAreUnchanged" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.016"/>
+  <testcase name="mapsSidebarMenuToggleReleasesOverrideAndCommitsOnce" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.029"/>
+  <testcase name="adjustingScrollbarPublishesOnceOnEitherAxisAndClearsMarker" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.038"/>
+  <testcase name="restoreReturnsVisibilityDividerStateAndCollapsedStateExactly" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.03"/>
+  <testcase name="dividerPressReleasesOverrideBeforeDrag" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.04"/>
+  <testcase name="subsequentIndependentResizeUsesBaselineAfterHoldDisarms" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.018"/>
+  <testcase name="holdNeverDisarmsBeforeTwoThousandFiveHundredMilliseconds" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.017"/>
+  <testcase name="preservesCenterForEvenCanvasAndEvenExtentGeometry" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.014"/>
+  <testcase name="restoreContinuesAfterOneComponentFails" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.031"/>
+  <testcase name="displaySettingsAndViewportCommandMutantsFailTheNoCommandAssertion" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.022"/>
+  <testcase name="modelAppliedViewportDoesNotPublishOrDisarm" classname="org.freeplane.plugin.graph.window.GraphWindowChromeShould" time="0.038"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" tests="31" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:29.376Z" hostname="Arch-MSSD0" time="1.409">
+  <properties/>
+  <testcase name="keepsThePinnedDenseHistogramsAtSmallerViewports" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.017"/>
+  <testcase name="recomputesTheLeaderStartOfRetainedLabelsAfterALargePan" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.005"/>
+  <testcase name="skipsSuppressedEnclosureLabels" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.001"/>
+  <testcase name="placesTheDenseSceneAtThePinnedViewport" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.004"/>
+  <testcase name="placesEmphaticEnclosureLabelsExternallyWithALeader" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.002"/>
+  <testcase name="boundsEveryPlacedLabelByItsSlotForms" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.009"/>
+  <testcase name="promotesAHoverOnlyLabelToForcedWithoutCollisions" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.005"/>
+  <testcase name="keepsEveryLeaderClearOfItsOwnLabelBox" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.012"/>
+  <testcase name="placesTheLongSceneThroughTheO4BaseSlotWithTheStandIn" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.001"/>
+  <testcase name="keepsPaintedInkSeparatedAcrossTheZoomMatrix" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.604"/>
+  <testcase name="reusesTheCachedPlacementUntilTheKeyChanges" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.002"/>
+  <testcase name="placesEmphaticAndSubtleEnclosureLabelsThroughTheLevelFilter" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.003"/>
+  <testcase name="neverTruncatesWhileAFullTextSlotWasFree" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.004"/>
+  <testcase name="keepsThePinnedLongHistogramsAtTheSmallerViewports" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.004"/>
+  <testcase name="keepsPlacementsStickyAcrossAPan" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.005"/>
+  <testcase name="invalidatesAStaleSlotAndReLadders" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.001"/>
+  <testcase name="recomputesTheLeaderStartOfRetainedLabelsAfterAZoomChange" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.002"/>
+  <testcase name="followsThePinnedZoomAndRenderingLevelMatrix" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.004"/>
+  <testcase name="placesEmphaticEnclosureLabelsInTheHullInterior" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.001"/>
+  <testcase name="keepsTheEmphaticEnclosureInteriorWhenASubtleEnclosureComesFirst" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.001"/>
+  <testcase name="hidesASubtleEnclosureLabelWhenNoExternalSlotIsAccepted" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.005"/>
+  <testcase name="retainsASlotForAOnePixelMove" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.003"/>
+  <testcase name="placesTheLongSceneThroughTheO4BaseSlotWithoutTheStandIn" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.002"/>
+  <testcase name="placesEmphaticEnclosureLabelsExternallyInTheSecondLaneWithATrimmedLeader" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.002"/>
+  <testcase name="resetsTheBaseSlotFlagWhenRetainingAnO4Label" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.001"/>
+  <testcase name="keepsLeaderInkOutOfItsOwnGlyphInk" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.69"/>
+  <testcase name="placesEmphaticEnclosureLabelsOnTheLeastPopulatedArc" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.001"/>
+  <testcase name="recomputesTheFullTextSlotPredicateIndependently" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.005"/>
+  <testcase name="forcesAnEmphaticEnclosureLabelAtTheAnchorWhenNoSlotIsAccepted" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.002"/>
+  <testcase name="drawsNodeLeadersForEverySlotExceptAboveAndBelow" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.003"/>
+  <testcase name="keepsHullGeometryUnchangedAcrossEnclosurePlacement" classname="org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

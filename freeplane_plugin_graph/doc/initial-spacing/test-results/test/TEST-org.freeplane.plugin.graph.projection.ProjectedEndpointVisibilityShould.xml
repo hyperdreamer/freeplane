@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.projection.ProjectedEndpointVisibilityShould" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:37.547Z" hostname="Arch-MSSD0" time="0.008">
+  <properties/>
+  <testcase name="rejectNullListsAndEntries" classname="org.freeplane.plugin.graph.projection.ProjectedEndpointVisibilityShould" time="0.006"/>
+  <testcase name="includeNodesAndNonSuppressedEnclosureEndpointsInProjectedOrder" classname="org.freeplane.plugin.graph.projection.ProjectedEndpointVisibilityShould" time="0.001"/>
+  <testcase name="retainSuppressedDeepEnclosureInProjectionWhileExcludingItsEndpointFromVisibility" classname="org.freeplane.plugin.graph.projection.ProjectedEndpointVisibilityShould" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.workspace.RecentWorkspaceListShould" tests="18" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:51.473Z" hostname="Arch-MSSD0" time="0.044">
+  <properties/>
+  <testcase name="recordAndClearNeverThrowWhenThePersisterFails" classname="org.freeplane.plugin.graph.workspace.RecentWorkspaceListShould" time="0.003"/>
+  <testcase name="recordNeverThrowsOnAnUnusablePath" classname="org.freeplane.plugin.graph.workspace.RecentWorkspaceListShould" time="0.002"/>
+  <testcase name="ordersEntriesNewestFirst" classname="org.freeplane.plugin.graph.workspace.RecentWorkspaceListShould" time="0.002"/>
+  <testcase name="clearsEveryStoredEntryAndPersistsTheEmptyString" classname="org.freeplane.plugin.graph.workspace.RecentWorkspaceListShould" time="0.002"/>
+  <testcase name="promotesARecordedPathInsteadOfDuplicatingIt" classname="org.freeplane.plugin.graph.workspace.RecentWorkspaceListShould" time="0.002"/>
+  <testcase name="keepsUnresolvableStoredPathsAcrossAnUnrelatedRecord" classname="org.freeplane.plugin.graph.workspace.RecentWorkspaceListShould" time="0.003"/>
+  <testcase name="labelHelperUsesFileNameAndFullContainingFolder" classname="org.freeplane.plugin.graph.workspace.RecentWorkspaceListShould" time="0.0"/>
+  <testcase name="filtersMissingFilesFromDisplayButKeepsThemStored" classname="org.freeplane.plugin.graph.workspace.RecentWorkspaceListShould" time="0.003"/>
+  <testcase name="dropsInvalidStoredTokensAtConstruction" classname="org.freeplane.plugin.graph.workspace.RecentWorkspaceListShould" time="0.002"/>
+  <testcase name="emptyReturnsFreshInertInstances" classname="org.freeplane.plugin.graph.workspace.RecentWorkspaceListShould" time="0.001"/>
+  <testcase name="skipsMissingEntriesWhenResolvingTheMostRecentExisting" classname="org.freeplane.plugin.graph.workspace.RecentWorkspaceListShould" time="0.0"/>
+  <testcase name="evictsTheOldestEntryAtTheStoredCapacity" classname="org.freeplane.plugin.graph.workspace.RecentWorkspaceListShould" time="0.003"/>
+  <testcase name="labelHelperFallsBackToThePathStringForARoot" classname="org.freeplane.plugin.graph.workspace.RecentWorkspaceListShould" time="0.0"/>
+  <testcase name="truncatesDecodedValuesToTheStoredCapacity" classname="org.freeplane.plugin.graph.workspace.RecentWorkspaceListShould" time="0.011"/>
+  <testcase name="standardToleratesAnAbsentResourceController" classname="org.freeplane.plugin.graph.workspace.RecentWorkspaceListShould" time="0.004"/>
+  <testcase name="roundTripsThePersistenceFormatThroughEncodeListValue" classname="org.freeplane.plugin.graph.workspace.RecentWorkspaceListShould" time="0.002"/>
+  <testcase name="recordsTheCanonicalPathAndNotTheGivenVariant" classname="org.freeplane.plugin.graph.workspace.RecentWorkspaceListShould" time="0.001"/>
+  <testcase name="truncatesDisplayedEntriesAtTheDisplayCapacity" classname="org.freeplane.plugin.graph.workspace.RecentWorkspaceListShould" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

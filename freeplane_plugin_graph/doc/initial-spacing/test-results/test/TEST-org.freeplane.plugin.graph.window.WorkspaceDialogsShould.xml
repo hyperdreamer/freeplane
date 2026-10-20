@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.window.WorkspaceDialogsShould" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-10-20T17:25:49.994Z" hostname="Arch-MSSD0" time="1.342">
+  <properties/>
+  <testcase name="capturesContributorRowsAndEmitsExactDisplayedDeletionInputs" classname="org.freeplane.plugin.graph.window.WorkspaceDialogsShould" time="0.016"/>
+  <testcase name="purgesOnlyMissingRowsWithTheGenerationAndPrecomputedDescriptions" classname="org.freeplane.plugin.graph.window.WorkspaceDialogsShould" time="0.009"/>
+  <testcase name="keepsInspectionAvailableButBlocksEveryReadOnlyContributorDeletionPath" classname="org.freeplane.plugin.graph.window.WorkspaceDialogsShould" time="0.032"/>
+  <testcase name="updatesSourceMapUndoFromSessionStatusIndependentlyOfWorkspaceHistory" classname="org.freeplane.plugin.graph.window.WorkspaceDialogsShould" time="0.088"/>
+  <testcase name="opensPurgeWithoutEmittingUntilTheCapturedExplicitAction" classname="org.freeplane.plugin.graph.window.WorkspaceDialogsShould" time="0.085"/>
+  <testcase name="disposesAnAttachedGraphicalWindowOnlyAfterSuccessfulCloseActionsAndOnCancel" classname="org.freeplane.plugin.graph.window.WorkspaceDialogsShould" time="0.71"/>
+  <testcase name="focusesTheGraphOnceOnlyForAnEditorActivatingCommandResultAfterRouting" classname="org.freeplane.plugin.graph.window.WorkspaceDialogsShould" time="0.02"/>
+  <testcase name="routesStatusActionsAndKeepsLayoutRestartAvailableReadOnly" classname="org.freeplane.plugin.graph.window.WorkspaceDialogsShould" time="0.367"/>
+  <testcase name="rendersOperationalStatusAndIndependentScaleWarnings" classname="org.freeplane.plugin.graph.window.WorkspaceDialogsShould" time="0.015"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

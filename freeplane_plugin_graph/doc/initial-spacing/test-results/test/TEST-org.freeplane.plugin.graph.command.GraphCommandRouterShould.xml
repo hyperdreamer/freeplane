@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.freeplane.plugin.graph.command.GraphCommandRouterShould" tests="18" skipped="0" failures="0" errors="0" timestamp="2026-10-20T16:57:32.354Z" hostname="Arch-MSSD0" time="0.285">
+  <properties/>
+  <testcase name="routesDeleteMapForInactiveMap" classname="org.freeplane.plugin.graph.command.GraphCommandRouterShould" time="0.24"/>
+  <testcase name="routesEverySessionIntentToItsOwningService" classname="org.freeplane.plugin.graph.command.GraphCommandRouterShould" time="0.01"/>
+  <testcase name="preservesExactGenerationBoundDeletionPayloads" classname="org.freeplane.plugin.graph.command.GraphCommandRouterShould" time="0.002"/>
+  <testcase name="rejectsRetryFailureWithoutSavingOrCallingTheCoordinatorTwice" classname="org.freeplane.plugin.graph.command.GraphCommandRouterShould" time="0.001"/>
+  <testcase name="rejectsDeleteMapForActiveMap" classname="org.freeplane.plugin.graph.command.GraphCommandRouterShould" time="0.002"/>
+  <testcase name="preservesExactWorkspaceCommandPayloads" classname="org.freeplane.plugin.graph.command.GraphCommandRouterShould" time="0.004"/>
+  <testcase name="retriesOnlyAnActiveRegistrationAndPassesItsUnchangedIdentityToTheCoordinator" classname="org.freeplane.plugin.graph.command.GraphCommandRouterShould" time="0.002"/>
+  <testcase name="freezesGenerationBoundCollectionsAndAllowsMissingConnectorExpectationsForRelationships" classname="org.freeplane.plugin.graph.command.GraphCommandRouterShould" time="0.001"/>
+  <testcase name="leavesAnOccupiedSaveAsTargetBytesIdentityAndRegistryUnchanged" classname="org.freeplane.plugin.graph.command.GraphCommandRouterShould" time="0.003"/>
+  <testcase name="executesTransientSourceCommandRejectionOnceWithoutImplicitSave" classname="org.freeplane.plugin.graph.command.GraphCommandRouterShould" time="0.002"/>
+  <testcase name="delegatesSameMapCrossMapAndSelfConnectorPayloads" classname="org.freeplane.plugin.graph.command.GraphCommandRouterShould" time="0.002"/>
+  <testcase name="saveAsCannotWriteBeforeReservation" classname="org.freeplane.plugin.graph.command.GraphCommandRouterShould" time="0.003"/>
+  <testcase name="appliesRestartLayoutAndDelegatesItExactlyOnce" classname="org.freeplane.plugin.graph.command.GraphCommandRouterShould" time="0.001"/>
+  <testcase name="routesReactivateMapToWorkspaceCommand" classname="org.freeplane.plugin.graph.command.GraphCommandRouterShould" time="0.004"/>
+  <testcase name="rejectsNullParametersForReactivateMapAndDeleteMap" classname="org.freeplane.plugin.graph.command.GraphCommandRouterShould" time="0.001"/>
+  <testcase name="savesAtMostOnceWhenAnExplicitSaveIsRejected" classname="org.freeplane.plugin.graph.command.GraphCommandRouterShould" time="0.001"/>
+  <testcase name="preservesTheCurrentMapUndoTargetWithoutLettingNullEscapeAsAnOptional" classname="org.freeplane.plugin.graph.command.GraphCommandRouterShould" time="0.001"/>
+  <testcase name="saveAsCommitsTheReservationOnlyAfterTheStorePublishesTheNewIdentity" classname="org.freeplane.plugin.graph.command.GraphCommandRouterShould" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
