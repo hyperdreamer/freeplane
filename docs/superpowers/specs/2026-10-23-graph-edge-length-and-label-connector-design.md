@@ -34,11 +34,14 @@ Goals:
   `DISPLACED_OFFSET - LEADER_CLEARANCE = 27 px` at any zoom and any label size, and a `RIGHT`/`LEFT`
   leader is exactly `SLOT_GAP - LEADER_CLEARANCE = 3 px`. The ordering therefore holds for
   axis-aligned connectors from zoom ~1.125 upward.
-  It does **not** hold for diagonal `ABOVE_RIGHT`-style slots: their anchor carries the zoom-scaled
-  disc radius and the `leader()` trim stops at the far edge of the inflated text box, so a wide
-  diagonal label produces a connector longer than the run even at zoom 1.63. The design therefore
-  promises the ordering only where it is provable and *measures* the diagonal case instead of
-  claiming it.
+  It does **not** hold for diagonal `ABOVE_RIGHT`-style slots. Their anchor is
+  `(r + SLOT_GAP + width/2, r + SLOT_GAP + height/2)` in screen pixels, so it carries both the
+  zoom-scaled disc radius and the label's own half-extents; `leader()` trims correctly at the first
+  entry into the inflated text box (`ScreenLabelPlacement.java:557`, implemented by taking the
+  larger of the two slab parameters at `:571`-`:585`), but for a wide label that first entry lies
+  close to the box along a long diagonal, so most of the anchor distance survives as connector. The
+  design therefore promises the ordering only where it is provable and *measures* the diagonal case
+  instead of claiming it.
 - A label connector reads as an annotation, not as a graph relationship.
 - Within one enclosure, relationship springs never demand more room than the containment ring
   already provides. This is a local claim; section C1 states exactly where it does and does not
@@ -59,6 +62,13 @@ acceptance harness must itself be amended (D1), the arrowhead rule gained a shaf
 the connector-length goal was corrected and scoped to axis-aligned slots (Goals, I11, I13), the ring
 argument was restricted to its provable scope (C1), enclosure-label connectors were brought
 explicitly into scope, and the production/test inventory and performance evidence were completed.
+
+Amended after the fourth review: `effectiveArrowHeadLengthPx` was separated from paint-time
+suppression so the helper stays a pure length function while `paintArrow` decides whether to paint;
+the routed-path bow test that suppression would otherwise break (`capsTheArrowheadAtTheTerminalSegmentOfARoutedPath`, 7 wu availability) was added to the migration inventory; the archival step now
+names the artifacts the driver actually writes; D0 records that the committed UI screenshots contain
+no edges and therefore cannot witness C2; and the diagonal-leader explanation now describes the real
+first-entry trim instead of a far-edge trim that does not exist.
 
 Amended again after the third review: the arrowhead rule replaced its `0.50 x availability` cap
 with head **suppression** below 8 wu of availability, because the cap produced heads narrower than
@@ -164,7 +174,7 @@ Like-for-like head bases, measured at equal 24 wu availability:
 | delivery base at a 24 wu run (unclipped 12.5 wu head) | 12.5 | 65.6% |
 | approved at a 24 wu run (30% rule) | 7.2 | 37.8% |
 | delivery base on the reported 6 wu run (clipped) | 6.0 | 31.5% |
-| approved on the same 6 wu run | 3.0 | 15.8% |
+| approved on the same 6 wu run | none painted (8 wu suppression floor) | n/a; the edge is a plain line |
 
 Panel B of this image is the approved spacing; it is the combination of the earlier B and D, not
 either of them alone.
@@ -380,10 +390,10 @@ Existing tests that must change, and why:
 | --- | --- |
 | `GraphCanvasPaintShould.keepsTheLeaderStrokeScreenConstant` (`:1021`) | Assert 1.0 screen px and a `{1.2, 2.8}` dash array after `× zoom`, instead of equality with the 1.4 px edge stroke. |
 | `GraphCanvasPaintShould.paintsTheLeaderStrokeScreenConstantThroughTheProductionCallSite` (`:1030`) | Detect leader ink with `mutedColor`, and count ink across the whole segment rather than one column, because a single column can land in a dash gap. |
-| `GraphCanvasPaintShould` head-rule probe (`:1398`–`:1405`) | `effectiveArrowHeadLengthPx(0.6, 6.0)` = `min(4, 3.0) × 0.6 = 1.8` (was `3.6`), and `(1.0, 3.0)` = `min(4, 1.5) × 1.0 = 1.5` (was `3.0`). The dependent half-base assertion becomes `0.42 × 1.8 = 0.756`. Add the shaft-guarantee rows. |
+| `GraphCanvasPaintShould` head-rule probe (`:1398`–`:1405`) | `effectiveArrowHeadLengthPx` stays a pure length function with no suppression: `(0.6, 6.0)` = `clamp(1.8, 4.0, 12.5) × 0.6 = 2.4` (was `3.6`) and `(1.0, 3.0)` = `clamp(0.9, 4.0, 12.5) × 1.0 = 4.0` (was `3.0`). Suppression lives in `paintArrow`, not in this helper, so the migrated test asserts that split explicitly: the helper returns 4.0 for any availability below `4/0.30`, and no head is painted below 8 wu availability. The half-base assertion follows the painted length and therefore moves to the paint-level test. |
 | `GraphCanvasPaintShould.arrowHeadLengthIsProportionalToZoom` (`:1383`) | Not annotated `@Test` and not run, but it compiles and calls the deleted `arrowHeadLengthPx` six times. Delete it with the helper, per the legacy-removal policy. |
-| `GraphCanvasPaintShould.paintedArrowHeadCapBaseAndBidirectionalSplitAtPaintLevel` (`:1575`, `:1580`, `:1582`) | The node-end head `6.0 ± 1.5` and the bidirectional base assertions were derived from the old fill-everything cap; re-derive them from C2 (`a = 6` gives a 3 wu head; bidirectional `a = 3` gives 1.5 wu per head). |
-| `GraphCanvasPaintShould.paintedArrowHeadCapBaseAndBidirectionalSplitAtPaintLevel` (`:1561`–`:1596`) | Holds the `30 px` cap assertion at `:1594`, the historical `12.5 / 8.68 ≈ 1.4401` crossover comment, the `6.0 ± 1.5` head and `3.5–6.0` base ranges at `:1575`–`:1582`, and the non-vacuity assertion at `:1586`–`:1587`. All of them are re-derived from C2: a 6 wu availability paints no head, so the cap/base rows move to an 8 wu or larger availability, and the comment is replaced by the new piecewise rule. |
+| `GraphCanvasPaintShould.paintedArrowHeadCapBaseAndBidirectionalSplitAtPaintLevel` (`:1561`–`:1596`) | Holds the `30 px` cap assertion at `:1594`, the historical `12.5 / 8.68 ≈ 1.4401` crossover comment, the `6.0 ± 1.5` head and `3.5–6.0` base ranges at `:1575`–`:1582`, and the non-vacuity assertion at `:1586`–`:1587`. Its `capFixture` uses a 6 wu availability, which now paints **no** head, so the fixture moves to a ≥ 8 wu availability (a 9 wu cap yields 4.0 wu and keeps the cap's meaning: the head is the floor, not the chord), the head/base ranges are re-derived, the half-base assertion arrives from the helper test, and the comment is replaced by the new piecewise rule. |
+| `GraphCanvasPaintShould.capsTheArrowheadAtTheTerminalSegmentOfARoutedPath` (`:1440`) | Newly required. `shortTerminalBowFixture()` puts the control at `(82, 7)`, so the routed terminal segment is 7 wu, below the 8 wu suppression floor: the test now finds `measuredHeadLengthPx` returning `NaN` (`:1370`) where it expects a painted head. Keep the terminal-versus-chord coverage by moving the control to an availability ≥ 8 wu (for example `(82, 9)`), and add a separate assertion that a 7 wu terminal paints no head and only the polyline. |
 | `ScreenLabelPlacementShould` (`:1736`) | Migrate the helper that calls `GraphPainter.leaderStroke(theme, zoom)` to the new `leaderStroke(zoom)` signature, or it will not compile. |
 | `InitialSpacingConsumers.topology` (`:179`–`:180`, both assertions) | Both relationship-gap assertions become configuration-aware: `first + second + (bothEndpointsAreNodes ? gap : 6.0)`, using the caller's `gap` (`InitialSpacingProbe.java:43` passes `6.0` for C0 and `24.0` for the candidate). A hard-coded `24.0` would fail the frozen C0 run, which I12 forbids. |
 | `InitialSpacingSeedShould` (`:14`, `:26`, `:33`) | The `+ 6.0`-based relationship assertions move to the new gap; its `PREFERRED_NODE_GAP == 24.0`, ring and `contentRingRadius` assertions stay as they are. |
@@ -392,10 +402,19 @@ Existing tests that must change, and why:
 
 `GraphWorkspaceUiEvidence` writes the committed screenshots used by earlier specifications. It
 asserts canvas, toolbar and interaction behaviour and contains **no** `labelColor`, `mutedColor` or
-leader-pixel assertion (verified by search), so C2 and C3 cannot fail it and regenerating it is not
-required for correctness. It is regenerated anyway, once, because the committed images would
-otherwise depict the old head and connector; the regeneration is recorded as evidence, not asserted
-by a test.
+leader-pixel assertion (verified by search), so C2 and C3 cannot fail it. Two limits make it
+insufficient as this feature's witness, and the design says so instead of implying otherwise:
+
+- its projection is built by `GraphProjection.structure` with an empty edge list
+  (`GraphWorkspaceUiEvidence.java:253`) and it installs `EdgePaths.empty()` (`:284`), so **no
+  arrowhead is ever painted** there. It cannot witness C2 at all.
+- it does paint labels, so it *does* witness C3, and it is regenerated once for that purpose. The
+  regeneration is recorded as evidence, not asserted by a test.
+
+C2's visual witness is a separate capture: the render harness already used for this design's mockups,
+driven with an edge-bearing projection at zoom 1.63 (a 24 wu single-headed run, and a 6 wu run that
+must now paint a plain line with no head), archived under `docs/superpowers/specs/images/` with its
+digest and the constant values used. That capture is evidence, not a gate.
 
 ### D1 — the frozen `graph-initial-spacing` acceptance harness must be amended
 
@@ -444,9 +463,11 @@ The amendment, in the same commit as C1 and C2 and C3:
    `build/initial-spacing-*` run directory into `freeplane_plugin_graph/doc/initial-spacing/runs/`,
    which is what that script did at the end. The exact changed-source set is enforced by the
    `git diff --name-only` check in step 1 instead.
-5. Archive that fresh receipt set (`manifest.json`, `results.json`, `verification.json`,
-   `comparison.json`, `acceptance.md`, `raw/*.json`) by direct copy, and keep the frozen C0 archive
-   untouched (invariant I12).
+5. Archive exactly what the driver writes into its output directory, by direct copy: `manifest.json`,
+   `comparison.json`, `acceptance.md` and one `<configuration>-<fixture>.json` per executed run
+   (`run-initial-spacing.py:221`). There is no `results.json`, `verification.json` or `raw/`
+   directory in that output, so naming them would make the archival step unverifiable. Keep the
+   frozen C0 archive untouched (invariant I12).
 6. Keep every C0 assertion, the seed-gap matrix and the control-pair accounting intact. The
    `graph-initial-spacing` **acceptance values** (24.0 seed gaps, `contentRingRadius == 20.0` in
    `BoundaryFootprintShould:73`) are genuinely unchanged; it is the harness's production-diff pin,
@@ -522,14 +543,14 @@ D1 harness), then D2, then the retained replay regression gate.
    proves too light in practice.
 5. **The connector can be longer than the edge.** Axis-aligned connectors are `FAR` slots at a fixed
    27 px and `RIGHT`/`LEFT` at a fixed 3 px, so the run (24 px at zoom 1, 39.12 px at zoom 1.63)
-   overtakes them from zoom ~1.125. Diagonal slots are not bounded: their anchor carries the
-   zoom-scaled disc radius and the `leader()` trim stops at the far edge of the inflated text box, so
-   whether a diagonal connector is longer than the run therefore depends on the zoom, the disc
-   radius and the label's own width and height: it can be longer at zoom 1.63 and shorter at zoom 4
-   for the same label. D2's diagonal fixture records the measured value and I13 requires it to be
-   reported rather than hidden. Removing the case would mean shortening `DISPLACED_OFFSET` or
-   changing `leader()` to trim at the *near* box edge, both of which are label geometry and out of
-   scope here.
+   overtakes them from zoom ~1.125. Diagonal slots are not bounded: the anchor is placed at
+   `(r + SLOT_GAP + width/2, r + SLOT_GAP + height/2)`, so its distance grows with the zoom-scaled
+   radius and with the label's own width and height, while the trim already stops correctly at the
+   first entry into the inflated text box. Whether such a connector is longer than the run therefore
+   depends on the zoom, the disc radius and the label dimensions: it can be longer at zoom 1.63 and
+   shorter at zoom 4 for the same label. D2's diagonal fixture records the measured value and I13
+   requires it to be reported rather than hidden. Removing the case would mean shortening
+   `DISPLACED_OFFSET` or the diagonal slot geometry, which is label geometry and out of scope here.
 6. **The frozen harness needs three amendments, not one.** The driver pins every production source,
    the receipt collector pins the changed-source set, and the driver pins candidate first-idle
    counts that this change may legitimately move. D1 permits all three, each narrowly, with the C0
