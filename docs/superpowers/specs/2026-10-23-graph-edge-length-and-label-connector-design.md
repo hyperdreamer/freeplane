@@ -63,6 +63,10 @@ the connector-length goal was corrected and scoped to axis-aligned slots (Goals,
 argument was restricted to its provable scope (C1), enclosure-label connectors were brought
 explicitly into scope, and the production/test inventory and performance evidence were completed.
 
+Amended after the fifth review: the redundant `min(head, available)` terminal clip was dropped from
+`effectiveArrowHeadLengthPx`, since paint-time suppression makes it unreachable and two contracts for
+one function are unimplementable as written; the design review then closed with zero blockers.
+
 Amended after the fourth review: `effectiveArrowHeadLengthPx` was separated from paint-time
 suppression so the helper stays a pure length function while `paintArrow` decides whether to paint;
 the routed-path bow test that suppression would otherwise break (`capsTheArrowheadAtTheTerminalSegmentOfARoutedPath`, 7 wu availability) was added to the migration inventory; the archival step now
@@ -248,11 +252,19 @@ MIN_ARROW_HEAD_AVAILABILITY   = 8.0        (below this, no head is drawn)
 ARROW_HEAD_HALF_BASE_RATIO    = 0.42       (unchanged)
 ```
 
-`effectiveArrowHeadLengthPx(zoom, available)` becomes
-`clamp(0.30 · available, 4.0, 12.5) · zoom`, keeping the existing clipping by the terminal segment,
-**and `paintArrow` draws no head at all when `available < MIN_ARROW_HEAD_AVAILABILITY`**, painting
-only the polyline. The `arrowAtFirst && arrowAtSecond` halving of `available` is unchanged, as is the
-bow handling; `paintArrow` keeps using the same unit vectors and half-base ratio.
+`effectiveArrowHeadLengthPx(zoom, available)` becomes `clamp(0.30 · available, 4.0, 12.5) · zoom`
+with **no** `min(head, available)` terminal clip, **and `paintArrow` draws no head at all when
+`available < MIN_ARROW_HEAD_AVAILABILITY`**, painting only the polyline. The
+`arrowAtFirst && arrowAtSecond` halving of `available` is unchanged, as is the bow handling;
+`paintArrow` keeps using the same unit vectors and half-base ratio.
+
+The separate clip is dropped rather than kept, because suppression makes it unreachable: a head is
+only painted when `available >= 8.0`, and on that domain `clamp(0.30 · a, 4.0, 12.5) <= a` holds
+throughout — `4.0 <= 8.0 <= a` in the floor branch, `0.30 · a < a` in the proportional branch, and
+`12.5 <= a` because the cap branch needs `a >= 12.5/0.30 = 41.666...`. Keeping both rules would have
+stated two contracts for one function; the helper is now the pure clamp and `paintArrow` owns the
+decision to paint. That is also why the migrated helper probe expects `4.0` and not `3.0` at
+`available = 3`: below the suppression floor the return value is defined but never painted.
 
 Suppression, not a proportional cap, is what makes the goal hold. Two constraints collide on a very
 short run: a head must stay small enough to leave a shaft, and it must stay wide enough to be seen at
