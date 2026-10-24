@@ -1,0 +1,133 @@
+# Execution manifest for 2026-10-23-graph-edge-length-and-label-connector.
+# Canonical scheduling source. Derived from the validated plan; every plan task maps exactly once.
+source_plan:
+  path: docs/superpowers/plans/2026-10-23-graph-edge-length-and-label-connector.md
+  sha256: a946165e4e103c95d13d5aeae3c4bd6501e292b211d6179c0d1eaec7387809c6
+  task_count: 5
+
+tasks:
+  - id: T-001
+    plan_task: 1
+    lane: harness
+    title: Amend the frozen D1 harness
+    implementer_tier: Advanced
+    depends_on: []
+    ownership:
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/InitialSpacingAcceptanceShould.java
+      - freeplane_plugin_graph/src/test/resources/initial-spacing/run-initial-spacing.py
+    resources: []
+    produced_interfaces:
+      - name: d1_overlay_set
+        signature: "C0 overlays = {GraphStreamLayoutEngine.java, ClusterPacking.java, GraphPainter.java}; candidate nn target = 36.0"
+        digest: sha256:a48cce07e0967100b3443896e9f285d4328bbf53ef02b26550ca77774b20d43a
+    consumed_interfaces: []
+    validation:
+      - argv: ["node", "/home/henry/.pi/agent/skills/subagent-driven-development/scripts/sdd-state.mjs", "validate-plan", "docs/superpowers/plans/2026-10-23-graph-edge-length-and-label-connector.md"]
+  - id: T-002
+    plan_task: 2
+    lane: tests
+    title: Pin relationship topology contracts
+    implementer_tier: Advanced
+    depends_on: [T-001]
+    ownership:
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/InitialSpacingConsumers.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/InitialSpacingSeedShould.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/InitialSpacingProbe.java
+    resources: []
+    produced_interfaces:
+      - name: topology_oracle
+        signature: "topology(projection, engine, ringGap, edgeGap); C0=(6.0,6.0); candidate=(24.0,20.0); I1 rest=r1+r2+PREFERRED_EDGE_GAP"
+        digest: sha256:dd900302f977f2494289c8feaef2646e031eab5ff34cb3067dc48a0b661ebb21
+    consumed_interfaces:
+      - name: d1_overlay_set
+        from: T-001
+        signature_digest: sha256:a48cce07e0967100b3443896e9f285d4328bbf53ef02b26550ca77774b20d43a
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.layout.graphstream.InitialSpacingSeedShould"]
+  - id: T-003
+    plan_task: 3
+    lane: production
+    title: Implement edge and connector rendering
+    implementer_tier: Advanced
+    depends_on: [T-001, T-002]
+    ownership:
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java
+      - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/GraphPainter.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphCanvasPaintShould.java
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/ScreenLabelPlacementShould.java
+    resources: []
+    produced_interfaces:
+      - name: preferred_edge_gap
+        signature: "static final double PREFERRED_EDGE_GAP = 20.0; PREFERRED_EDGE_GAP < PREFERRED_NODE_GAP"
+        digest: sha256:5f281c16bbdd99de94eff4ae90f536061e2d454df7cb290656271a9c1f1fd4c9
+      - name: arrow_head_rule
+        signature: "length = clamp(0.30 * availability, 4.0, 12.5); no head when availability < 8.0; half base 0.42 * length"
+        digest: sha256:2f1afc06004d4d4ad907d0658d6f32dedc5e20d0f251101f967b4a119ae277b1
+      - name: leader_stroke
+        signature: "leaderStroke(zoom): mutedColor, width max(1.0/zoom, 1e-6), dash {max(1.2/zoom,1e-6), max(2.8/zoom,1e-6)}, round caps"
+        digest: sha256:f1f058c14829a55355234206abdbb2f04d80a806cebf5c2d4d7fb933ba4641fb
+    consumed_interfaces:
+      - name: topology_oracle
+        from: T-002
+        signature_digest: sha256:dd900302f977f2494289c8feaef2646e031eab5ff34cb3067dc48a0b661ebb21
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould", "--tests", "org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould"]
+  - id: T-004
+    plan_task: 4
+    lane: tests
+    title: Add fresh-relaxation D2 measurements
+    implementer_tier: Capable
+    depends_on: [T-002, T-003]
+    ownership:
+      - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/GraphEdgeLengthSettleShould.java
+      - freeplane_plugin_graph/doc/edge-length/
+    resources: []
+    produced_interfaces:
+      - name: d2_settle_receipts
+        signature: "delivery-448c0d679d-<fixture>.json and candidate-<fixture>.json: first-idle, settled gaps, conflict counts, routing work"
+        digest: sha256:d6085aac29babda517fe88f9eadef7fb45453585abf966a9c487c3d161233cec
+    consumed_interfaces:
+      - name: preferred_edge_gap
+        from: T-003
+        signature_digest: sha256:5f281c16bbdd99de94eff4ae90f536061e2d454df7cb290656271a9c1f1fd4c9
+      - name: arrow_head_rule
+        from: T-003
+        signature_digest: sha256:2f1afc06004d4d4ad907d0658d6f32dedc5e20d0f251101f967b4a119ae277b1
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.layout.graphstream.GraphEdgeLengthSettleShould"]
+  - id: T-005
+    plan_task: 5
+    lane: evidence
+    title: Run acceptance gates and archive evidence
+    implementer_tier: Capable
+    depends_on: [T-003, T-004]
+    ownership:
+      - docs/superpowers/specs/images/
+    resources: []
+    produced_interfaces:
+      - name: acceptance_evidence
+        signature: "Mode 1 and Mode 2 gate logs, C2 capture digest, replay baseline-equivalence record"
+        digest: sha256:047d3a2cd7898514882200c25275e60217079e44b80a6f7d2062b9c1119e013f
+    consumed_interfaces:
+      - name: d2_settle_receipts
+        from: T-004
+        signature_digest: sha256:d6085aac29babda517fe88f9eadef7fb45453585abf966a9c487c3d161233cec
+      - name: leader_stroke
+        from: T-003
+        signature_digest: sha256:f1f058c14829a55355234206abdbb2f04d80a806cebf5c2d4d7fb933ba4641fb
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:verifyGraphBundle"]
+
+lanes:
+  - id: harness
+    task_ids: [T-001]
+    sequence: [1]
+  - id: tests
+    task_ids: [T-002, T-004]
+    sequence: [1, 2]
+  - id: production
+    task_ids: [T-003]
+    sequence: [1]
+  - id: evidence
+    task_ids: [T-005]
+    sequence: [1]

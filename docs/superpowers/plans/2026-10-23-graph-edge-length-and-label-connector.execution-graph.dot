@@ -1,0 +1,16 @@
+digraph execution {
+  rankdir=LR;
+  node [shape=box, style=rounded];
+  T_001 [label="T-001 (plan task 1)\nAmend the frozen D1 harness\nAdvanced"];
+  T_002 [label="T-002 (plan task 2)\nPin relationship topology contracts\nAdvanced"];
+  T_003 [label="T-003 (plan task 3)\nImplement edge and connector rendering\nAdvanced"];
+  T_004 [label="T-004 (plan task 4)\nAdd fresh-relaxation D2 measurements\nCapable"];
+  T_005 [label="T-005 (plan task 5)\nRun acceptance gates and archive evidence\nCapable"];
+  T_001 -> T_002;
+  T_001 -> T_003;
+  T_002 -> T_003;
+  T_002 -> T_004;
+  T_003 -> T_004;
+  T_003 -> T_005;
+  T_004 -> T_005;
+}
