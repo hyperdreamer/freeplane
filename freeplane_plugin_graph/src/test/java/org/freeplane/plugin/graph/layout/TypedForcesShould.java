@@ -47,7 +47,8 @@ public class TypedForcesShould {
     // Test-local size formulas; the values must equal the production
     // BoundarySizes constants (reviewed by the task reviewer).
     private static final double SIBLING_GAP = 8.0;
-    private static final int TWO_MAP_FIRST_IDLE_STEP = 3455;
+    // Epoch-2 candidate: 3455 -> 3103, fresh task5-candidate-cross-pin probe.
+    private static final int TWO_MAP_FIRST_IDLE_STEP = 3103;
     private static final int INITIAL_SPACING_FIRST_IDLE_LIMIT = 6000;
 
     private static final WorkspaceId WORKSPACE_ONE =

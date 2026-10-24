@@ -267,7 +267,9 @@ def run_acceptance(repo, candidate_cp, output):
                 assert int(first[0][3]) <= 600_000_000_000
                 assert int(post[0][6]) <= 600_000_000_000
             if fixture in ('S1', 'reference', 'cross'):
-                expected_step = {'S1': (84, 58), 'reference': (42, 37), 'cross': (756, 3455)}[fixture][configuration == 'candidate']
+                # Epoch-2 candidate refresh: S1 58 -> 41, initial-spacing-9087999385746809203;
+                # cross 3455 -> 3103, task5-candidate-cross-pin with that run's frozen C0 receipts.
+                expected_step = {'S1': (84, 41), 'reference': (42, 37), 'cross': (756, 3103)}[fixture][configuration == 'candidate']
                 assert int(first[0][2]) == expected_step
             if configuration == 'C0' and fixture == 'S1':
                 assert int(post[0][2]) == 184 and int(post[0][3]) == 100
