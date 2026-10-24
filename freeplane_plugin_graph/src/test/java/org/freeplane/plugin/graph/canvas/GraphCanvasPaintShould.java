@@ -10,6 +10,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
@@ -23,6 +24,8 @@ import java.awt.geom.PathIterator;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.Modifier;
 import java.net.URI;
 import java.util.ArrayList;
@@ -35,6 +38,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import javax.imageio.ImageIO;
 import javax.swing.JScrollPane;
 import javax.swing.JViewport;
 
@@ -1018,60 +1022,104 @@ public class GraphCanvasPaintShould {
 
     @Test
     public void keepsTheLeaderStrokeScreenConstant() {
-        GraphTheme theme = lightTheme();
-        for (double zoom : new double[] { 0.25, 1.0, 2.0, 4.0 }) {
-            assertThat((double) GraphPainter.leaderStroke(theme, zoom).getLineWidth() * zoom)
-                .as("leader stroke screen width at zoom " + zoom)
-                .isCloseTo(theme.edgeStroke().getLineWidth(), within(1e-6));
+        for (double zoom : new double[] { 1e-6, 0.25, 1.0, 1.63, 4.0, 1e6 }) {
+            BasicStroke stroke = GraphPainter.leaderStroke(zoom);
+            assertThat((double) stroke.getLineWidth() * zoom).isCloseTo(1.0, within(1e-6));
+            assertThat(stroke.getEndCap()).isEqualTo(BasicStroke.CAP_ROUND);
+            assertThat(stroke.getLineJoin()).isEqualTo(BasicStroke.JOIN_ROUND);
+            assertThat(stroke.getDashArray()).hasSize(2);
+            assertThat(stroke.getDashArray()[0] * zoom).isCloseTo(1.2, within(1e-6));
+            assertThat(stroke.getDashArray()[1] * zoom).isCloseTo(2.8, within(1e-6));
+            assertThat((stroke.getDashArray()[0] + (double) stroke.getDashArray()[1]) * zoom)
+                .isCloseTo(4.0, within(1e-6));
+            assertThat(stroke.getDashPhase()).isZero();
         }
+        BasicStroke extreme = GraphPainter.leaderStroke(1e46);
+        assertThat(extreme.getLineWidth()).isPositive();
+        assertThat(extreme.getDashArray()).hasSize(2);
+        for (float dash : extreme.getDashArray()) assertThat(dash).isPositive();
     }
 
     @Test
     public void paintsTheLeaderStrokeScreenConstantThroughTheProductionCallSite() {
-        CanvasState state = leaderStrokeState();
-        GraphPaintState paintState = GraphPaintState.empty();
-        GraphTheme theme = lightTheme();
-        double zoom = 4.0;
-        List<PlacedLabel> placed = placedLabels(state, theme, paintState, RenderingLevel.FULL,
-            zoom, SIZE.width, SIZE.height);
-        PlacedLabel carried = null;
-        for (PlacedLabel label : placed) {
-            if (label.leader().isPresent()) {
-                carried = label;
-                break;
+        for (CanvasTheme mode : new CanvasTheme[] { CanvasTheme.LIGHT, CanvasTheme.DARK }) {
+            GraphTheme theme = GraphTheme.resolve(mode, registeredMaps());
+            for (boolean dim : new boolean[] { false, true }) {
+                for (double zoom : new double[] { 0.25, 1.0, 1.63, 4.0 }) {
+                    CanvasState state = fixedRunState(20.0, true);
+                    PlacedLabel label = retainedLabel(state, theme, zoom, ScreenLabelPlacement.Slot.ABOVE_FAR);
+                    assertLeaderPaint(state, label, theme, zoom, new Dimension(1128, 364), dim);
+                }
+                Rectangle2D area = new Rectangle2D.Double(0.0, 0.0, 320.0, 320.0);
+                LabelPlacementRequest request = ScreenLabelPlacementShould.enclosureRequest(
+                    "Basic Definitions and Theorems", true, area,
+                    Collections.<ScreenLabelPlacementShould.SceneNode>emptyList(), RenderingLevel.FULL);
+                List<PlacedLabel> placed = new ScreenLabelPlacement().place(request, null, LabelFonts.from(theme),
+                    Collections.<Rectangle2D>singletonList(new Rectangle2D.Double(100, 84, 120, 24)));
+                PlacedLabel enclosure = ScreenLabelPlacementShould.findEnclosure(placed);
+                assertThat(enclosure.leader()).isPresent();
+                CanvasState state = CanvasState.of(1L, request.projection(),
+                    LayoutFrame.of(1L, request.positions(), false, 0), request.geometry(), EdgePaths.empty(),
+                    OperationalStatus.IDLE);
+                assertLeaderPaint(state, enclosure, theme, 1.0, new Dimension(320, 320), dim);
             }
         }
-        assertThat(carried).as("label carrying a leader at zoom " + zoom).isNotNull();
-        LeaderLine line = carried.leader().get();
-        assertThat(line.start().y()).as("horizontal leader for a column scan")
-            .isCloseTo(line.end().y(), within(1e-9));
-
-        BufferedImage image = paintAtZoom(state, paintState, theme, zoom);
-        int column = (int) Math.floor((line.start().x() + line.end().x()) * 0.5);
-        int rows = leaderInkRows(image, theme, column,
-            (int) Math.floor(line.start().y()) - 12, (int) Math.ceil(line.start().y()) + 12);
-        // The production call site must draw with GraphPainter.leaderStroke: 1.4 screen px
-        // covers at most two device rows by >50% at any subpixel offset, while the
-        // uncompensated theme.edgeStroke() paints 1.4 * zoom = 5.6 device px at zoom 4 and
-        // can never cover fewer than five rows by more than 50%.
-        assertThat(rows).as("painted leader thickness in device rows at zoom " + zoom)
-            .isBetween(1, 3);
     }
 
-    private static int leaderInkRows(final BufferedImage image, final GraphTheme theme,
-            final int column, final int minY, final int maxY) {
-        int rows = 0;
-        for (int y = Math.max(0, minY); y < Math.min(image.getHeight(), maxY); y++) {
-            final Color pixel = new Color(image.getRGB(column, y), true);
-            final double toLabel = colorDistanceSquared(pixel, theme.labelColor());
-            // A row counts as leader ink when it is closer to the leader colour than to the
-            // background or to the node stroke the leader overlaps at zoom 4.
-            if (toLabel < colorDistanceSquared(pixel, theme.background())
-                    && toLabel < colorDistanceSquared(pixel, theme.nodeStroke())) {
-                rows++;
+    private static void assertLeaderPaint(CanvasState state, PlacedLabel label, GraphTheme theme,
+            double zoom, Dimension size, boolean dim) {
+        GraphPaintState paintState = GraphPaintState.empty().withDimUnrelated(dim);
+        BufferedImage background = paintPlaced(state, Collections.<PlacedLabel>emptyList(), theme, zoom, size, paintState);
+        BufferedImage image = paintPlaced(state, Collections.singletonList(label), theme, zoom, size, paintState);
+        LeaderLine line = label.leader().get();
+        int mutedInk = 0;
+        int gaps = 0;
+        double length = leaderLength(label);
+        for (int step = 2; step < length - 2; step++) {
+            double fraction = step / length;
+            int x = (int) Math.floor(line.start().x() + fraction * (line.end().x() - line.start().x()));
+            int y = (int) Math.floor(line.start().y() + fraction * (line.end().y() - line.start().y()));
+            boolean inkAtStep = false;
+            boolean unchanged = true;
+            int thickness = 0;
+            for (int dx = -2; dx <= 2; dx++) {
+                Color base = new Color(background.getRGB(x + dx, y), true);
+                Color pixel = new Color(image.getRGB(x + dx, y), true);
+                Color muted = blend(theme.mutedColor(), base, dim ? 0.28 : 1.0);
+                Color text = blend(theme.labelColor(), base, dim ? 0.28 : 1.0);
+                if (colorDistanceSquared(pixel, muted) < colorDistanceSquared(pixel, base)
+                        && colorDistanceSquared(pixel, muted) < colorDistanceSquared(pixel, text)) {
+                    mutedInk++;
+                    thickness++;
+                    inkAtStep = true;
+                }
+                unchanged &= pixel.equals(base);
+            }
+            if (unchanged) gaps++;
+            if (inkAtStep) assertThat(thickness).as("screen leader width").isBetween(1, 3);
+        }
+        assertThat(mutedInk).as("muted leader ink: " + label.endpoint() + " zoom=" + zoom + " dim=" + dim)
+            .isPositive();
+        assertThat(gaps).as("dotted leader gaps").isPositive();
+        int textInk = 0;
+        Rectangle2D box = label.bounds();
+        for (int y = (int) Math.floor(box.getMinY()); y <= Math.ceil(box.getMaxY()); y++) {
+            for (int x = (int) Math.floor(box.getMinX()); x <= Math.ceil(box.getMaxX()); x++) {
+                Color base = new Color(background.getRGB(x, y), true);
+                Color pixel = new Color(image.getRGB(x, y), true);
+                Color text = blend(theme.labelColor(), base, dim ? 0.28 : 1.0);
+                Color muted = blend(theme.mutedColor(), base, dim ? 0.28 : 1.0);
+                if (colorDistanceSquared(pixel, text) < colorDistanceSquared(pixel, base)
+                        && colorDistanceSquared(pixel, text) < colorDistanceSquared(pixel, muted)) textInk++;
             }
         }
-        return rows;
+        assertThat(textInk).as("label color restored after leader").isPositive();
+    }
+
+    private static Color blend(Color ink, Color background, double alpha) {
+        return new Color((int) Math.round(ink.getRed() * alpha + background.getRed() * (1.0 - alpha)),
+            (int) Math.round(ink.getGreen() * alpha + background.getGreen() * (1.0 - alpha)),
+            (int) Math.round(ink.getBlue() * alpha + background.getBlue() * (1.0 - alpha)));
     }
 
     private static double colorDistanceSquared(final Color first, final Color second) {
@@ -1197,7 +1245,7 @@ public class GraphCanvasPaintShould {
     }
 
     private static PaintFixture shortTerminalBowFixture() {
-        return bowFixture(LayoutPoint.of(82.0, 7.0));
+        return bowFixture(LayoutPoint.of(82.0, 9.0));
     }
 
     private static PaintFixture bowFixture(final LayoutPoint control) {
@@ -1380,30 +1428,78 @@ public class GraphCanvasPaintShould {
         }
     }
 
-    public void arrowHeadLengthIsProportionalToZoom() {
-        assertThat(GraphPainter.arrowHeadLengthPx(0.6)).isCloseTo(7.5, within(1e-9));
-        assertThat(GraphPainter.arrowHeadLengthPx(0.378)).isCloseTo(4.725, within(1e-9));
-        assertThat(GraphPainter.arrowHeadLengthPx(1.0)).isCloseTo(12.5, within(1e-9));
-        assertThat(GraphPainter.arrowHeadLengthPx(1.44)).isCloseTo(18.0, within(1e-9));
-        assertThat(GraphPainter.arrowHeadLengthPx(3.0)).isCloseTo(37.5, within(1e-9));
-        assertThat(GraphPainter.arrowHeadLengthPx(0.5))
-            .isLessThan(GraphPainter.arrowHeadLengthPx(1.0));
-        assertThat(GraphPainter.arrowHeadHalfBasePx(12.5)).isCloseTo(5.25, within(1e-9));
+    @Test
+    public void arrowHeadRuleCapAndBidirectionalSplitAreSelectedInTheHelpers() {
+        assertThat(GraphPainter.effectiveArrowHeadLengthPx(0.6, 6.0)).isCloseTo(2.4, within(1e-9));
+        assertThat(GraphPainter.effectiveArrowHeadLengthPx(1.0, 3.0)).isCloseTo(4.0, within(1e-9));
+        for (double availability : new double[] { 3, 6, 7.99, 8, 4.0 / 0.30, 24, 12.5 / 0.30, 80 }) {
+            for (double zoom : new double[] { 0.25, 1, 1.63, 4 }) {
+                for (boolean both : new boolean[] { false, true }) {
+                    double separation = availability * (both ? 2.0 : 1.0);
+                    assertThat(GraphPainter.availableArrowHeadWorldLength(separation, both, true))
+                        .isCloseTo(availability, within(1e-9));
+                    double expected = Math.max(4.0, Math.min(12.5, 0.30 * availability));
+                    assertThat(GraphPainter.effectiveArrowHeadLengthPx(zoom, availability))
+                        .isCloseTo(expected * zoom, within(1e-9));
+                }
+            }
+        }
     }
 
     @Test
-    public void arrowHeadRuleCapAndBidirectionalSplitAreSelectedInTheHelpers() {
-        assertThat(GraphPainter.availableArrowHeadWorldLength(6.0, false, false)).isCloseTo(6.0, within(1e-9));
-        assertThat(GraphPainter.availableArrowHeadWorldLength(6.0, true, true)).isCloseTo(3.0, within(1e-9));
-        assertThat(GraphPainter.availableArrowHeadWorldLength(6.0, true, false)).isCloseTo(6.0, within(1e-9));
-        assertThat(GraphPainter.availableArrowHeadWorldLength(6.0, false, true)).isCloseTo(6.0, within(1e-9));
-        assertThat(GraphPainter.effectiveArrowHeadLengthPx(1.0, 100.0)).isCloseTo(12.5, within(1e-9));
-        assertThat(GraphPainter.effectiveArrowHeadLengthPx(0.6, 100.0)).isCloseTo(7.5, within(1e-9));
-        assertThat(GraphPainter.effectiveArrowHeadLengthPx(3.0, 100.0)).isCloseTo(37.5, within(1e-9));
-        assertThat(GraphPainter.effectiveArrowHeadLengthPx(0.6, 6.0)).isCloseTo(6.0 * 0.6, within(1e-9));
-        assertThat(GraphPainter.effectiveArrowHeadLengthPx(1.0, 3.0)).isCloseTo(3.0, within(1e-9));
-        assertThat(GraphPainter.arrowHeadHalfBasePx(GraphPainter.effectiveArrowHeadLengthPx(0.6, 6.0)))
-            .isCloseTo(0.42 * 6.0 * 0.6, within(1e-9));
+    public void paintsProportionalFilledHeadsOnlyAboveTheAvailabilityFloor() {
+        for (double availability : new double[] { 3, 6, 7.99, 8, 4.0 / 0.30, 24, 12.5 / 0.30, 80 }) {
+            for (double zoom : new double[] { 0.25, 1, 1.63, 4 }) {
+                for (boolean both : new boolean[] { false, true }) {
+                    CanvasState state = capFixture(both, 8.0 + availability * (both ? 2 : 1));
+                    ProjectedEdge edge = state.projection().edges().get(0);
+                    PaintFixture fixture = new PaintFixture(state, edge.key());
+                    List<Shape> drawn = new ArrayList<Shape>();
+                    List<Shape> filled = new ArrayList<Shape>();
+                    recordPaint(fixture, drawn, filled, zoom);
+                    EdgePath path = state.edgePaths().path(edge.key()).get();
+                    assertThat(GraphPainter.availableArrowHeadWorldLength(path.terminalSegmentLength(false),
+                        edge.arrowAtFirst(), edge.arrowAtSecond()))
+                        .as("fixture availability %s, bidirectional %s, samples %s", availability, both, path.samples())
+                        .isCloseTo(availability, within(1e-9));
+                    List<Shape> lines = new ArrayList<Shape>();
+                    List<Shape> heads = new ArrayList<Shape>();
+                    for (Shape shape : drawn) {
+                        if (shape instanceof Path2D && pathVertices((Path2D) shape).equals(path.samples())) lines.add(shape);
+                    }
+                    for (Shape shape : filled) {
+                        if (shape instanceof Path2D && pathVertices((Path2D) shape).size() == 3) heads.add(shape);
+                    }
+                    assertThat(lines).hasSize(1);
+                    assertThat(pathVertices((Path2D) lines.get(0))).isEqualTo(path.samples());
+                    assertThat(heads).as("availability %s, bidirectional %s, path %s, terminal lengths %s/%s",
+                        availability, both, path.samples(), path.terminalSegmentLength(true), path.terminalSegmentLength(false))
+                        .hasSize(availability < 8.0 ? 0 : both ? 2 : 1);
+                    for (Shape head : heads) {
+                        List<LayoutPoint> vertices = pathVertices((Path2D) head);
+                        assertThat(vertices).hasSize(3);
+                        assertThat(lines).doesNotContain(head);
+                        LayoutPoint tip = vertices.get(0);
+                        double midX = (vertices.get(1).x() + vertices.get(2).x()) / 2;
+                        double midY = (vertices.get(1).y() + vertices.get(2).y()) / 2;
+                        double length = Math.hypot(tip.x() - midX, tip.y() - midY);
+                        double base = Math.hypot(vertices.get(1).x() - vertices.get(2).x(),
+                            vertices.get(1).y() - vertices.get(2).y());
+                        assertThat(length).isCloseTo(Math.max(4, Math.min(12.5, 0.30 * availability)), within(1e-9));
+                        assertThat(length).isLessThanOrEqualTo(availability * 0.50);
+                        assertThat(base).isCloseTo(0.84 * length, within(1e-9));
+                        assertThat(base).isGreaterThanOrEqualTo((double) lightTheme().edgeStroke().getLineWidth());
+                        assertThat(GraphPainter.arrowHeadHalfBasePx(length * zoom) / zoom)
+                            .isCloseTo(base / 2.0, within(1e-9));
+                        if (availability == 8.0) {
+                            assertThat(length).isCloseTo(4.0, within(1e-9));
+                            assertThat(base).isCloseTo(3.36, within(1e-9));
+                            assertThat(availability - length).isGreaterThanOrEqualTo(4.0);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     @Test
@@ -1439,6 +1535,14 @@ public class GraphCanvasPaintShould {
 
         assertThat(paintedHead).isCloseTo(terminalCapped, within(1e-9));
         assertThat(paintedHead).isNotCloseTo(chordCapped, within(0.5));
+        PaintFixture suppressed = bowFixture(LayoutPoint.of(82.0, 7.0));
+        assertThat(paintedArrowHeadWorldLength(suppressed, false, zoom)).isNaN();
+        List<Shape> drawn = new ArrayList<Shape>();
+        List<Shape> filled = new ArrayList<Shape>();
+        recordPaint(suppressed, drawn, filled, zoom);
+        assertThat(filled).noneMatch(shape -> shape instanceof Path2D);
+        assertThat(drawn).anyMatch(shape -> shape instanceof Path2D && pathVertices((Path2D) shape)
+            .equals(suppressed.state.edgePaths().path(suppressed.edgeKey).get().samples()));
     }
 
     private static int perpendicularRunPx(final BufferedImage image, final Color edgeColor,
@@ -1518,7 +1622,7 @@ public class GraphCanvasPaintShould {
     }
 
     private static CanvasState capFixture(final boolean bidirectional) {
-        return capFixture(bidirectional, 14.0);
+        return capFixture(bidirectional, bidirectional ? 26.0 : 17.0);
     }
 
     private static CanvasState capFixture(final boolean bidirectional, final double targetCenterX) {
@@ -1559,39 +1663,23 @@ public class GraphCanvasPaintShould {
 
     @Test
     public void paintedArrowHeadCapBaseAndBidirectionalSplitAtPaintLevel() {
+        CanvasState single = capFixture(false);
+        CanvasState bidirectional = capFixture(true);
+        for (CanvasState state : Arrays.asList(single, bidirectional)) {
+            PaintFixture fixture = new PaintFixture(state, state.projection().edges().get(0).key());
+            assertThat(paintedArrowHeadWorldLength(fixture, false, 1.0)).isCloseTo(4.0, within(1e-9));
+            if (state == bidirectional) {
+                assertThat(paintedArrowHeadWorldLength(fixture, true, 1.0)).isCloseTo(4.0, within(1e-9));
+            }
+        }
         GraphTheme theme = lightTheme();
-        BufferedImage oneHead = paint(capFixture(false), GraphPaintState.empty(), theme, RenderingLevel.FULL);
-        BufferedImage twoHeads = paint(capFixture(true), GraphPaintState.empty(), theme, RenderingLevel.FULL);
-
-        GraphCanvas canvas = new GraphCanvas();
-        canvas.setSize(SIZE);
-        canvas.setTheme(theme);
-        canvas.setCanvasState(capFixture(true));
-        canvas.setPaintState(GraphPaintState.empty());
-        canvas.setViewport(GraphViewport.of(0.0, 0.0, 1.0));
-        canvas.setShowArrowheads(false);
-        BufferedImage plainLine = paintCanvas(canvas);
-
-        // Cap: the node-end head is 6 world = 6 px long, not 12.5.
-        assertThat(measuredHeadLengthPx(oneHead, new Point2D.Double(126.0, 70.0), theme.edgeColor(), 1.0))
-            .isCloseTo(6.0, within(1.5));
-        // Base follows the capped length: 5.04 px nominal, 4 px measured at the pinned alignment.
-        assertThat((double) maximumPerpendicularRunPx(oneHead, theme.edgeColor(), 118, 126, 70))
-            .isBetween(3.5, 6.0);
-        // Bidirectional split: a = d / 2 = 3 world, so each base is 2.52 px and no run reaches 3.0.
-        assertThat((double) maximumPerpendicularRunPx(twoHeads, theme.edgeColor(), 114, 126, 70))
-            .isLessThan(3.0);
-        // Pinned-fixture measurement (recorded, not asserted): twoHeads=5, plainLine=3.
-        // Non-vacuity: the enclosure-side head adds near-edge ink vs. the same edge with arrowheads off.
-        assertThat(nearColorPixelsIn(twoHeads, theme.edgeColor(), 120, 66, 123, 74, 80))
-            .isGreaterThan(nearColorPixelsIn(plainLine, theme.edgeColor(), 120, 66, 123, 74, 80));
-
-        // Capped rule at a zoom above the shipped 12.5 / 8.68 ~ 1.4401 crossover:
-        // d = 10 world, a = 10 world < 12.5, so L = min(12.5, 10) x 3.0 = 30 px.
-        // The shipped rule draws min(max(12.5, 8.68 x 3.0), 10 x 3.0) = 26.04 px.
-        BufferedImage cappedAtThree = paintAtZoom(capFixture(false, 18.0), GraphPaintState.empty(), theme, 3.0);
-        assertThat(measuredHeadLengthPx(cappedAtThree, new Point2D.Double(150.0, 70.0),
-            theme.edgeColor(), 3.0)).isCloseTo(30.0, within(1.5));
+        CanvasState shortRun = capFixture(false, 16.0);
+        BufferedImage zoomFour = paintAtZoom(shortRun, GraphPaintState.empty(), theme, 4.0);
+        assertThat(measuredHeadLengthPx(zoomFour, new Point2D.Double(152, 70), theme.edgeColor(), 4.0))
+            .isCloseTo(16.0, within(1.5));
+        PaintFixture suppressed = new PaintFixture(capFixture(false, 14.0),
+            capFixture(false, 14.0).projection().edges().get(0).key());
+        assertThat(paintedArrowHeadWorldLength(suppressed, false, 1.0)).isNaN();
     }
 
     @Test
@@ -1749,19 +1837,176 @@ public class GraphCanvasPaintShould {
             GraphGeometry.of(nodes, hulls), EdgePaths.empty(), OperationalStatus.IDLE);
     }
 
-    private static CanvasState leaderStrokeState() {
-        ProjectedNode carried = node(FIRST_MAP, "Axiom of Choice", LayoutPoint.of(-25.0, 0.0));
+    @Test
+    public void keepsTheSpecifiedRetainedLeaderAtTwentySevenScreenPixels() {
+        CanvasState state = fixedRunState(20.0, false);
+        for (double zoom : new double[] { 0.25, 1.0, 1.63, 4.0 }) {
+            PlacedLabel label = retainedLabel(state, lightTheme(), zoom, ScreenLabelPlacement.Slot.ABOVE_FAR);
+            LeaderLine line = label.leader().get();
+            double radius = state.geometry().nodes().get(label.endpoint().node().get()).radius() * zoom;
+            assertThat(label.mode()).isEqualTo(PlacedLabel.Mode.INTERIOR);
+            assertThat(Math.hypot(line.start().x() - (564.0 - 18.0 * zoom), line.start().y() - 182.0))
+                .isCloseTo(radius, within(1e-6));
+            assertThat(label.anchorX()).isCloseTo(564.0 - 18.0 * zoom, within(1e-6));
+            assertThat(label.anchorY()).isCloseTo(182.0 - radius - 30.0 - label.height() / 2.0, within(1e-6));
+            assertThat(leaderLength(label)).isCloseTo(27.0, within(1e-6));
+            assertThat(line.end().y() - label.bounds().getMaxY()).isCloseTo(3.0, within(1e-6));
+            ScreenLabelPlacementShould.assertLeaderClearsBox(label);
+        }
+        EdgePath path = state.edgePaths().path(state.projection().edges().get(0).key()).get();
+        List<Shape> drawn = new ArrayList<Shape>();
+        recordPaint(new PaintFixture(state, state.projection().edges().get(0).key()), drawn,
+            new ArrayList<Shape>(), 1.63);
+        assertThat(drawn).anyMatch(shape -> shape instanceof Path2D && pathVertices((Path2D) shape).equals(path.samples()));
+        GraphViewport viewport = GraphViewport.of(0, 0, 1.63);
+        Point2D start = viewport.toScreen(path.samples().get(0), new Dimension(1128, 364));
+        Point2D end = viewport.toScreen(path.samples().get(path.samples().size() - 1), new Dimension(1128, 364));
+        assertThat(start.distance(end)).isCloseTo(32.6, within(1e-9));
+        assertThat(start.distance(end)).isGreaterThan(leaderLength(retainedLabel(state, lightTheme(), 1.63,
+            ScreenLabelPlacement.Slot.ABOVE_FAR)));
+        for (ScreenLabelPlacement.Slot side : new ScreenLabelPlacement.Slot[] {
+                ScreenLabelPlacement.Slot.RIGHT, ScreenLabelPlacement.Slot.LEFT }) {
+            assertThat(leaderLength(retainedLabel(state, lightTheme(), 1.63, side))).isCloseTo(3.0, within(1e-6));
+        }
+    }
+
+    @Test
+    public void measuresTheLargestActualWideLabelLeaderWithoutImposingACap() {
+        Rectangle2D area = new Rectangle2D.Double(0, 0, 1128, 364);
+        for (double zoom : new double[] { 1.63 }) {
+            List<ScreenLabelPlacementShould.SceneNode> scene = ScreenLabelPlacementShould.longScene();
+            List<PlacedLabel> labels = ScreenLabelPlacementShould.place(scene,
+                zoom, area, null, Collections.singleton(ProjectedEndpointKey.ofNode(ScreenLabelPlacementShould.key(scene.get(0).name))),
+                RenderingLevel.FULL, null);
+            PlacedLabel largest = null;
+            for (PlacedLabel label : labels) {
+                if (label.leader().isPresent()) {
+                    assertThat(Double.isFinite(leaderLength(label))).isTrue();
+                    assertThat(label.slot()).isNotNull();
+                    System.out.println("WIDE_LEADER zoom=" + zoom + " endpoint=" + label.endpoint()
+                        + " text=" + label.text() + " slot=" + label.slot() + " length_px=" + leaderLength(label));
+                    if (largest == null || leaderLength(label) > leaderLength(largest)) largest = label;
+                }
+            }
+            assertThat(largest).isNotNull();
+            assertThat(largest.slot()).isNotNull();
+            CanvasState edgeBearingRender = fixedRunState(20.0, false);
+            assertThat(edgeBearingRender.projection().edges()).hasSize(1);
+            paintPlaced(edgeBearingRender, labels, lightTheme(), zoom, new Dimension(1128, 364),
+                GraphPaintState.empty());
+            System.out.println("WIDE_LONGEST zoom=" + zoom + " endpoint=" + largest.endpoint()
+                + " text=" + largest.text() + " slot=" + largest.slot() + " length_px=" + leaderLength(largest));
+        }
+    }
+
+    @Test
+    public void keepsAdjacentAboveLabelsLeaderlessAndHoverOnlyLabelsUnpainted() {
+        CanvasState state = fixedRunState(48.0, false);
+        List<PlacedLabel> ordinary = placedLabels(state, lightTheme(), GraphPaintState.empty(),
+            RenderingLevel.FULL, 1.0, 1128, 364);
+        assertThat(ordinary).hasSize(2);
+        for (PlacedLabel label : ordinary) {
+            assertThat(label.slot()).isEqualTo(ScreenLabelPlacement.Slot.ABOVE);
+            assertThat(label.leader()).isEmpty();
+        }
+        PlacedLabel above = ordinary.get(0);
+        PlacedLabel hidden = new PlacedLabel(above.endpoint(), above.text(), above.font(),
+            PlacedLabel.Mode.HOVER_ONLY, PlacedLabel.Rung.HOVER_ONLY, above.anchorX(), above.anchorY(),
+            above.width(), above.height(), false, false, false, false, false,
+            Optional.<LeaderLine>empty(), ScreenLabelPlacement.Slot.ABOVE);
+        BufferedImage base = paintPlaced(state, Collections.<PlacedLabel>emptyList(), lightTheme(), 1.0,
+            new Dimension(1128, 364), GraphPaintState.empty());
+        BufferedImage image = paintPlaced(state, Collections.singletonList(hidden), lightTheme(), 1.0,
+            new Dimension(1128, 364), GraphPaintState.empty());
+        assertThat(differentPixels(base, image)).isZero();
+    }
+
+    @Test
+    public void writesC2EdgeLengthEvidenceImage() throws IOException {
+        BufferedImage capture = new BufferedImage(1128, 728, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = capture.createGraphics();
+        try {
+            graphics.drawImage(paintPlaced(fixedRunState(20.0, false), Collections.<PlacedLabel>emptyList(),
+                lightTheme(), 1.63, new Dimension(1128, 364), GraphPaintState.empty()), 0, 0, null);
+            graphics.drawImage(paintPlaced(fixedRunState(6.0, false), Collections.<PlacedLabel>emptyList(),
+                lightTheme(), 1.63, new Dimension(1128, 364), GraphPaintState.empty()), 0, 364, null);
+            graphics.setColor(lightTheme().labelColor());
+            graphics.setFont(new Font("Dialog", Font.PLAIN, 18));
+            graphics.drawString("20 wu run: 6 wu filled head at zoom 1.63", 30, 40);
+            graphics.drawString("6 wu run: complete line, head suppressed at zoom 1.63", 30, 404);
+        }
+        finally { graphics.dispose(); }
+        File output = new File("build/graph-edge-length-c2.png");
+        if (!ImageIO.write(capture, "png", output)) throw new IOException("No PNG image writer");
+    }
+
+    private static double leaderLength(PlacedLabel label) {
+        LeaderLine line = label.leader().get();
+        return Math.hypot(line.end().x() - line.start().x(), line.end().y() - line.start().y());
+    }
+
+    private static PlacedLabel retainedLabel(CanvasState state, GraphTheme theme, double zoom,
+            ScreenLabelPlacement.Slot slot) {
+        ProjectedNode node = state.projection().nodes().get(slot == ScreenLabelPlacement.Slot.RIGHT ? 1 : 0);
+        Font font = LabelFonts.from(theme).full();
+        Rectangle2D bounds = font.getStringBounds(node.label().displayText(), ScreenLabelPlacement.SCREEN_FRC);
+        PlacedLabel previous = new PlacedLabel(ProjectedEndpointKey.ofNode(node.key()),
+            node.label().displayText(), font, PlacedLabel.Mode.INTERIOR, PlacedLabel.Rung.FULL_DISPLACED,
+            0, 0, bounds.getWidth(), bounds.getHeight(), false, false, false, false, false,
+            Optional.<LeaderLine>empty(), slot);
+        LabelPlacementRequest request = LabelPlacementRequest.of(state.projection(), state.geometry(),
+            state.layout().positions(), zoom, 0, 0, new Rectangle2D.Double(0, 0, 1128, 364),
+            Collections.<ProjectedEndpointKey>emptySet(), RenderingLevel.FULL);
+        List<PlacedLabel> placed = new ScreenLabelPlacement().place(request, Collections.singletonList(previous),
+            LabelFonts.from(theme), Collections.<Rectangle2D>emptyList());
+        for (PlacedLabel label : placed) if (label.endpoint().equals(previous.endpoint())) return label;
+        throw new AssertionError("Retained production label absent");
+    }
+
+    private static BufferedImage paintPlaced(CanvasState state, List<PlacedLabel> labels, GraphTheme theme,
+            double zoom, Dimension size, GraphPaintState paintState) {
+        BufferedImage image = new BufferedImage(size.width, size.height, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = image.createGraphics();
+        try {
+            new GraphPainter().paint(graphics, state, paintState, GraphViewport.of(0, 0, zoom), size, theme, labels);
+        }
+        finally { graphics.dispose(); }
+        return image;
+    }
+
+    private static CanvasState fixedRunState(double boundaryGap, boolean backgroundHull) {
+        double center = (16.0 + boundaryGap) / 2.0;
+        ProjectedNode first = node(FIRST_MAP, "node 1", LayoutPoint.of(-center, 0));
+        ProjectedNode second = node(FIRST_MAP, "node 2", LayoutPoint.of(center, 0));
         Map<ProjectedNodeKey, NodeGeometry> nodes = new LinkedHashMap<ProjectedNodeKey, NodeGeometry>();
-        nodes.put(carried.key(), NodeGeometry.of(LayoutPoint.of(-25.0, 0.0), 8.0));
+        nodes.put(first.key(), NodeGeometry.of(LayoutPoint.of(-center, 0), 8));
+        nodes.put(second.key(), NodeGeometry.of(LayoutPoint.of(center, 0), 8));
         Map<ProjectedNodeKey, LayoutPoint> positions = new LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
-        positions.put(carried.key(), LayoutPoint.of(-25.0, 0.0));
-        GraphProjection projection = GraphProjection.structure(1L, Collections.singletonList(carried),
-            Collections.<ProjectedEnclosure>emptyList());
-        LayoutFrame layout = LayoutFrame.of(1L, LayoutPositions.of(positions,
-            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), false, 0);
-        return CanvasState.of(1L, projection, layout,
-            GraphGeometry.of(nodes, Collections.<EnclosureHullKey, HullGeometry>emptyMap()),
-            EdgePaths.empty(), OperationalStatus.IDLE);
+        positions.put(first.key(), LayoutPoint.of(-center, 0));
+        positions.put(second.key(), LayoutPoint.of(center, 0));
+        List<ProjectedEnclosure> enclosures = new ArrayList<ProjectedEnclosure>();
+        Map<EnclosureHullKey, HullGeometry> hulls = new LinkedHashMap<EnclosureHullKey, HullGeometry>();
+        Map<EnclosureHullKey, LayoutPoint> anchors = new LinkedHashMap<EnclosureHullKey, LayoutPoint>();
+        if (backgroundHull) {
+            EnclosureKey key = EnclosureKey.of(source(FIRST_MAP, "background"));
+            EnclosureHullKey hull = EnclosureHullKey.of(Collections.singletonList(key));
+            enclosures.add(enclosure(hull, key, "Background", "Background", BoundaryTier.SUBTLE));
+            hulls.put(hull, rectangle(-400, -400, 400, 400, LayoutPoint.of(0, 0)));
+            anchors.put(hull, LayoutPoint.of(0, 0));
+        }
+        ProjectedEndpointKey from = ProjectedEndpointKey.ofNode(first.key());
+        ProjectedEndpointKey to = ProjectedEndpointKey.ofNode(second.key());
+        ConnectorDescriptor descriptor = ConnectorDescriptor.of(source(FIRST_MAP, "node 1"),
+            reference(FIRST_MAP, "node 2"), false, true, "source", "middle", "target");
+        ProjectedEdge edge = ProjectedEdge.of(ProjectedEdgeKey.of(from, to),
+            Collections.singletonList(EdgeContributor.nativeConnector(ConnectorSnapshot.of(0, descriptor), from, to)));
+        GraphProjection projection = GraphProjection.projected(1, Arrays.asList(first, second), enclosures,
+            Collections.singletonList(edge), Collections.<RelationshipResolution>emptyList(),
+            Collections.<PinProjection>emptyList());
+        LayoutFrame frame = LayoutFrame.of(1, LayoutPositions.of(positions, anchors), false, 0);
+        GraphGeometry geometry = GraphGeometry.of(nodes, hulls);
+        return CanvasState.of(1, projection, frame, geometry,
+            routedPaths(projection, frame.positions(), geometry), OperationalStatus.IDLE);
     }
 
     private static CanvasState hoverOnlyLabelState() {

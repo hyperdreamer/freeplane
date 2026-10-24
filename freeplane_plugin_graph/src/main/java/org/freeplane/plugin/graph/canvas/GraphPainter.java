@@ -35,11 +35,14 @@ import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 
 final class GraphPainter {
-    // World units. 12.5 / 14.0 ~ 0.8929 of the maximum node radius:
-    // GraphGeometryEngine.BASE_RADIUS 8.0 x NodeProminence.MAX_SCALE 1.75 = 14.0 world.
-    private static final double ARROW_HEAD_WORLD_LENGTH = 12.5;
+    // World units.
+    private static final double ARROW_HEAD_RATIO = 0.30;
+    private static final double MIN_ARROW_HEAD_WORLD_LENGTH = 4.0;
+    private static final double MAX_ARROW_HEAD_WORLD_LENGTH = 12.5;
+    private static final double MIN_ARROW_HEAD_AVAILABILITY = 8.0;
     // Head base is 0.84 x length; the aspect is preserved when the cap shrinks a head.
     private static final double ARROW_HEAD_HALF_BASE_RATIO = 0.42;
+    private static final double MIN_STROKE_WORLD = 1e-6;
     void paint(final Graphics2D graphics, final CanvasState state, final GraphPaintState paintState,
             final GraphViewport viewport, final java.awt.Dimension size, final GraphTheme theme,
             final List<PlacedLabel> labels) {
@@ -159,11 +162,6 @@ final class GraphPainter {
         return path;
     }
 
-    // Screen px.
-    static double arrowHeadLengthPx(final double zoom) {
-        return ARROW_HEAD_WORLD_LENGTH * zoom;
-    }
-
     // World units in, world units out.
     static double availableArrowHeadWorldLength(final double attachmentDistanceWorld,
             final boolean arrowAtFirst, final boolean arrowAtSecond) {
@@ -172,7 +170,8 @@ final class GraphPainter {
 
     // Screen px.
     static double effectiveArrowHeadLengthPx(final double zoom, final double availableWorldLength) {
-        return Math.min(arrowHeadLengthPx(zoom), availableWorldLength * zoom);
+        return Math.max(MIN_ARROW_HEAD_WORLD_LENGTH,
+            Math.min(MAX_ARROW_HEAD_WORLD_LENGTH, ARROW_HEAD_RATIO * availableWorldLength)) * zoom;
     }
 
     // Screen px.
@@ -195,6 +194,9 @@ final class GraphPainter {
         final double perpendicularY = unitX;
         final double availableWorldLength =
             availableArrowHeadWorldLength(terminalSegmentLength, arrowAtFirst, arrowAtSecond);
+        if (availableWorldLength < MIN_ARROW_HEAD_AVAILABILITY) {
+            return;
+        }
         final double arrowLengthPx = effectiveArrowHeadLengthPx(zoom, availableWorldLength);
         final double arrowLength = arrowLengthPx / zoom;
         final double arrowWidth = arrowHeadHalfBasePx(arrowLengthPx) / zoom;
@@ -268,7 +270,7 @@ final class GraphPainter {
     private static void paintLabels(final Graphics2D graphics, final List<PlacedLabel> labels,
             final GraphPaintState paintState, final GraphTheme theme, final GraphViewport viewport,
             final java.awt.Dimension size, final boolean dimUnrelated) {
-        final BasicStroke leaderStroke = leaderStroke(theme, viewport.zoom());
+        final BasicStroke leaderStroke = leaderStroke(viewport.zoom());
         for (final PlacedLabel label : labels) {
             if (label.mode() == PlacedLabel.Mode.HOVER_ONLY && !label.forced()) {
                 continue;
@@ -284,19 +286,24 @@ final class GraphPainter {
             final double anchorY = worldY(label.anchorY(), viewport, size);
             if (label.leader().isPresent()) {
                 final LeaderLine line = label.leader().get();
+                graphics.setColor(theme.mutedColor());
                 graphics.setStroke(leaderStroke);
                 graphics.draw(new Line2D.Double(
                     worldX(line.start().x(), viewport, size), worldY(line.start().y(), viewport, size),
                     worldX(line.end().x(), viewport, size), worldY(line.end().y(), viewport, size)));
             }
+            graphics.setColor(theme.labelColor());
             drawCentered(graphics, font, label.text(), anchorX, anchorY);
             graphics.setComposite(oldComposite);
         }
     }
 
-    static BasicStroke leaderStroke(final GraphTheme theme, final double zoom) {
-        return new BasicStroke((float) (theme.edgeStroke().getLineWidth() / zoom),
-            BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
+    static BasicStroke leaderStroke(final double zoom) {
+        final float width = (float) Math.max(1.0 / zoom, MIN_STROKE_WORLD);
+        final float dashOn = (float) Math.max(1.2 / zoom, MIN_STROKE_WORLD);
+        final float dashOff = (float) Math.max(2.8 / zoom, MIN_STROKE_WORLD);
+        return new BasicStroke(width, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND, 10.0f,
+            new float[] { dashOn, dashOff }, 0.0f);
     }
 
     private static double worldX(final double screenX, final GraphViewport viewport,
