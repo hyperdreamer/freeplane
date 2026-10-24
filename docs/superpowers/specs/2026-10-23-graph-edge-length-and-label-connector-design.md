@@ -428,7 +428,7 @@ Existing tests that must change, and why:
 | `GraphCanvasPaintShould.paintedArrowHeadCapBaseAndBidirectionalSplitAtPaintLevel` (`:1561`–`:1596`) | Holds the `30 px` cap assertion at `:1594`, the historical `12.5 / 8.68 ≈ 1.4401` crossover comment, the `6.0 ± 1.5` head and `3.5–6.0` base ranges at `:1575`–`:1582`, and the non-vacuity assertion at `:1586`–`:1587`. Its `capFixture` uses a 6 wu availability, which now paints **no** head, so the fixture moves to a ≥ 8 wu availability (a 9 wu cap yields 4.0 wu and keeps the cap's meaning: the head is the floor, not the chord), the head/base ranges are re-derived, the half-base assertion arrives from the helper test, and the comment is replaced by the new piecewise rule. |
 | `GraphCanvasPaintShould.capsTheArrowheadAtTheTerminalSegmentOfARoutedPath` (`:1440`) | Newly required. `shortTerminalBowFixture()` puts the control at `(82, 7)`, so the routed terminal segment is 7 wu, below the 8 wu suppression floor: the test now finds `measuredHeadLengthPx` returning `NaN` (`:1370`) where it expects a painted head. Keep the terminal-versus-chord coverage by moving the control to an availability ≥ 8 wu (for example `(82, 9)`), and add a separate assertion that a 7 wu terminal paints no head and only the polyline. |
 | `ScreenLabelPlacementShould` (`:1736`) | Migrate the helper that calls `GraphPainter.leaderStroke(theme, zoom)` to the new `leaderStroke(zoom)` signature, or it will not compile. |
-| `InitialSpacingConsumers.topology` (`:179`–`:180`, both assertions) | Both relationship-gap assertions become configuration-aware: `first + second + (bothEndpointsAreNodes ? gap : 6.0)`, using the caller's `gap` (`InitialSpacingProbe.java:43` passes `6.0` for C0 and `24.0` for the candidate). A hard-coded `24.0` would fail the frozen C0 run, which I12 forbids. |
+| `InitialSpacingConsumers.topology` (`:179`–`:180`, both assertions) | The helper takes **two** gaps, because the ring gap and the relationship gap are now different constants: signature `topology(projection, engine, ringGap, edgeGap)`, assertion `first + second + (bothEndpointsAreNodes ? edgeGap : 6.0)`, containment assertions keep `ringGap`. Callers: `InitialSpacingProbe.java:79` (passes `6.0, 6.0` for C0 and `24.0, PREFERRED_EDGE_GAP = 20.0` for the candidate), `InitialSpacingSeedShould.java:33` and `:80`, `InitialSpacingLifecycleShould.java:32`. Reusing the ring gap yields `8 + 8 + 24 = 40` against a production `36`, which fails five seed assertions and D1. |
 | `InitialSpacingSeedShould` (`:14`, `:26`, `:33`) | The `+ 6.0`-based relationship assertions move to the new gap; its `PREFERRED_NODE_GAP == 24.0`, ring and `contentRingRadius` assertions stay as they are. |
 
 ### D0 — committed UI evidence
@@ -510,13 +510,17 @@ The amendment, in the same commit as C1 and C2 and C3:
    its `nn` rest target and its candidate settling pins that change, which the first version of this
    design wrongly described as "untouched".
 
-The shared test helper must stay configuration-aware. `InitialSpacingConsumers.topology(p, engine,
-gap)` is used by both configurations: `InitialSpacingProbe` selects `gap = 6.0` for C0 and `24.0` for
-the candidate (`InitialSpacingProbe.java:43`) and passes it to the same helper (`:79`), and that
-helper is not in the frozen `FROZEN` list. Therefore the migrated expectation is
-`first + second + (bothEndpointsAreNodes ? gap : 6.0)` — using the caller's `gap` for node-to-node
-links and the fixed `MIN_GAP` for enclosure-endpoint links. A hard-coded `24.0` would make the C0
-control fail while the candidate passed, which I12 forbids.
+The shared test helper must carry **both** gaps, because epoch 2 made them different constants.
+`InitialSpacingConsumers.topology(p, engine, gap)` is used by both configurations: `InitialSpacingProbe`
+selects the ring gap (`6.0` for C0, `24.0` for the candidate, `InitialSpacingProbe.java:43`) and passes
+it to the helper (`:79`), and that helper is not in the frozen `FROZEN` list. The four callers are
+`InitialSpacingProbe.java:79`, `InitialSpacingSeedShould.java:33`, `InitialSpacingSeedShould.java:80` and
+`InitialSpacingLifecycleShould.java:32`. The migrated signature is
+`topology(projection, engine, ringGap, edgeGap)` with the expectation
+`first + second + (bothEndpointsAreNodes ? edgeGap : 6.0)`: the containment and hierarchy rows keep
+`ringGap`, and the relationship row uses `edgeGap`, which is `6.0` for C0 and `PREFERRED_EDGE_GAP = 20.0`
+for the candidate. Using the ring gap for the relationship row would expect `40` where production
+returns `36`, failing five seed assertions and D1 — measured, not hypothesised.
 
 ### D2 — performance and settle evidence
 
