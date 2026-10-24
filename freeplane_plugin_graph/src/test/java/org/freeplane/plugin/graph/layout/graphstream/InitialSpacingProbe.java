@@ -76,7 +76,7 @@ public final class InitialSpacingProbe {
             try (GraphStreamLayoutEngine engine = new GraphStreamLayoutEngine(LayoutCalibration.spikeDefaults())) {
                 raw = engine.apply(InitialSpacingFixtures.request(p, p));
                 InitialSpacingConsumers.raw(p, raw, gap);
-                InitialSpacingConsumers.topology(p, engine, gap);
+                InitialSpacingConsumers.topology(p, engine, gap, configuration.equals("C0") ? 6.0 : 20.0);
             }
             Set<EnclosureHullKey> eligible = classify(p, raw, seed);
             print(p, "raw", raw); print(p, "seed", seed);
