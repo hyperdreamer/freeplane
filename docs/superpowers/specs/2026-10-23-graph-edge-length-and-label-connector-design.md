@@ -185,7 +185,7 @@ dial. Panel letters below are local to this image and do not refer back to that 
 - **D** — gap 56, head = 12.5 wu; the ratio rule reaches today's cap, so the head never grows.
 
 The approved point keeps `PREFERRED_NODE_GAP` at 24.0, so hull size, fit zoom and disc size are
-unchanged from the delivery base, while the relationship edge is lengthened 22 → 40 wu
+unchanged from the delivery base, while the relationship edge is lengthened 22 → 36 wu
 centre-to-centre.
 
 Like-for-like head bases at the approved epoch-2 gap of 20 wu, and at the superseded 24 wu:
@@ -244,7 +244,7 @@ radius is at most `maxR`, so `rest = r₁ + r₂ + 20 ≤ 2·maxR + 20 < 2·maxR
 exactly the chord between adjacent ring members, by construction of `contentRingRadius`. The bound
 holds because the relationship gap is strictly smaller than the ring gap; keeping the two constants
 separate is what makes that inequality explicit rather than incidental. The bound holds with
-mixed prominence too: radii 8 and 14 give `rest = 46` against a chord of `52`. This is a property to
+mixed prominence too: radii 8 and 14 give `rest = 42` against a chord of `52`. This is a property to
 assert, not a tuning result.
 
 The bound is **local**. It does not constrain, and this design does not claim it constrains:
@@ -387,7 +387,7 @@ both the edge's colour and the text's weight, which is what makes it read as an 
 Production-scale unit tests, in the existing modules and naming style:
 
 1. `GraphStreamLayoutEngine` — I1, I2, I3, I4. Fixtures: two default nodes; a mixed-prominence
-   pair (radii 8 and 14, so `rest = 46` against a chord of 52); a pair inside a four-node
+   pair (radii 8 and 14, so `rest = 42` against a chord of 52); a pair inside a four-node
    enclosure comparing `restLength` against the `BoundarySizes.contentRingRadius`-derived chord; a
    node that is a direct member of two enclosures, asserting it is not claimed by I3 but that its
    containment links are unchanged (I4). I2 is asserted on the fixtures that actually carry
@@ -486,8 +486,11 @@ The amendment, in the same commit as C1 and C2 and C3:
    are *candidate* observations of the previous change; the C0 column and every operational limit
    (600 s bounds, control-pair accounting, exhaustion expectations) stay exactly as they are. The
    refresh rule: update a candidate pin only from a fresh recorded run of the amended candidate, and
-   record the run id and the previous value in the receipt. If a candidate first-idle moves by more
-   than 25% the change is escalated as a risk finding instead of absorbed.
+   record the run id and the previous value in the receipt. The escalation rule is **asymmetric**: a
+   candidate that settles *slower* by more than 25%, `(new - old) / old > 0.25`, is escalated as a risk
+   finding instead of absorbed, because slower settling is the instability this gate exists to catch;
+   a candidate that settles *faster* by more than 25%, `(old - new) / old > 0.25`, simply refreshes the
+   pin and is recorded as a finding with the measured value. Faster settling is not a regression.
 4. Do **not** use `freeplane_plugin_graph/doc/initial-spacing/collect-receipt.py`. It is the previous
    feature's one-off archival script: it is referenced by no build task and no test (verified by
    search over `*.gradle`, `*.java`, `*.sh`, `*.py`), and it pins its own historical planning head
@@ -562,7 +565,7 @@ D1 harness), then D2, then the retained replay regression gate.
    and its `nn` rest target must be amended (D1), so part of a previously accepted feature's
    evidence is rewritten. The C0 control stays byte-identical, and the amendment is one overlay
    plus one target value, but it is a real edit to accepted evidence and must be reviewed as such.
-2. **Settled geometry moves.** Rest length 22 → 40 changes where unpinned nodes come to rest, so
+2. **Settled geometry moves.** Rest length 22 → 36 changes where unpinned nodes come to rest, so
    recorded settle snapshots, idle-step counts and conflict counts may change. The ring bound only
    proves that *same-enclosure* pairs do not gain conflicting demand; cross-map, nested and pinned
    pairs are unconstrained. Mitigation: D2 measures first-idle, settled gaps, conflicts and routing
@@ -588,8 +591,8 @@ D1 harness), then D2, then the retained replay regression gate.
    the receipt collector pins the changed-source set, and the driver pins candidate first-idle
    counts that this change may legitimately move. D1 permits all three, each narrowly, with the C0
    control and the operational limits preserved. The residual risk is that a candidate first-idle
-   moves by more than the 25% escalation threshold, which would mean the layout is genuinely less
-   stable and must be reconsidered rather than re-pinned.
+   settles more than 25% **slower**, which would mean the layout is genuinely less stable and must be
+   reconsidered rather than re-pinned. Settling faster is recorded, not escalated.
 
 ## H — Epoch-2 pivot: why the relationship gap is 20 wu
 

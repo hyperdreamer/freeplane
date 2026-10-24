@@ -8,7 +8,7 @@ Amended under epoch 2 (2026-10-23): the relationship gap is `PREFERRED_EDGE_GAP 
 constant strictly below the untouched ring constant `PREFERRED_NODE_GAP = 24.0`; every derived number
 below is computed for 20 wu. The design's section H records the measured reason.
 
-The sole design authority is [the approved design](2026-10-23-graph-edge-length-and-label-connector-design.md), approved on 2026-10-23 and present at `bb983dbeff8e8b2736e22c2e7090c51f0917981c`. Its decisions are closed. This specification turns those decisions into implementation and verification contracts; it does not reopen alternatives. Source locations below are the delivery-base locations at `448c0d679d2b1d46563eaf079352e1eefb254305`. The integration head has no production or test changes relative to that base, so the listed source anchors identify the same code.
+The sole design authority is [the approved design](2026-10-23-graph-edge-length-and-label-connector-design.md), approved on 2026-10-23, amended under epoch 2, and present at `d1e23895e9`. The epoch-2 amendment (design section H) supersedes the epoch-1 gap of 24 wu and is authoritative where the two disagree. Its decisions are closed. This specification turns those decisions into implementation and verification contracts; it does not reopen alternatives. Source locations below are the delivery-base locations at `448c0d679d2b1d46563eaf079352e1eefb254305`. The integration head has no production or test changes relative to that base, so the listed source anchors identify the same code.
 
 Production paths are relative to `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/`. Test paths are relative to `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/`. Layout distances are world units (wu); screen measurements are pixels (px).
 
@@ -100,7 +100,7 @@ Clamp each world-space float input before conversion. For accepted zooms in `[1e
 
 **Required arithmetic:** `0.30 * 20 = 6.0`; `0.84 * 6.0 = 5.04`; `5.04 / 16 = 0.315`; `4.0 / 0.30 = 13.333...`; `12.5 / 0.30 = 41.666...`; `2 * 41.666... = 83.333...`; `20 * 1.63 = 32.6`; `0.84 * 4.0 = 3.36`. The superseded epoch-1 figures at a 24 wu run were `0.30 * 24 = 7.2`, base `6.048`, `0.378` of the disc; they appear nowhere as a requirement. Test branch boundaries using the fractions `4.0 / 0.30` and `12.5 / 0.30`, not rounded decimal substitutes.
 
-C1's ring-bound invariant is local: for two direct nodes in the same single enclosure, `rest = r1 + r2 + 24 <= 2 * maxRadius + 24`, the adjacent-ring chord. With radii 8 and 14, rest is 46 wu and the chord is 52 wu. Do not claim the bound for cross-enclosure, cross-map, unenclosed, multi-membership, pinned, node-to-anchor, or settled pairs. A node-to-enclosure or enclosure-to-enclosure relationship keeps additive `MIN_GAP`; adding 24 there would double-count the content-ring spacing.
+C1's ring-bound invariant is local: for two direct nodes in the same single enclosure, `rest = r1 + r2 + 20 <= 2 * maxRadius + 20 < 2 * maxRadius + 24`, the adjacent-ring chord. With radii 8 and 14, rest is 42 wu and the chord is 52 wu; the margin is `2*max(r1,r2) + 24 - (r1+r2+20) = |r1-r2| + 4 >= 4`. Do not claim the bound for cross-enclosure, cross-map, unenclosed, multi-membership, pinned, node-to-anchor, or settled pairs. A node-to-enclosure or enclosure-to-enclosure relationship keeps additive `MIN_GAP`; adding the relationship gap there would double-count the content-ring spacing.
 
 ## B — Test changes and invariant coverage
 
@@ -116,8 +116,8 @@ All test additions and edits stay under `freeplane_plugin_graph/src/test/` and u
 | `canvas/GraphCanvasPaintShould.java`: `capsTheArrowheadAtTheTerminalSegmentOfARoutedPath` | Keep the routed-path-versus-chord distinction. Move the bow control from `(82, 7)` to `(82, 9)` for the painted-head case; add a 7 wu terminal-availability case asserting no head and the full polyline. |
 | `canvas/GraphCanvasPaintShould.java`: paint-level arrow tests | For every availability below 8 wu, assert the painted path is the polyline only. At 8 wu assert a 4 wu head, half-base `0.42 * 4 = 1.68 wu` (full base 3.36 wu), and at least 4 wu of uncovered shaft. For all painted availability values assert head length `<= 0.50 * availability` and full base `0.84 * headLength >= 1.4 wu`. Pixel-length oracle is permitted only at zoom >= 2; short heads at zoom 1 are asserted as shape/world-unit geometry. |
 | `canvas/ScreenLabelPlacementShould.java`: `leaderMask` around line 1736 | Call `GraphPainter.leaderStroke(zoom)` with no theme parameter. Keep the existing leader geometry assertions byte-for-byte in meaning. |
-| `layout/graphstream/InitialSpacingConsumers.java`: `topology` | Make the relationship expectation configuration-aware: `first + second + (bothEndpointsAreNodes ? gap : 6.0)`. `InitialSpacingProbe` supplies gap 6.0 for C0 and 24.0 for candidate. Do not hard-code 24.0, which would invalidate the frozen C0 control. |
-| `layout/graphstream/InitialSpacingSeedShould.java` | Update node-to-node relationship assertions from `r1 + r2 + 6.0` to `r1 + r2 + 24.0`; preserve enclosure-endpoint `+6.0`, `MIN_GAP == 6.0`, ring, and `contentRingRadius` assertions. Add direct node/node, node/enclosure (`matrix(..., "ne")`), and enclosure/enclosure (`matrix(..., "ee")`) checks so no endpoint-type row is vacuous. |
+| `layout/graphstream/InitialSpacingConsumers.java`: `topology` | The shared helper receives the **ring** gap and must also be told the relationship gap, because the two are now different constants. Change the signature to `topology(projection, engine, ringGap, edgeGap)` and assert `first + second + (bothEndpointsAreNodes ? edgeGap : 6.0)`; the containment assertions keep using `ringGap`. `InitialSpacingProbe` passes `ringGap = 6.0, edgeGap = 6.0` for C0 and `ringGap = 24.0, edgeGap = PREFERRED_EDGE_GAP = 20.0` for the candidate. Reusing the ring gap for the relationship row produces `8 + 8 + 24 = 40` against a production `36` and fails five seed assertions plus D1, which is exactly what the epoch-2 materialisation measured. |
+| `layout/graphstream/InitialSpacingSeedShould.java` | Update node-to-node relationship assertions from `r1 + r2 + 6.0` to `r1 + r2 + 20.0` for the candidate, and keep `r1 + r2 + 6.0` as the C0 expectation; preserve enclosure-endpoint `+6.0`, `MIN_GAP == 6.0`, ring, and `contentRingRadius` assertions. Add direct node/node, node/enclosure (`matrix(..., "ne")`), and enclosure/enclosure (`matrix(..., "ee")`) checks so no endpoint-type row is vacuous. |
 | `layout/graphstream/InitialSpacingAcceptanceShould.java` and `src/test/resources/initial-spacing/run-initial-spacing.py` | Apply the frozen-harness amendment in C below. Keep the C0 arm and its limits unchanged. |
 | `layout/graphstream/GraphEdgeLengthSettleShould.java` (new `*Should` class) | Implement the D2 fresh-relaxation comparison against delivery base `448c0d679d`, with all fixtures and receipts in D below. It must exercise a relationship edge for every new relationship-bearing fixture and must report I14 pairs without asserting that settled distance equals rest length. |
 
@@ -125,9 +125,9 @@ The implementation test matrix shall cover all invariants. I5a-I5c are three sub
 
 | Id | Required assertion and test home |
 | --- | --- |
-| I1 | Every node/node relationship rest is `r1 + r2 + 24.0`, from the actual engine topology. Cover default and mixed-prominence nodes and the cross-map node/node edge. `InitialSpacingSeedShould` / `InitialSpacingConsumers`. |
+| I1 | Every node/node relationship rest is `r1 + r2 + 20.0`, from the actual engine topology, and the constant used is `PREFERRED_EDGE_GAP`, not `PREFERRED_NODE_GAP`. Also assert `PREFERRED_EDGE_GAP < PREFERRED_NODE_GAP`. Cover default and mixed-prominence nodes and the cross-map node/node edge. `InitialSpacingSeedShould` / `InitialSpacingConsumers`. |
 | I2 | A relationship with at least one enclosure endpoint keeps `r1 + r2 + 6.0`; exercise both `matrix(..., "ne")` and `matrix(..., "ee")`. Do not cite the `cross` fixture for this, since its relationships are node/node. |
-| I3 | Same-enclosure direct node pairs satisfy `rest <= 2 * maxRadius + 24.0`; include a four-node ring and radii 8/14 (rest 46 against chord 52). Exclude cross-enclosure, cross-map, multi-membership, pinned, and unenclosed pairs from this proof. |
+| I3 | Same-enclosure direct node pairs satisfy `rest <= 2 * maxRadius + 20.0`; include a four-node ring and radii 8/14 (rest 42 against chord 52). Exclude cross-enclosure, cross-map, multi-membership, pinned, and unenclosed pairs from this proof. |
 | I4 | Containment and hierarchy link rest lengths are identical to delivery-base formulas; assert on topology rather than inferring from a settled frame. |
 | I5a | A requested head is painted only when terminal availability is at least 8.0 wu; at exactly 8.0 it is painted with 4.0 wu length. At 3, 6, and 7.99, assert no head and full polyline. |
 | I5b | For every painted head, length is at most half the available run, leaving at least half a shaft uncovered. The below-8 case is a plain line, so the whole run is uncovered. Scope this assertion to available run >= 8 for a painted head. |
@@ -384,24 +384,48 @@ Neither mode alone can pass the module, so the validation vector below is execut
 explicit selector split. Skipping the accessibility tests is not permitted: coverage must be
 preserved, only relocated.
 
-**Mode 1 — headless, everything except the AWT-window tests:**
+**Mode 1 — headless, everything except the display-dependent tests.** Gradle's `--tests` patterns are
+all *includes*; a `!`-prefixed pattern does not exclude anything (measured: the module still ran 1432
+tests and failed twice with `HeadlessException`). Use a real exclusion through an init script:
 
 ```bash
+cat > /tmp/graph-headless.gradle <<'SCRIPT'
+allprojects {
+    tasks.withType(Test).configureEach {
+        filter {
+            excludeTestsMatching 'org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould'
+            excludeTestsMatching 'org.freeplane.plugin.graph.window.GraphWorkspaceWindowModelShould'
+            excludeTestsMatching 'org.freeplane.plugin.graph.window.GraphPluginIntegrationShould'
+        }
+    }
+}
+SCRIPT
 export JAVA_HOME=~/.sdkman/candidates/java/21.0.8-zulu
 export PATH="$JAVA_HOME/bin:$PATH"
 export JAVA_TOOL_OPTIONS=-Djava.awt.headless=true
-gradle :freeplane_plugin_graph:test --tests '*' \
-  --tests '!org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould'
+gradle -I /tmp/graph-headless.gradle :freeplane_plugin_graph:test
 ```
 
-**Mode 2 — headful under a virtual display, the AWT-window tests:**
+**Mode 2 — headful under a virtual display, exactly the excluded classes.** `AccessibleGraphCanvasShould`
+is not guarded by a headless assumption and simply throws; `GraphWorkspaceWindowModelShould` and
+`GraphPluginIntegrationShould` guard 15 methods with `Assume.assumeFalse(GraphicsEnvironment.isHeadless())`,
+which would otherwise **skip silently** and drop coverage. Selecting the whole classes in this mode runs
+every method, including the 16 that Mode 1 deliberately excludes:
 
 ```bash
 unset JAVA_TOOL_OPTIONS
 Xvfb :99 -screen 0 1600x1200x24 &
 export DISPLAY=:99
-gradle :freeplane_plugin_graph:test --tests 'org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould'
+gradle :freeplane_plugin_graph:test \
+  --tests 'org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould' \
+  --tests 'org.freeplane.plugin.graph.window.GraphWorkspaceWindowModelShould' \
+  --tests 'org.freeplane.plugin.graph.window.GraphPluginIntegrationShould'
 ```
+
+The two modes together must execute every method the single-mode run would, and the executed-method
+counts must be reconciled against `--info` output rather than compared as discovery counts, because
+discovery includes assumption-skipped methods. Two `WorkspaceUriResolverShould` skips are
+platform-conditional (`Windows path semantics`, `>= 2 file-system roots`) and are independent of AWT.
 
 Both modes must pass. `JAVA_TOOL_OPTIONS` is what reaches the test worker: the Gradle `test` task does
 not set `java.awt.headless`, and the four `systemProperty 'java.awt.headless', 'true'` entries in
@@ -409,24 +433,14 @@ not set `java.awt.headless`, and the four `systemProperty 'java.awt.headless', '
 `graphPerformanceDiagnostic`, `boundaryCorrectionProfile`, `graphOsgiSmoke` and `graphUiEvidence`.
 There is no `gradle.properties` setting it either.
 
-`JAVA_TOOL_OPTIONS` is not optional. `InitialSpacingAcceptanceShould`'s first assertion requires the
-system property `java.awt.headless` to equal `"true"` in the test worker
-(`InitialSpacingAcceptanceShould.java:14`), and the Gradle `test` task does not set it: the four
-`systemProperty 'java.awt.headless', 'true'` entries in `freeplane_plugin_graph/build.gradle`
-(`:116`, `:130`, `:163`, `:175`) belong to the `JavaExec` tasks `graphPerformanceDiagnostic`,
-`boundaryCorrectionProfile`, `graphOsgiSmoke` and `graphUiEvidence`. There is no `gradle.properties`
-setting it either, so without this prelude the focused layout gate and the full module suite fail
-before D1 even launches. `JAVA_TOOL_OPTIONS` reaches the test worker because it is picked up by the
-worker JVM process, which is how this feature's predecessors ran the same gate.
-
 | Gate | Command / selector | Acceptance statement |
 | --- | --- | --- |
 | Focused layout contracts (Mode 1) | `gradle :freeplane_plugin_graph:test --tests org.freeplane.plugin.graph.layout.graphstream.InitialSpacingSeedShould --tests org.freeplane.plugin.graph.layout.graphstream.InitialSpacingAcceptanceShould` | Engine endpoint-type rest lengths pass; the amended D1 harness completes with byte-frozen C0, candidate `nn=36.0`, preserved `ne`/`ee`, and unchanged limits. |
 | Focused painter and label contracts (Mode 1) | `gradle :freeplane_plugin_graph:test --tests org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould --tests org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould` | Arrow, suppression, color, stroke, zoom, label geometry, I11 (pinned `ABOVE_FAR` retention fixture) and I13 tests pass. |
-| Full graph module suite (D1 included) | Mode 1 then Mode 2, exactly as the prelude defines them | Both modes pass: Mode 1 covers every graph test including the fresh-JVM D1 harness; Mode 2 covers the AWT-window tests under Xvfb. No test may be deleted or skipped, and no undiscovered-test relaxation may hide a missing `*Should` test. |
+| Full graph module suite (D1 included) | Mode 1 then Mode 2, exactly as the prelude defines them, with the executed-method counts reconciled | Both modes pass: Mode 1 covers every graph test including the fresh-JVM D1 harness; Mode 2 covers the AWT-window tests under Xvfb. No test may be deleted or skipped, and no undiscovered-test relaxation may hide a missing `*Should` test. |
 | Bundle verification | `gradle :freeplane_plugin_graph:verifyGraphBundle` | Existing GraphStream checksum, Java class-version, bundle manifest/classpath, import/export, and license checks pass unchanged. |
 | D2 | `gradle :freeplane_plugin_graph:test --tests org.freeplane.plugin.graph.layout.graphstream.GraphEdgeLengthSettleShould` | All listed fixtures run against delivery base and candidate in fresh equivalent environments; all receipts listed in D are archived; every relationship pair is represented; observed findings are reported without invented bounds. |
-| Retained replay regression | `gradle :freeplane_plugin_graph:graphPerformanceDiagnostic` | Existing fixed-geometry routing/conflict diagnostic passes as a regression gate; it is not represented as settle evidence. |
+| Retained replay regression | `gradle :freeplane_plugin_graph:graphPerformanceDiagnostic` | Existing fixed-geometry routing/conflict diagnostic passes as a regression gate; it is not represented as settle evidence. **If it fails on its own 40-minute process deadline, do not attribute that to this feature**: re-run it on an unmodified delivery-base checkout first and record both runs. A deadline failure on the unchanged baseline is a pre-existing environment limit, not a regression, and must be reported as such rather than absorbed. |
 | Candidate review | `git diff --check` and review of `git diff --name-only` | No whitespace errors; production diff contains only the two files in A; tests and evidence stay within the paths authorized here. |
 
 The build file also defines `boundaryCorrectionProfile`, `graphSmokeInstallation`, `graphOsgiSmoke`, `graphUiEvidence`, and `freeplaneLaunchSmoke`; run them only where the implementation's ordinary acceptance workflow calls for them. `graphUiEvidence` can refresh C3 screenshots but cannot witness C2. Do not substitute those tasks for the ordered full-suite, D2, and retained-replay gates.
@@ -450,7 +464,8 @@ This section resolves descriptive prose and earlier contracts; it does not alter
 
 1. Any earlier graph-initial-spacing statement that every relationship rest adds `NodeSeparationProjection.MIN_GAP` is superseded for node/node relationships only. The new node/node additive gap is the new constant `PREFERRED_EDGE_GAP = 20.0`, which is not the ring constant `PREFERRED_NODE_GAP = 24.0`; the earlier `+ MIN_GAP = 6.0` rule remains normative for relationships with at least one enclosure endpoint, for collision correction, and for the public `MIN_GAP` constant.
 2. The design's causal discussion, option comparisons, mockup labels, and rounded diagrams describe motivation or rejected alternatives. They do not authorize changes to prominence, radii, labels, enclosure geometry, routing, or settings. The formulas and exact constants in A are normative.
-3. The phrase that a relationship is longer than a label connector is not a universal or settled-layout assertion. I11 is only the fixed 20 wu, zoom-1.63, axis-aligned render comparison, which holds above about zoom 1.35 (`27 / 20`). Diagonal connector lengths are measured and reported by I13 without an inequality.
+3. The epoch-1 rule that escalated any candidate first-idle change beyond 25% is superseded: only slower settling escalates (E and design H). Any remaining sentence in either document that escalates on absolute change is superseded by this one.
+4. The phrase that a relationship is longer than a label connector is not a universal or settled-layout assertion. I11 is only the fixed 20 wu, zoom-1.63, axis-aligned render comparison, which holds above about zoom 1.35 (`27 / 20`). Diagonal connector lengths are measured and reported by I13 without an inequality.
 4. `restLength` is a force target, not an equilibrium promise. I3 proves only the same-enclosure direct-node chord bound. Cross-map, nested, pinned, multi-membership, unenclosed, and settled results are measured under D2; no inference extends I3 to those cases.
 5. Helper head length below 8 wu is still defined by the clamp, but it is never painted. The suppression decision belongs only in `paintArrow`; a helper result of 4.0 px for availability 3.0 is not a painted head and does not license an availability clip.
 6. A 1 px connector applies only in the stated unclamped zoom band. At extreme finite positive zooms, the minimum-world clamp guarantees `BasicStroke` construction; it does not preserve a 1 px screen width or 4 px pitch there.
