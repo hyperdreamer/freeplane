@@ -4,6 +4,10 @@ Status: implementation contract dated 2026-10-23. This specification authorizes 
 
 ## A — Authority, scope and exact production diff
 
+Amended under epoch 2 (2026-10-23): the relationship gap is `PREFERRED_EDGE_GAP = 20.0`, a new
+constant strictly below the untouched ring constant `PREFERRED_NODE_GAP = 24.0`; every derived number
+below is computed for 20 wu. The design's section H records the measured reason.
+
 The sole design authority is [the approved design](2026-10-23-graph-edge-length-and-label-connector-design.md), approved on 2026-10-23 and present at `bb983dbeff8e8b2736e22c2e7090c51f0917981c`. Its decisions are closed. This specification turns those decisions into implementation and verification contracts; it does not reopen alternatives. Source locations below are the delivery-base locations at `448c0d679d2b1d46563eaf079352e1eefb254305`. The integration head has no production or test changes relative to that base, so the listed source anchors identify the same code.
 
 Production paths are relative to `freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/`. Test paths are relative to `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/`. Layout distances are world units (wu); screen measurements are pixels (px).
@@ -11,7 +15,7 @@ Production paths are relative to `freeplane_plugin_graph/src/main/java/org/freep
 | Item | Exact contract | Authority / baseline source |
 | --- | --- | --- |
 | Production-file allowlist | Change exactly `layout/graphstream/GraphStreamLayoutEngine.java` and `canvas/GraphPainter.java` under `src/main`. No other `src/main` file, module, public API, setting, or configuration changes. | Approved design, C1-C3; delivery base `448c0d679d` |
-| Relationship rest length | In `GraphStreamLayoutEngine.topology()`, use `radius(first) + radius(second) + PREFERRED_NODE_GAP` only when both projected endpoints are nodes. Otherwise retain `radius(first) + radius(second) + NodeSeparationProjection.MIN_GAP`. `PREFERRED_NODE_GAP` already exists at `GraphStreamLayoutEngine.java:42` and remains `24.0`; `MIN_GAP` remains `6.0`. | `GraphStreamLayoutEngine.java:236-244`; C1 |
+| Relationship rest length | In `GraphStreamLayoutEngine.topology()`, use `radius(first) + radius(second) + PREFERRED_EDGE_GAP` only when both projected endpoints are nodes. Otherwise retain `radius(first) + radius(second) + NodeSeparationProjection.MIN_GAP`. **Add** `static final double PREFERRED_EDGE_GAP = 20.0;` beside the existing `PREFERRED_NODE_GAP` at `GraphStreamLayoutEngine.java:42`. `PREFERRED_NODE_GAP` stays `24.0` and keeps its one existing use in `contentRingRadius`; `MIN_GAP` remains `6.0`. The two constants are deliberately separate so `PREFERRED_EDGE_GAP < PREFERRED_NODE_GAP` is an explicit, testable inequality. | `GraphStreamLayoutEngine.java:41-42,236-244`; design C1 and H |
 | Arrowhead constants and rule | Replace `ARROW_HEAD_WORLD_LENGTH` with `ARROW_HEAD_RATIO = 0.30`, `MIN_ARROW_HEAD_WORLD_LENGTH = 4.0`, `MAX_ARROW_HEAD_WORLD_LENGTH = 12.5`, and `MIN_ARROW_HEAD_AVAILABILITY = 8.0`. Keep `ARROW_HEAD_HALF_BASE_RATIO = 0.42`. Pure helper length is `clamp(0.30 * available, 4.0, 12.5) * zoom`. `paintArrow` suppresses the head when availability is `< 8.0` wu; it does not clip head length to availability. Keep the bidirectional half-distance and bow handling. Delete `arrowHeadLengthPx`. | `GraphPainter.java:38-42,162-210`; C2 |
 | Leader stroke and paint | Every node and enclosure leader uses `theme.mutedColor()` and the dotted, round-capped stroke defined in C3 below. Restore `theme.labelColor()` before drawing every label's text. Change the helper signature to `leaderStroke(zoom)`; remove its theme argument. | `GraphPainter.java:268-300`; C3 |
 | Untouched behavior | Do not change containment/hierarchy rest lengths, node radii, prominence, hull or label geometry, slot selection, path routing, relationship direction/multiplicity, pin behavior, persistence, hit testing, or zoom policy. No compatibility path or user setting. | Approved design C1-C3; source anchors in this table |
@@ -26,10 +30,10 @@ radiusOf(first, radiusById) + radiusOf(second, radiusById)
 // After
 radiusOf(first, radiusById) + radiusOf(second, radiusById)
     + (edge.first().isNode() && edge.second().isNode()
-        ? PREFERRED_NODE_GAP : NodeSeparationProjection.MIN_GAP)));
+        ? PREFERRED_EDGE_GAP : NodeSeparationProjection.MIN_GAP)));
 ```
 
-Do not add another `PREFERRED_NODE_GAP` declaration; it is already present. The relationship endpoint radii remain those in `radiusById`, including node disc radius or enclosure content-ring radius.
+Do not modify the existing `PREFERRED_NODE_GAP` declaration. The relationship endpoint radii remain those in `radiusById`, including node disc radius or enclosure content-ring radius.
 
 The exact `GraphPainter` class-level constant block at lines 38-42 becomes:
 
@@ -94,7 +98,7 @@ static BasicStroke leaderStroke(final double zoom) {
 
 Clamp each world-space float input before conversion. For accepted zooms in `[1e-6, 1e6]`, the stroke is 1.0 px wide and its dash pitch is 4.0 px. Outside that band the clamp intentionally changes the screen-space width/pitch; assert constructibility rather than 1.0 px. At zoom `1e46`, all three values remain nonzero after conversion to float. Do not change `LeaderLine`, `ScreenLabelPlacement`, or connector geometry.
 
-**Required arithmetic:** `0.30 * 24 = 7.2`; `0.84 * 7.2 = 6.048`; `6.048 / 16 = 0.378`; `4.0 / 0.30 = 13.333...`; `12.5 / 0.30 = 41.666...`; `2 * 41.666... = 83.333...`; `24 * 1.63 = 39.12`; `0.84 * 4.0 = 3.36`. Test branch boundaries using the fractions `4.0 / 0.30` and `12.5 / 0.30`, not rounded decimal substitutes.
+**Required arithmetic:** `0.30 * 20 = 6.0`; `0.84 * 6.0 = 5.04`; `5.04 / 16 = 0.315`; `4.0 / 0.30 = 13.333...`; `12.5 / 0.30 = 41.666...`; `2 * 41.666... = 83.333...`; `20 * 1.63 = 32.6`; `0.84 * 4.0 = 3.36`. The superseded epoch-1 figures at a 24 wu run were `0.30 * 24 = 7.2`, base `6.048`, `0.378` of the disc; they appear nowhere as a requirement. Test branch boundaries using the fractions `4.0 / 0.30` and `12.5 / 0.30`, not rounded decimal substitutes.
 
 C1's ring-bound invariant is local: for two direct nodes in the same single enclosure, `rest = r1 + r2 + 24 <= 2 * maxRadius + 24`, the adjacent-ring chord. With radii 8 and 14, rest is 46 wu and the chord is 52 wu. Do not claim the bound for cross-enclosure, cross-map, unenclosed, multi-membership, pinned, node-to-anchor, or settled pairs. A node-to-enclosure or enclosure-to-enclosure relationship keeps additive `MIN_GAP`; adding 24 there would double-count the content-ring spacing.
 
@@ -133,23 +137,23 @@ The implementation test matrix shall cover all invariants. I5a-I5c are three sub
 | I8 | On zoom `[1e-6, 1e6]`, leader width is 1.0 screen px and dash pitch is 4.0 px with entries 1.2 and 2.8 px. At extreme accepted zoom `1e46`, construction succeeds and float width/dash entries are nonzero. Do not assert 1 px outside the unclamped band. |
 | I9 | Pixel probes show every leader (node and enclosure) in `mutedColor` and every label in `labelColor`, with paint restored before text. Cover light/dark theme, over a hull fill, and dim-unrelated alpha. |
 | I10 | `PlacedLabel.leader()` start/end and the `ScreenLabelPlacement` placement outputs are unchanged; do not modify leader geometry to satisfy a paint test. |
-| I11 | Fixed render fixture below: two default nodes at center distance 40 wu, edge attachment run 24 wu, zoom 1.63, and an axis-aligned `ABOVE_FAR` label. Assert 39.12 px edge run exceeds 27 px connector. A separate `RIGHT`/`LEFT` sample is 3 px. This is a fixed render claim, not a settled-layout claim. |
-| I12 | D1 C0 sources, `nn = 22.0`, C0 pins, control accounting and every operational limit remain frozen. Only candidate overlays, candidate `nn = 40.0`, and candidate settling pins may change. |
+| I11 | Fixed render fixture below: two default nodes at center distance 36 wu, edge attachment run 20 wu, zoom 1.63, and an axis-aligned `ABOVE_FAR` label. Assert 32.6 px edge run exceeds 27 px connector. A separate `RIGHT`/`LEFT` sample is 3 px. This is a fixed render claim, not a settled-layout claim. |
+| I12 | D1 C0 sources, `nn = 22.0`, C0 pins, control accounting and every operational limit remain frozen. Only candidate overlays, candidate `nn = 36.0`, and candidate settling pins may change. |
 | I13 | Fixed wide-label placement fixture below at zoom 1.63: record the longest connector over all placed labels, its measured pixel length, and its slot name. Assert only that a finite length and slot are reported; never assert it is shorter than the edge run. |
 | I14 | For every D2 fixture and every relationship pair, record settled center-to-center distance and resulting rim gap from candidate and delivery base. Report lopsided and sub-6.0 wu pairs as findings. Do not assert settled distance equals `restLength`. |
 
-**I11 fixed render fixture.** Construct two unprominent nodes with radii 8.0 wu, centers `(-20.0, 0.0)` and `(20.0, 0.0)`, and one directed relationship edge. Its straight rendered attachment points are `(-12.0, 0.0)` and `(12.0, 0.0)`, giving a 24 wu run. Render at `GraphViewport.of(0.0, 0.0, 1.63)` in a `1128 x 364` image with `Dialog` 12 and `ScreenLabelPlacement.SCREEN_FRC`.
+**I11 fixed render fixture.** Construct two unprominent nodes with radii 8.0 wu, centers `(-18.0, 0.0)` and `(18.0, 0.0)` — separated by `2 * 8.0 + PREFERRED_EDGE_GAP = 36.0` wu — and one directed relationship edge. Its straight rendered attachment points are `(-10.0, 0.0)` and `(10.0, 0.0)`, giving a 20 wu run. Render at `GraphViewport.of(0.0, 0.0, 1.63)` in a `1128 x 364` image with `Dialog` 12 and `ScreenLabelPlacement.SCREEN_FRC`.
 
 The connector must come from production placement, and production does not offer a displaced slot for free: `placeNode` tries `retained`, then `ladder` over `LadderRung`/`NEAR_SLOTS` first (`ScreenLabelPlacement.java:486`), so with an ordinary short label and no obstacles it returns the near `ABOVE` slot and no leader at all. The fixture therefore **pins a previous `PlacedLabel` in `Slot.ABOVE_FAR`** for the first node — with its text, font, `Rung.FULL_DISPLACED`, measured width and height — and passes it as the `previous` list to `ScreenLabelPlacement.place`, which returns it through `retained()` and recomputes the leader via `nodeLeader(previous.slot(), ...)`. Deterministic, production-path, and no production accessor is added. The test then asserts:
 
 - the returned label's `slot()` is `Slot.ABOVE_FAR` and its `mode()` is `Mode.INTERIOR`;
 - the leader is present and its length is exactly `DISPLACED_OFFSET - LEADER_CLEARANCE = 30.0 - 3.0 = 27.0` screen px;
 - the same fixture with an ordinary `ABOVE` slot yields no leader at all, which is the contrast that makes the 27 px row non-vacuous;
-- the painted edge run is `24.0 * 1.63 = 39.12` px, measured from the rendered image, and exceeds the 27.0 px connector.
+- the painted edge run is `20.0 * 1.63 = 32.6` px, measured from the rendered image, and exceeds the 27.0 px connector.
 
 Record both measurements at full precision before any formatted display. Do not use settled coordinates, and do not hand-construct the `LeaderLine` — it must come from `retained()`.
 
-**I13 fixed render fixture.** Use the existing deterministic `ScreenLabelPlacementShould.longScene()` inputs: `LONG_NAMES` in source order, radius 8.0, node coordinates `((index % 3) - 1) * 22.0` and `(index / 3) * 22.0`, area `1128 x 364`, zoom 1.63, no stand-in, forced label `LONG_NAMES[0]`, light theme, `Dialog` font metrics, and the existing fixed `MAP` identifier. Include an edge-bearing two-node run of 24 wu in the render state. From the production placed labels, measure every present `LeaderLine`, select the largest by Euclidean screen length, and record its slot, endpoint, text, and unrounded length. The test must not impose an upper bound or compare that value to the run. This is the wide diagonal-placement measurement; it reports a diagonal result if selected and does not change the slot policy to force one.
+**I13 fixed render fixture.** Use the existing deterministic `ScreenLabelPlacementShould.longScene()` inputs: `LONG_NAMES` in source order, radius 8.0, node coordinates `((index % 3) - 1) * 22.0` and `(index / 3) * 22.0`, area `1128 x 364`, zoom 1.63, no stand-in, forced label `LONG_NAMES[0]`, light theme, `Dialog` font metrics, and the existing fixed `MAP` identifier. Include an edge-bearing two-node run of 20 wu in the render state. From the production placed labels, measure every present `LeaderLine`, select the largest by Euclidean screen length, and record its slot, endpoint, text, and unrounded length. The test must not impose an upper bound or compare that value to the run. This is the wide diagonal-placement measurement; it reports a diagonal result if selected and does not change the slot policy to force one.
 
 ## C — D1 frozen harness amendment
 
@@ -169,7 +173,7 @@ OLD: radiusOf(first, radiusById) + radiusOf(second, radiusById)
      + NodeSeparationProjection.MIN_GAP));
 NEW: radiusOf(first, radiusById) + radiusOf(second, radiusById)
      + (edge.first().isNode() && edge.second().isNode()
-         ? PREFERRED_NODE_GAP : NodeSeparationProjection.MIN_GAP)));
+         ? PREFERRED_EDGE_GAP : NodeSeparationProjection.MIN_GAP)));
 ```
 
 The `painter` overlay performs the following exact baseline-to-candidate literal replacements and no others. Whitespace and source text inside each OLD block are the baseline literal; the NEW block is the complete replacement.
@@ -326,9 +330,9 @@ static BasicStroke leaderStroke(final double zoom) {
 
 After overlaying C0 with the candidate allowlist, the driver's comparison must accept exactly the three overlays listed above. The implementation diff, measured separately from the delivery base, must name exactly the two files A authorises; both assertions belong in the change, because the first guards the frozen control and the second guards scope. Preserve the driver's complete-source-tree comparison. Do not adapt or invoke `freeplane_plugin_graph/doc/initial-spacing/collect-receipt.py`.
 
-Change the REST matrix target from scalar `nn = 22.0` on both configurations to the C0/candidate tuple `(22.0, 40.0)`. Leave `ne = 42.28427124746190` and `ee = 62.568542494923804` unchanged. Those values preserve the `+ MIN_GAP` contract for enclosure endpoints.
+Change the REST matrix target from scalar `nn = 22.0` on both configurations to the C0/candidate tuple `(22.0, 36.0)`. Leave `ne = 42.28427124746190` and `ee = 62.568542494923804` unchanged. Those values preserve the `+ MIN_GAP` contract for enclosure endpoints.
 
-The current candidate settling pins are `{'S1': (84, 58), 'reference': (42, 37), 'cross': (756, 3455)}` in the driver; `TypedForcesShould.TWO_MAP_FIRST_IDLE_STEP = 3455` pins the cross first-idle value again. Refresh candidate values only, and only from a fresh recorded run of the amended candidate. Record the run id and previous value alongside each refreshed value. If `abs(new - old) / old > 0.25`, stop and escalate it as a risk finding; do not absorb it by re-pinning. C0 pins and C0 expectations are immutable. Keep the 6000-step and 600-second bounds, control-pair accounting, exhaustion expectations, C0 column, seed-gap matrix, and all other operational limits byte-identical.
+The current candidate settling pins are `{'S1': (84, 58), 'reference': (42, 37), 'cross': (756, 3455)}` in the driver; `TypedForcesShould.TWO_MAP_FIRST_IDLE_STEP = 3455` pins the cross first-idle value again. Refresh candidate values only, and only from a fresh recorded run of the amended candidate. Record the run id and previous value alongside each refreshed value. The escalation rule is asymmetric, because the two directions mean different things: if the candidate settles **slower**, `(new - old) / old > 0.25`, stop and escalate it as a risk finding instead of re-pinning, since slower settling is the instability this gate exists to catch; if it settles **faster**, `(old - new) / old > 0.25`, refresh the pin and record the change as a finding with the measured first-idle. Faster settling is not a regression, and the epoch-1 rule that escalated on absolute change fired on S1 (`58 -> 37`, -36%) for no good reason. C0 pins and C0 expectations are immutable. Keep the 6000-step and 600-second bounds, control-pair accounting, exhaustion expectations, C0 column, seed-gap matrix, and all other operational limits byte-identical.
 
 Archive a direct copy of each amended run output under `freeplane_plugin_graph/doc/initial-spacing/runs/`: `manifest.json`, `comparison.json`, `acceptance.md`, and one `<configuration>-<fixture>.json` for every executed fixture. The driver writes no `results.json`, `verification.json`, or `raw/` directory; do not invent them. Preserve existing frozen C0 archives unchanged. Do not use the unreferenced historical receipt collector.
 
@@ -338,7 +342,7 @@ Archive a direct copy of each amended run output under `freeplane_plugin_graph/d
 
 The committed `GraphWorkspaceUiEvidence` projection has an empty edge list and installs `EdgePaths.empty()`. Its screenshots cannot show an arrowhead and therefore cannot witness C2. Regenerate its committed screenshot, including `docs/superpowers/specs/images/2026-08-10-graph-workspace-implemented.png`, after C3; use that regenerated screenshot as the C3 visual witness. This regeneration is evidence, not a test assertion.
 
-C2 requires a separate edge-bearing render capture at zoom 1.63 under `docs/superpowers/specs/images/2026-10-23-graph-edge-length-and-label-connector-c2.png`. It must show a 24 wu single-headed run with the proportional head and a 6 wu run as a plain line with no head. Record the PNG's computed SHA-256 digest and the constants `ARROW_HEAD_RATIO=0.30`, `MIN_ARROW_HEAD_WORLD_LENGTH=4.0`, `MAX_ARROW_HEAD_WORLD_LENGTH=12.5`, `MIN_ARROW_HEAD_AVAILABILITY=8.0`, and `ARROW_HEAD_HALF_BASE_RATIO=0.42` in the implementation evidence record. The capture is evidence, not a gate. Do not claim the empty-edge committed screenshot witnesses C2. This spec-only commit does not create either screenshot.
+C2 requires a separate edge-bearing render capture at zoom 1.63 under `docs/superpowers/specs/images/2026-10-23-graph-edge-length-and-label-connector-c2.png`. It must show a 20 wu single-headed run with the proportional head and a 6 wu run as a plain line with no head. Record the PNG's computed SHA-256 digest and the constants `ARROW_HEAD_RATIO=0.30`, `MIN_ARROW_HEAD_WORLD_LENGTH=4.0`, `MAX_ARROW_HEAD_WORLD_LENGTH=12.5`, `MIN_ARROW_HEAD_AVAILABILITY=8.0`, and `ARROW_HEAD_HALF_BASE_RATIO=0.42` in the implementation evidence record. The capture is evidence, not a gate. Do not claim the empty-edge committed screenshot witnesses C2. This spec-only commit does not create either screenshot.
 
 ### D2 — fresh relaxation and retained replay gate
 
@@ -368,13 +372,42 @@ Use a fresh output directory for each execution under `freeplane_plugin_graph/do
 
 Run the following after implementation, in order. Commands are from the repository root and use `gradle`, not the wrapper. This specification task itself runs no build.
 
-**Required environment prelude for every command in this table:**
+**Two execution modes are required, not one.** The module contains two tests with contradictory
+AWT requirements, and this is a pre-existing conflict that this change does not create:
+
+- `InitialSpacingAcceptanceShould`'s first assertion requires `java.awt.headless == "true"` in the test
+  worker (`InitialSpacingAcceptanceShould.java:14`).
+- `AccessibleGraphCanvasShould` constructs `JFrame`s and throws `HeadlessException` when that property
+  is true (`:235`, `:328`, `:495`); it needs a real display.
+
+Neither mode alone can pass the module, so the validation vector below is executed twice with an
+explicit selector split. Skipping the accessibility tests is not permitted: coverage must be
+preserved, only relocated.
+
+**Mode 1 — headless, everything except the AWT-window tests:**
 
 ```bash
 export JAVA_HOME=~/.sdkman/candidates/java/21.0.8-zulu
 export PATH="$JAVA_HOME/bin:$PATH"
 export JAVA_TOOL_OPTIONS=-Djava.awt.headless=true
+gradle :freeplane_plugin_graph:test --tests '*' \
+  --tests '!org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould'
 ```
+
+**Mode 2 — headful under a virtual display, the AWT-window tests:**
+
+```bash
+unset JAVA_TOOL_OPTIONS
+Xvfb :99 -screen 0 1600x1200x24 &
+export DISPLAY=:99
+gradle :freeplane_plugin_graph:test --tests 'org.freeplane.plugin.graph.canvas.AccessibleGraphCanvasShould'
+```
+
+Both modes must pass. `JAVA_TOOL_OPTIONS` is what reaches the test worker: the Gradle `test` task does
+not set `java.awt.headless`, and the four `systemProperty 'java.awt.headless', 'true'` entries in
+`freeplane_plugin_graph/build.gradle` (`:116`, `:130`, `:163`, `:175`) belong to the `JavaExec` tasks
+`graphPerformanceDiagnostic`, `boundaryCorrectionProfile`, `graphOsgiSmoke` and `graphUiEvidence`.
+There is no `gradle.properties` setting it either.
 
 `JAVA_TOOL_OPTIONS` is not optional. `InitialSpacingAcceptanceShould`'s first assertion requires the
 system property `java.awt.headless` to equal `"true"` in the test worker
@@ -388,9 +421,9 @@ worker JVM process, which is how this feature's predecessors ran the same gate.
 
 | Gate | Command / selector | Acceptance statement |
 | --- | --- | --- |
-| Focused layout contracts | `gradle :freeplane_plugin_graph:test --tests org.freeplane.plugin.graph.layout.graphstream.InitialSpacingSeedShould --tests org.freeplane.plugin.graph.layout.graphstream.InitialSpacingAcceptanceShould` | Engine endpoint-type rest lengths pass; the amended D1 harness completes with byte-frozen C0, candidate `nn=40.0`, preserved `ne`/`ee`, and unchanged limits. |
-| Focused painter and label contracts | `gradle :freeplane_plugin_graph:test --tests org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould --tests org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould` | Arrow, suppression, color, stroke, zoom, label geometry, I11 (pinned `ABOVE_FAR` retention fixture) and I13 tests pass. |
-| Full graph module suite (D1 included) | `gradle :freeplane_plugin_graph:test` | All graph tests pass, including fresh-JVM D1; no undiscovered-test relaxation may be used to hide a missing `*Should` test. |
+| Focused layout contracts (Mode 1) | `gradle :freeplane_plugin_graph:test --tests org.freeplane.plugin.graph.layout.graphstream.InitialSpacingSeedShould --tests org.freeplane.plugin.graph.layout.graphstream.InitialSpacingAcceptanceShould` | Engine endpoint-type rest lengths pass; the amended D1 harness completes with byte-frozen C0, candidate `nn=36.0`, preserved `ne`/`ee`, and unchanged limits. |
+| Focused painter and label contracts (Mode 1) | `gradle :freeplane_plugin_graph:test --tests org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould --tests org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould` | Arrow, suppression, color, stroke, zoom, label geometry, I11 (pinned `ABOVE_FAR` retention fixture) and I13 tests pass. |
+| Full graph module suite (D1 included) | Mode 1 then Mode 2, exactly as the prelude defines them | Both modes pass: Mode 1 covers every graph test including the fresh-JVM D1 harness; Mode 2 covers the AWT-window tests under Xvfb. No test may be deleted or skipped, and no undiscovered-test relaxation may hide a missing `*Should` test. |
 | Bundle verification | `gradle :freeplane_plugin_graph:verifyGraphBundle` | Existing GraphStream checksum, Java class-version, bundle manifest/classpath, import/export, and license checks pass unchanged. |
 | D2 | `gradle :freeplane_plugin_graph:test --tests org.freeplane.plugin.graph.layout.graphstream.GraphEdgeLengthSettleShould` | All listed fixtures run against delivery base and candidate in fresh equivalent environments; all receipts listed in D are archived; every relationship pair is represented; observed findings are reported without invented bounds. |
 | Retained replay regression | `gradle :freeplane_plugin_graph:graphPerformanceDiagnostic` | Existing fixed-geometry routing/conflict diagnostic passes as a regression gate; it is not represented as settle evidence. |
@@ -398,13 +431,26 @@ worker JVM process, which is how this feature's predecessors ran the same gate.
 
 The build file also defines `boundaryCorrectionProfile`, `graphSmokeInstallation`, `graphOsgiSmoke`, `graphUiEvidence`, and `freeplaneLaunchSmoke`; run them only where the implementation's ordinary acceptance workflow calls for them. `graphUiEvidence` can refresh C3 screenshots but cannot witness C2. Do not substitute those tasks for the ordered full-suite, D2, and retained-replay gates.
 
+## E2 — Epoch-2 pivot record
+
+The relationship gap is `PREFERRED_EDGE_GAP = 20.0`, not the ring gap. This is a user decision taken
+after the epoch-1 contract was materialised and executed, and the evidence is design section H. Three
+consequences are normative here:
+
+1. `PREFERRED_EDGE_GAP` is a new constant; `PREFERRED_NODE_GAP` is not touched. The containment bound
+   is `r1 + r2 + 20 <= 2 * maxR + 20 < 2 * maxR + 24` (the ring chord), so it holds by an explicit
+   inequality, and a test must assert `PREFERRED_EDGE_GAP < PREFERRED_NODE_GAP`.
+2. The D1 `nn` candidate target is `36.0` (`8 + 8 + 20`) and `ne`/`ee` stay unchanged.
+3. The two-mode execution split in E is mandatory, and the escalation rule is slower-only. Both are
+   consequences of measured facts, not of preference.
+
 ## F — Superseded statements and interpretation
 
 This section resolves descriptive prose and earlier contracts; it does not alter the approved design's normative decisions.
 
-1. Any earlier graph-initial-spacing statement that every relationship rest adds `NodeSeparationProjection.MIN_GAP` is superseded for node/node relationships only. The new node/node additive gap is `PREFERRED_NODE_GAP = 24.0`; the earlier `+ MIN_GAP = 6.0` rule remains normative for relationships with at least one enclosure endpoint, for collision correction, and for the public `MIN_GAP` constant.
+1. Any earlier graph-initial-spacing statement that every relationship rest adds `NodeSeparationProjection.MIN_GAP` is superseded for node/node relationships only. The new node/node additive gap is the new constant `PREFERRED_EDGE_GAP = 20.0`, which is not the ring constant `PREFERRED_NODE_GAP = 24.0`; the earlier `+ MIN_GAP = 6.0` rule remains normative for relationships with at least one enclosure endpoint, for collision correction, and for the public `MIN_GAP` constant.
 2. The design's causal discussion, option comparisons, mockup labels, and rounded diagrams describe motivation or rejected alternatives. They do not authorize changes to prominence, radii, labels, enclosure geometry, routing, or settings. The formulas and exact constants in A are normative.
-3. The phrase that a relationship is longer than a label connector is not a universal or settled-layout assertion. I11 is only the fixed 24 wu, zoom-1.63, axis-aligned render comparison. Diagonal connector lengths are measured and reported by I13 without an inequality.
+3. The phrase that a relationship is longer than a label connector is not a universal or settled-layout assertion. I11 is only the fixed 20 wu, zoom-1.63, axis-aligned render comparison, which holds above about zoom 1.35 (`27 / 20`). Diagonal connector lengths are measured and reported by I13 without an inequality.
 4. `restLength` is a force target, not an equilibrium promise. I3 proves only the same-enclosure direct-node chord bound. Cross-map, nested, pinned, multi-membership, unenclosed, and settled results are measured under D2; no inference extends I3 to those cases.
 5. Helper head length below 8 wu is still defined by the clamp, but it is never painted. The suppression decision belongs only in `paintArrow`; a helper result of 4.0 px for availability 3.0 is not a painted head and does not license an availability clip.
 6. A 1 px connector applies only in the stated unclamped zoom band. At extreme finite positive zooms, the minimum-world clamp guarantees `BasicStroke` construction; it does not preserve a 1 px screen width or 4 px pitch there.
