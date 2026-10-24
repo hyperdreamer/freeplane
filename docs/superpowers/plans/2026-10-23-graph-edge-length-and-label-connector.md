@@ -21,7 +21,7 @@
 - Use `PREFERRED_EDGE_GAP = 20.0`; leave `PREFERRED_NODE_GAP = 24.0`, `NodeSeparationProjection.MIN_GAP = 6.0`, `BoundarySizes.SIBLING_GAP = 8.0`, node radii, prominence, hull geometry, routing, leader geometry, pins, persistence, hit testing, and zoom policy unchanged.
 - Use Java 8-compatible syntax, UTF-8, four-space indentation, and `*Should` test class names. Add no dependencies, public APIs, settings, configuration, compatibility fallback, or replacement for the deleted `arrowHeadLengthPx` helper.
 - Do not edit a fixture, threshold, force, budget, timeout, or C0 oracle to obtain a pass. Record a discrepancy and stop/escalate its gate.
-- Every task has one lowercase `**Implementer tier:**` annotation as explicitly required for this plan. The installed SDD parser currently accepts only TitleCase (`Economy`, `Fast`, `Standard`, `Advanced`, `Capable`, `Frontier`), so its `validate-plan` command will reject these user-required lowercase values. Do not silently change casing or claim controller acceptance; validate structural completeness separately and report the casing incompatibility.
+- Every task carries exactly one `**Implementer tier:**` line with a TitleCase value (`Economy`, `Fast`, `Standard`, `Advanced`, `Capable`, `Frontier`), which is the only form the installed SDD parser accepts. A lowercase value is rejected by `validate-plan` as a malformed tier field and blocks the deterministic controller.
 - All automated Java/Gradle commands use `/home/henry/.sdkman/candidates/java/21.0.8-zulu` and `gradle`, never `gradlew` or Maven. Set `JAVA_TOOL_OPTIONS=-Djava.awt.headless=true` for headless tests. Use the real Xvfb mode for the excluded AWT-window tests.
 - Execute the full graph suite in both prescribed modes. Mode 1 excludes only `AccessibleGraphCanvasShould`, `GraphWorkspaceWindowModelShould`, and `GraphPluginIntegrationShould` with a Gradle init script; Mode 2 runs exactly those classes under Xvfb. Reconcile executed-method counts from `--info`, not discovery counts. Preserve the two platform-conditional `WorkspaceUriResolverShould` assumptions.
 - D1 must keep the C0 arm byte-reproducible and its limits unchanged. D1's cumulative C0 overlay compares exactly three source files (`GraphStreamLayoutEngine.java`, existing `ClusterPacking.java` overlay, and new `GraphPainter.java` overlay); the separate production diff against delivery base is exactly two files.
@@ -38,7 +38,7 @@
 - Consumes: the existing C0 commit and literal `engine` and `packing` overlays. Keep the existing Java probe invocation and its timeout; migrate its topology helper call in Task 2.
 - Produces: a C0-byte-frozen D1 comparison that recognizes precisely the approved candidate source overlays and targets `nn = 36.0` while retaining `ne = 42.28427124746190` and `ee = 62.568542494923804`.
 
-**Implementer tier:** advanced
+**Implementer tier:** Advanced
 **Lane:** harness
 **Depends on:** none. This amendment must precede Task 3, which changes the candidate source bytes checked by this harness.
 
@@ -65,7 +65,7 @@
 - Consumes: Task 1's D1 candidate target `nn=36.0`, unchanged `ne`/`ee` targets, and existing `InitialSpacingFixtures.matrix(crossMap, pair, reverse)` fixtures.
 - Produces: `InitialSpacingConsumers.topology(projection, engine, ringGap, edgeGap)` plus actual-engine topology assertions for node/node `+20.0`, enclosure-endpoint `+6.0`, unchanged containment/hierarchy links, and the local single-enclosure chord bound.
 
-**Implementer tier:** advanced
+**Implementer tier:** Advanced
 **Lane:** tests
 **Depends on:** 1
 
@@ -90,7 +90,7 @@
 - Consumes: Task 2's topology oracle and the existing `GraphPainter`/`ScreenLabelPlacement` test fixtures.
 - Produces: the exact C1-C3 production behavior, painter tests for I5-I11/I13, and unchanged leader geometry coverage for I10.
 
-**Implementer tier:** advanced
+**Implementer tier:** Advanced
 **Lane:** production
 **Depends on:** 1, 2
 
@@ -133,7 +133,7 @@ gradle :freeplane_plugin_graph:test --tests org.freeplane.plugin.graph.canvas.Gr
 - Consumes: `InitialSpacingFixtures`, `GraphStreamLayoutEngine`, the approved production topology, and delivery-base commit `448c0d679d2b1d46563eaf079352e1eefb254305`.
 - Produces: isolated baseline/candidate fixture receipts and a comparison schema that retains every relationship-pair observation and never treats rest length as equilibrium.
 
-**Implementer tier:** capable
+**Implementer tier:** Capable
 **Lane:** tests
 **Depends on:** 1, 2, 3
 
@@ -169,7 +169,7 @@ gradle :freeplane_plugin_graph:test --tests org.freeplane.plugin.graph.canvas.Gr
 - Consumes: Task 3's focused contracts, Task 4's D2 runner, D1 acceptance outputs, the existing `graphUiEvidence` task, and `graphPerformanceDiagnostic`.
 - Produces: ordered gate results, D1 and D2 archives, C2/C3 visual evidence, and a scope/reviewer record.
 
-**Implementer tier:** capable
+**Implementer tier:** Capable
 **Lane:** evidence
 **Depends on:** 1, 2, 3, 4
 
