@@ -1733,7 +1733,7 @@ public class ScreenLabelPlacementShould {
             world.scale(zoom, zoom);
             graphics.transform(world);
             graphics.setColor(java.awt.Color.BLACK);
-            graphics.setStroke(GraphPainter.leaderStroke(theme, zoom));
+            graphics.setStroke(GraphPainter.leaderStroke(zoom));
             LeaderLine line = label.leader().get();
             graphics.draw(new java.awt.geom.Line2D.Double(
                 (line.start().x() - width * 0.5) / zoom, (line.start().y() - height * 0.5) / zoom,
