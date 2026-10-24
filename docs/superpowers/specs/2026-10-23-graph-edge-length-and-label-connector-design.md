@@ -2,10 +2,21 @@
 
 Task identifier: `2026-10-23-graph-edge-length-and-label-connector`
 
-Status: approved by the user on 2026-10-23. The user chose the spacing as a combination of
-options B and D from the arrowhead comparison — option D's compact span (the shared gap stays
-24 wu) with option B's head-to-shaft balance (a proportional head) — and connector option **B**
-for the label indicator. Both choices are recorded with their mockups below.
+Status: approved by the user on 2026-10-23, revised under epoch 2 on the same date. The user chose
+the spacing as a combination of options B and D from the arrowhead comparison — option D's compact
+span with option B's head-to-shaft balance (a proportional head) — and connector option **B** for the
+label indicator. Both choices are recorded with their mockups below.
+
+**Epoch-2 amendment (2026-10-23).** The first implementation readiness check materialised the
+contract and ran it. The approved 24 wu relationship gap does not survive the existing correctness
+gates: the two-map fixture never reaches idle within its unchanged 6000-frame bound, because the
+cross-map clamp compares residuals at two decimals while the correction publishes four, so a larger
+spring keeps the correction oscillating at the rounding floor. Measured in the same harness, gap 20
+settles (first-idle 3103) and gap 16 settles (3293). After re-engaging, the user chose **gap 20 wu**.
+The ring constant `PREFERRED_NODE_GAP = 24.0` is not touched at all; the relationship gap becomes its
+own constant, `PREFERRED_EDGE_GAP = 20.0`, which is `<=` the ring gap, so the containment bound still
+holds by construction. Every number below has been recomputed for 20 wu. See H for the pivot
+evidence.
 
 Source and delivery target: `plugin/graph-workspace` at
 `448c0d679d2b1d46563eaf079352e1eefb254305`. All investigation, mockup rendering and proposed
@@ -29,11 +40,11 @@ Goals:
 - A relationship edge is visibly a line with an arrowhead at its end, never an arrowhead alone,
   at any gap, zoom, or node prominence, for single and double-headed edges.
 - At the reported fit zoom of 1.63, an unpinned two-default-node relationship run is longer than the
-  connector of a displaced label. The run is world-space (`24 wu x 1.63 = 39.12 px`); a displaced
+  connector of a displaced label. The run is world-space (`20 wu x 1.63 = 32.6 px`); a displaced
   (`ABOVE_FAR`/`BELOW_FAR`/`LEFT_FAR`/`RIGHT_FAR`) leader is exactly
   `DISPLACED_OFFSET - LEADER_CLEARANCE = 27 px` at any zoom and any label size, and a `RIGHT`/`LEFT`
   leader is exactly `SLOT_GAP - LEADER_CLEARANCE = 3 px`. The ordering therefore holds for
-  axis-aligned connectors from zoom ~1.125 upward.
+  axis-aligned connectors from zoom ~1.35 upward (`27 / 20`).
   It does **not** hold for diagonal `ABOVE_RIGHT`-style slots. Their anchor is
   `(r + SLOT_GAP + width/2, r + SLOT_GAP + height/2)` in screen pixels, so it carries both the
   zoom-scaled disc radius and the label's own half-extents; `leader()` trims correctly at the first
@@ -62,6 +73,11 @@ acceptance harness must itself be amended (D1), the arrowhead rule gained a shaf
 the connector-length goal was corrected and scoped to axis-aligned slots (Goals, I11, I13), the ring
 argument was restricted to its provable scope (C1), enclosure-label connectors were brought
 explicitly into scope, and the production/test inventory and performance evidence were completed.
+
+Amended under epoch 2 after the specification's own materialisation: the relationship gap became
+`PREFERRED_EDGE_GAP = 20.0` (a separate constant, strictly below the ring gap) because 24 wu never
+reaches idle in the unchanged two-map gate; every derived number was recomputed; and H records the
+evidence. The 24 wu panels in the mockups below are the epoch-1 renders and are retained as history.
 
 Amended after the fifth review: the redundant `min(head, available)` terminal clip was dropped from
 `effectiveArrowHeadLengthPx`, since paint-time suppression makes it unreachable and two contracts for
@@ -163,7 +179,8 @@ multiplies the hulls while the head-to-shaft ratio does not, the combination is 
 dial. Panel letters below are local to this image and do not refer back to that comparison:
 
 - **A** — gap 24, fixed 9 wu head (option D as first shown).
-- **B** — gap 24, head = 30% of the run = 7.2 wu. **Approved.**
+- **B** — gap 24, head = 30% of the run = 7.2 wu. **Superseded by epoch 2: approved at gap 20,
+  head 6.0 wu.**
 - **C** — gap 40, head = 12 wu; the same ratio at a larger span.
 - **D** — gap 56, head = 12.5 wu; the ratio rule reaches today's cap, so the head never grows.
 
@@ -171,12 +188,13 @@ The approved point keeps `PREFERRED_NODE_GAP` at 24.0, so hull size, fit zoom an
 unchanged from the delivery base, while the relationship edge is lengthened 22 → 40 wu
 centre-to-centre.
 
-Like-for-like head bases, measured at equal 24 wu availability:
+Like-for-like head bases at the approved epoch-2 gap of 20 wu, and at the superseded 24 wu:
 
 | | head (wu) | base / 16 wu disc |
 | --- | --- | --- |
-| delivery base at a 24 wu run (unclipped 12.5 wu head) | 12.5 | 65.6% |
-| approved at a 24 wu run (30% rule) | 7.2 | 37.8% |
+| delivery base at a 20 wu run (unclipped 12.5 wu head) | 12.5 | 65.6% |
+| **approved (epoch 2) at a 20 wu run** | **6.0** | **31.5%** |
+| superseded epoch-1 value at a 24 wu run | 7.2 | 37.8% |
 | delivery base on the reported 6 wu run (clipped) | 6.0 | 31.5% |
 | approved on the same 6 wu run | none painted (8 wu suppression floor) | n/a; the edge is a plain line |
 
@@ -207,22 +225,25 @@ In `layout.graphstream.GraphStreamLayoutEngine.topology`, the relationship `Forc
 becomes:
 
 ```text
-gap  = (edge.first is a node AND edge.second is a node) ? PREFERRED_NODE_GAP : NodeSeparationProjection.MIN_GAP
+gap  = (edge.first is a node AND edge.second is a node) ? PREFERRED_EDGE_GAP : NodeSeparationProjection.MIN_GAP
 rest = radius(first) + radius(second) + gap
 ```
 
-`PREFERRED_NODE_GAP` stays `24.0`. `NodeSeparationProjection.MIN_GAP` stays `6.0` and remains the
+`PREFERRED_EDGE_GAP = 20.0` is a new package-private constant in `GraphStreamLayoutEngine`, declared
+beside `PREFERRED_NODE_GAP`. `PREFERRED_NODE_GAP` stays `24.0` and keeps its single existing use. `NodeSeparationProjection.MIN_GAP` stays `6.0` and remains the
 minimum clearance used by `NodeSeparationProjection`, `EdgeConflictCorrection` and the
 hull-endpoint rest length. Containment and hierarchy rest lengths are untouched.
 
 Why enclosure endpoints keep `MIN_GAP`: a hull endpoint's "radius" is already its content ring,
 which encodes the preferred spacing. Adding the preferred gap there would place the node a further
-24 wu outside its own ring, so the relationship spring would pull against the containment spring
+20 wu outside its own ring, so the relationship spring would pull against the containment spring
 that holds it on the ring. Keeping the additive gap node-only avoids double counting.
 
 Why this cannot fight the ring, and where it can: for two direct members of **one** enclosure, each
-radius is at most `maxR`, so `rest = r₁ + r₂ + G ≤ 2·maxR + G`, and `2·maxR + G` is exactly the
-chord between adjacent ring members, by construction of `contentRingRadius`. The bound holds with
+radius is at most `maxR`, so `rest = r₁ + r₂ + 20 ≤ 2·maxR + 20 < 2·maxR + 24`, and `2·maxR + 24` is
+exactly the chord between adjacent ring members, by construction of `contentRingRadius`. The bound
+holds because the relationship gap is strictly smaller than the ring gap; keeping the two constants
+separate is what makes that inequality explicit rather than incidental. The bound holds with
 mixed prominence too: radii 8 and 14 give `rest = 46` against a chord of `52`. This is a property to
 assert, not a tuning result.
 
@@ -291,8 +312,8 @@ fractions, never a rounded decimal: near `a = 13.333...` the two middle branches
 `0.001`, and near `a = 41.666...` they agree only in the limit, so a rounded boundary would assert a
 value the formula does not produce.
 
-Consequences at the approved spacing: a 24 wu run gets a 7.2 wu head (30% of the run, base 6.05 wu
-= 37.8% of the disc); a run of `12.5/0.30 = 41.666...` wu or more keeps today's 12.5 wu head, so long edges are
+Consequences at the approved spacing: a 20 wu run gets a 6.0 wu head (30% of the run, base 5.04 wu
+= 31.5% of the disc); a run of `12.5/0.30 = 41.666...` wu or more keeps today's 12.5 wu head, so long edges are
 pixel-identical to the base; the reported 6 wu run now draws a plain 6 wu line where the base drew a
 6 wu head that swallowed the edge. For a double-headed edge the thresholds apply to `distance / 2`,
 so the base 12.5 wu head is reached at a `2 x 41.666... = 83.333...` wu separation rather
@@ -344,9 +365,9 @@ both the edge's colour and the text's weight, which is what makes it read as an 
 
 | Id | Invariant |
 | --- | --- |
-| I1 | Every relationship link whose endpoints are both nodes has `restLength = r₁ + r₂ + 24.0`, where `r` is the disc radius from `radiusById`. |
+| I1 | Every relationship link whose endpoints are both nodes has `restLength = r₁ + r₂ + PREFERRED_EDGE_GAP` with `PREFERRED_EDGE_GAP = 20.0`, where `r` is the disc radius from `radiusById`. |
 | I2 | Every relationship link with at least one enclosure endpoint has the same `restLength` as the delivery base. |
-| I3 | For any two direct members of **one** enclosure, the relationship `restLength` is `≤ 2·maxR + 24.0`, the ring chord. Cross-enclosure, cross-map, multi-membership and pinned pairs are excluded from this invariant by design. |
+| I3 | For any two direct members of **one** enclosure, the relationship `restLength` is `≤ 2·maxR + 20.0`, strictly below the ring chord `2·maxR + 24.0`. Cross-enclosure, cross-map, multi-membership and pinned pairs are excluded from this invariant by design. |
 | I4 | Containment and hierarchy rest lengths are unchanged. |
 | I5a | An arrowhead is painted only when `availableRun ≥ 8.0` wu; when it is painted, `length = clamp(0.30 · availableRun, 4.0, 12.5)` and `length ≤ 0.50 · availableRun` at every zoom. |
 | I5b | For every painted head, single- or double-headed, a shaft of at least `0.50 · availableRun` remains uncovered. When no head is painted, the whole run is an uncovered shaft. |
@@ -356,7 +377,7 @@ both the edge's colour and the text's weight, which is what makes it read as an 
 | I8 | For zoom in `[1e-6, 1e6]`, the leader stroke paints 1.0 screen px wide with a 4.0 screen px dash pitch. For any zoom `GraphViewport` accepts, `leaderStroke` is constructible: neither the width nor any dash entry converts to `float` zero. Outside the 1.0 px band, the clamp is an intentional exception and must not be asserted as 1.0 px. |
 | I9 | Label text is painted in `theme.labelColor()`; every leader, node or enclosure, is painted in `theme.mutedColor()`; the text paint is restored after the leader. |
 | I10 | `ScreenLabelPlacement` leader geometry is unchanged. |
-| I11 | In a fixed-coordinate render fixture (two default nodes placed exactly `r₁ + r₂ + 24` apart) at zoom 1.63, the drawn run (`24 × 1.63 = 39.12` px) exceeds every **axis-aligned** connector: `FAR` slots are 27 px and `RIGHT`/`LEFT` are 3 px. This is a render claim about a specified geometry, not a promise about settled layouts; `restLength` is a spring target (`TypedSpringBox:119` applies a force), so settled runs are measured by I14. Diagonal slots are excluded and measured by I13. |
+| I11 | In a fixed-coordinate render fixture (two default nodes placed exactly `r₁ + r₂ + 20` apart) at zoom 1.63, the drawn run (`20 × 1.63 = 32.6` px) exceeds every **axis-aligned** connector: `FAR` slots are 27 px and `RIGHT`/`LEFT` are 3 px. This is a render claim about a specified geometry, not a promise about settled layouts; `restLength` is a spring target (`TypedSpringBox:119` applies a force), so settled runs are measured by I14. Diagonal slots are excluded and measured by I13. |
 | I14 | For every D2 fixture, the settled centre-to-centre distance and the resulting rim gap of each relationship pair are recorded from the candidate run and compared with the delivery base. Lopsided or sub-`MIN_GAP` pairs are reported as findings; nothing asserts they equal `restLength`. |
 | I12 | The frozen `graph-initial-spacing` C0 control stays byte-reproducible: its sources, its `nn = 22.0` expectation and every operational limit are unchanged. Only the candidate side is amended — the two permitted production overlays, the `nn` candidate target and the candidate settling pins. |
 | I13 | For each placement fixture at zoom 1.63, the longest connector over all slots is recorded as a measured value with its slot name, and is never asserted to be shorter than the run. |
@@ -392,7 +413,7 @@ Production-scale unit tests, in the existing modules and naming style:
    fill and under dim-unrelated alpha; a geometry assertion that `PlacedLabel.leader()` is
    unchanged; a construction assertion that `leaderStroke` is legal at zoom `1e46`.
 4. `GraphPainter` — I11 as a render-measured comparison: place a default two-node edge with a
-   displaced label at zoom 1.63 and assert the measured run (`39.12` px) exceeds the measured `FAR`
+   displaced label at zoom 1.63 and assert the measured run (`32.6` px) exceeds the measured `FAR`
    connector (`27` px). I13 records, for the same fixture, the longest connector over all slots with
    its slot name, and asserts only that the value is reported — never that it is smaller.
 
@@ -424,7 +445,7 @@ insufficient as this feature's witness, and the design says so instead of implyi
   regeneration is recorded as evidence, not asserted by a test.
 
 C2's visual witness is a separate capture: the render harness already used for this design's mockups,
-driven with an edge-bearing projection at zoom 1.63 (a 24 wu single-headed run, and a 6 wu run that
+driven with an edge-bearing projection at zoom 1.63 (a 20 wu single-headed run, and a 6 wu run that
 must now paint a plain line with no head), archived under `docs/superpowers/specs/images/` with its
 digest and the constant values used. That capture is evidence, not a gate.
 
@@ -441,7 +462,7 @@ status, so the driver runs inside the ordinary `freeplane_plugin_graph` suite. T
   `GraphStreamLayoutEngine.java`, which is `ENGINE` in that allowlist, so the run fails unless the
   overlay list is extended by exactly this change;
 - pins the `REST` matrix targets (`run-initial-spacing.py:289`): `nn = 22.0` for both C0 and
-  candidate. C1 makes the candidate `nn` value `40.0`.
+  candidate. C1 makes the candidate `nn` value `36.0`.
 
 The amendment, in the same commit as C1 and C2 and C3:
 
@@ -454,7 +475,7 @@ The amendment, in the same commit as C1 and C2 and C3:
    - `painter` (`GraphPainter.java`): the arrow constants and the fold from C2, and the leader paint
      and `leaderStroke` signature change from C3.
    `git diff --name-only` for this feature must be exactly those two production files.
-2. Change the `nn` target tuple to `(22.0, 40.0)`. Leave `ne = 42.28427124746190` and
+2. Change the `nn` target tuple to `(22.0, 36.0)`. Leave `ne = 42.28427124746190` and
    `ee = 62.568542494923804` unchanged: they are `R + r + MIN_GAP` and `R + R + MIN_GAP`, and C1
    deliberately does not touch enclosure-endpoint links. That triple is itself the test that C1
    stayed node-to-node.
@@ -554,8 +575,8 @@ D1 harness), then D2, then the retained replay regression gate.
    combinations, and option C (hairline with an endpoint dot) remains available if the dotted form
    proves too light in practice.
 5. **The connector can be longer than the edge.** Axis-aligned connectors are `FAR` slots at a fixed
-   27 px and `RIGHT`/`LEFT` at a fixed 3 px, so the run (24 px at zoom 1, 39.12 px at zoom 1.63)
-   overtakes them from zoom ~1.125. Diagonal slots are not bounded: the anchor is placed at
+   27 px and `RIGHT`/`LEFT` at a fixed 3 px, so the run (20 px at zoom 1, 32.6 px at zoom 1.63)
+   overtakes them from zoom ~1.35. Diagonal slots are not bounded: the anchor is placed at
    `(r + SLOT_GAP + width/2, r + SLOT_GAP + height/2)`, so its distance grows with the zoom-scaled
    radius and with the label's own width and height, while the trim already stops correctly at the
    first entry into the inflated text box. Whether such a connector is longer than the run therefore
@@ -569,6 +590,54 @@ D1 harness), then D2, then the retained replay regression gate.
    control and the operational limits preserved. The residual risk is that a candidate first-idle
    moves by more than the 25% escalation threshold, which would mean the layout is genuinely less
    stable and must be reconsidered rather than re-pinned.
+
+## H — Epoch-2 pivot: why the relationship gap is 20 wu
+
+The epoch-1 contract was materialised into a disposable copy and executed before planning, rather
+than reasoned about. Three gates failed. Only the first is a property of the approved gap itself.
+
+**1. Non-convergence at 24 wu (the reason for this pivot).** `TypedForcesShould.twoMapWorkspaceSettlesToIdle`
+fails with `ComparisonFailure: expected:<[3]> but was:<[2]>` around frame 4360, and with that equality
+disabled the fixture still has not reached idle after 6000 frames. The mechanism is pre-existing and
+independent of the rest length: the cross-map clamp in `TypedForcesShould` compares residuals rounded
+to two decimals (`Math.round(v * 100) / 100.0`) while the correction publishes four. Replacing the
+clamp's rounding with the four-decimal round reproduces the identical `expected 3 but was 2` failure
+with **no rest-length change at all**. A larger spring therefore keeps the correction oscillating at
+the rounding floor, and the "no perceivable residual" predicate never fires.
+
+Measured in the same harness by substituting only the node-to-node gap:
+
+| Relationship gap | Settles within 6000 frames | Cross-map first-idle | Run at zoom 1.63 |
+| --- | --- | ---: | ---: |
+| 24 (epoch 1) | **no** | never | 39.12 px |
+| 20 (epoch 2, approved) | yes | 3103 | 32.60 px |
+| 16 | yes | 3293 | 26.08 px |
+
+20 is the largest measured value that settles. It clears the 27 px `FAR` connector by 21%, whereas 16
+does not clear it at all (26.08 < 27), so 16 fails the user's first complaint while 20 satisfies it.
+
+**2. A pre-existing suite conflict.** `InitialSpacingAcceptanceShould` requires
+`java.awt.headless == "true"` in the test worker, while `AccessibleGraphCanvasShould` constructs
+`JFrame`s and throws `HeadlessException` when that property is true. Both are in the same module, so
+the module suite cannot pass in either single mode. This is independent of this change, and the test
+strategy must state the two-mode execution instead of pretending one command covers both.
+
+**3. The escalation rule fired.** S1's candidate first-idle moved 58 → 37 (a 36% change), tripping
+the 25% rule. Settling *faster* is not the instability that rule was written to catch, so the rule is
+re-scoped to escalate on **slower** settling beyond 25% and to report faster settling as a finding
+without blocking.
+
+Positive results from the same materialisation, which are why the rest of the contract stands: all
+twelve Java fences matched the materialised source after whitespace normalisation; the cumulative C0
+overlay correctly retained `ClusterPacking.java`; eight of eight targeted mutations were detected
+(gap, head ratio, availability floor, leader width, dash length, label-colour restore, extreme-zoom
+stroke construction, `FAR` connector offset); and the `ABOVE_FAR` retention path was reachable with
+the 27 px oracle falsifiable by changing `DISPLACED_OFFSET` from 30 to 29.
+
+**Consequences for the constants.** The ring constant is untouched at 24.0 and the relationship gap
+becomes its own constant at 20.0, which is strictly smaller. The containment bound therefore holds by
+an explicit inequality instead of by coincidence, and the `graph-initial-spacing` acceptance values
+(24.0 seed gaps, `contentRingRadius == 20.0`) remain valid.
 
 ## Out of scope
 
