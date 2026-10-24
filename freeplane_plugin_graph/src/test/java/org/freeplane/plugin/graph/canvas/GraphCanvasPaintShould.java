@@ -1472,6 +1472,9 @@ public class GraphCanvasPaintShould {
                     }
                     assertThat(lines).hasSize(1);
                     assertThat(pathVertices((Path2D) lines.get(0))).isEqualTo(path.samples());
+                    assertThat(drawn).as("availability %s, bidirectional %s, path %s, stroked arrowheads",
+                        availability, both, path.samples())
+                        .noneMatch(shape -> shape instanceof Path2D && pathVertices((Path2D) shape).size() == 3);
                     assertThat(heads).as("availability %s, bidirectional %s, path %s, terminal lengths %s/%s",
                         availability, both, path.samples(), path.terminalSegmentLength(true), path.terminalSegmentLength(false))
                         .hasSize(availability < 8.0 ? 0 : both ? 2 : 1);
@@ -1853,17 +1856,19 @@ public class GraphCanvasPaintShould {
             assertThat(line.end().y() - label.bounds().getMaxY()).isCloseTo(3.0, within(1e-6));
             ScreenLabelPlacementShould.assertLeaderClearsBox(label);
         }
-        EdgePath path = state.edgePaths().path(state.projection().edges().get(0).key()).get();
-        List<Shape> drawn = new ArrayList<Shape>();
-        recordPaint(new PaintFixture(state, state.projection().edges().get(0).key()), drawn,
-            new ArrayList<Shape>(), 1.63);
-        assertThat(drawn).anyMatch(shape -> shape instanceof Path2D && pathVertices((Path2D) shape).equals(path.samples()));
-        GraphViewport viewport = GraphViewport.of(0, 0, 1.63);
-        Point2D start = viewport.toScreen(path.samples().get(0), new Dimension(1128, 364));
-        Point2D end = viewport.toScreen(path.samples().get(path.samples().size() - 1), new Dimension(1128, 364));
-        assertThat(start.distance(end)).isCloseTo(32.6, within(1e-9));
-        assertThat(start.distance(end)).isGreaterThan(leaderLength(retainedLabel(state, lightTheme(), 1.63,
-            ScreenLabelPlacement.Slot.ABOVE_FAR)));
+        GraphTheme theme = lightTheme();
+        Dimension imageSize = new Dimension(1128, 364);
+        BufferedImage rendered = paintPlaced(state, Collections.<PlacedLabel>emptyList(), theme, 1.63,
+            imageSize, GraphPaintState.empty());
+        double paintedEdgeRunPx = measuredHorizontalEdgeRunPx(rendered, theme.edgeColor(),
+            rendered.getHeight() / 2, theme.edgeStroke().getLineWidth() * 1.63);
+        System.out.println("I11_RENDERED_EDGE_RUN_PX=" + paintedEdgeRunPx);
+        assertThat(paintedEdgeRunPx).isCloseTo(20.0 * 1.63, within(0.5));
+        double retainedConnectorPx = leaderLength(retainedLabel(state, theme, 1.63,
+            ScreenLabelPlacement.Slot.ABOVE_FAR));
+        System.out.println("I11_RETAINED_ABOVE_FAR_CONNECTOR_PX=" + retainedConnectorPx);
+        assertThat(retainedConnectorPx).isCloseTo(27.0, within(1e-6));
+        assertThat(paintedEdgeRunPx).isGreaterThan(retainedConnectorPx);
         for (ScreenLabelPlacement.Slot side : new ScreenLabelPlacement.Slot[] {
                 ScreenLabelPlacement.Slot.RIGHT, ScreenLabelPlacement.Slot.LEFT }) {
             assertThat(leaderLength(retainedLabel(state, lightTheme(), 1.63, side))).isCloseTo(3.0, within(1e-6));
@@ -1938,6 +1943,23 @@ public class GraphCanvasPaintShould {
         finally { graphics.dispose(); }
         File output = new File("build/graph-edge-length-c2.png");
         if (!ImageIO.write(capture, "png", output)) throw new IOException("No PNG image writer");
+    }
+
+    private static double measuredHorizontalEdgeRunPx(final BufferedImage image, final Color edgeColor,
+            final int row, final double nodeOutlineOcclusionPx) {
+        int longest = 0;
+        int current = 0;
+        for (int x = 0; x < image.getWidth(); x++) {
+            if (image.getRGB(x, row) == edgeColor.getRGB()) {
+                current++;
+                longest = Math.max(longest, current);
+            }
+            else {
+                current = 0;
+            }
+        }
+        // The full-scene node outlines cover one half-stroke at each attachment.
+        return longest + nodeOutlineOcclusionPx;
     }
 
     private static double leaderLength(PlacedLabel label) {
