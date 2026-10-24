@@ -40,6 +40,7 @@ import org.graphstream.graph.implementations.MultiGraph;
 final class GraphStreamLayoutEngine implements LayoutEngine {
     static final double NODE_RADIUS = 8.0;
     static final double PREFERRED_NODE_GAP = 24.0;
+    static final double PREFERRED_EDGE_GAP = 20.0;
 
     private final LayoutCalibration calibration;
     private final LinkedHashMap<String, ParticleState> particles = new LinkedHashMap<String, ParticleState>();
@@ -240,7 +241,8 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
                 result.add(new ForceLink(first, second, ForceKind.RELATIONSHIP,
                     !edge.first().mapReferenceId().equals(edge.second().mapReferenceId()),
                     radiusOf(first, radiusById) + radiusOf(second, radiusById)
-                        + NodeSeparationProjection.MIN_GAP));
+                        + (edge.first().isNode() && edge.second().isNode()
+                            ? PREFERRED_EDGE_GAP : NodeSeparationProjection.MIN_GAP)));
             }
         }
         for (final ProjectedEnclosure enclosure : projection.enclosures()) {
