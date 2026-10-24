@@ -422,12 +422,33 @@ gradle :freeplane_plugin_graph:test \
   --tests 'org.freeplane.plugin.graph.window.GraphPluginIntegrationShould'
 ```
 
-The two modes together must execute every method the single-mode run would, and the executed-method
-counts must be reconciled against `--info` output rather than compared as discovery counts, because
-discovery includes assumption-skipped methods. Two `WorkspaceUriResolverShould` skips are
+**Mode 1b — the headless-only method inside the otherwise headful class.** `GraphPluginIntegrationShould`
+contains **both** kinds of method: `:220` guards `passesTheSharedListIntoTheCreatedHeadlessView` with
+`Assume.assumeTrue(GraphicsEnvironment.isHeadless())`, while its other fourteen methods need a display.
+Mode 1 excludes the class and Mode 2 runs it headfully, so that one method would be executed in neither
+mode — measured: 1,409 distinct methods selected, 1,406 executed. Execute it headless on its own:
+
+```bash
+export JAVA_TOOL_OPTIONS=-Djava.awt.headless=true
+gradle :freeplane_plugin_graph:test \
+  --tests 'org.freeplane.plugin.graph.window.GraphPluginIntegrationShould.passesTheSharedListIntoTheCreatedHeadlessView'
+```
+
+The three passes (1, 1b, 2) together must execute every method the single-mode run would, and the
+executed-method counts must be reconciled against `--info` output rather than compared as discovery
+counts, because discovery includes assumption-skipped methods. Two `WorkspaceUriResolverShould` skips are
 platform-conditional (`Windows path semantics`, `>= 2 file-system roots`) and are independent of AWT.
 
-Both modes must pass. `JAVA_TOOL_OPTIONS` is what reaches the test worker: the Gradle `test` task does
+**Mode 2 has a pre-existing environment dependency and must be baselined before it can be used as a
+gate.** On plain Xvfb, `GraphWorkspaceWindowModelShould.f11RestoresBoundsAndExtendedStateFromMaximizedWindow`
+fails by timing out while waiting for initial maximisation; with Openbox it passes maximisation but fails
+the later restore assertion. Neither result involves this change. Therefore Mode 2 acceptance is
+*pass, or fail identically on an unmodified delivery-base checkout*: run Mode 2 on `448c0d679d` first,
+record both logs and the exact failing method names, and only treat a method as this change's
+regression if it passes on the baseline and fails on the candidate. A pre-existing failure is recorded
+and reported, never silently accepted or deleted.
+
+With that baseline rule, both modes must pass or be shown baseline-equivalent. `JAVA_TOOL_OPTIONS` is what reaches the test worker: the Gradle `test` task does
 not set `java.awt.headless`, and the four `systemProperty 'java.awt.headless', 'true'` entries in
 `freeplane_plugin_graph/build.gradle` (`:116`, `:130`, `:163`, `:175`) belong to the `JavaExec` tasks
 `graphPerformanceDiagnostic`, `boundaryCorrectionProfile`, `graphOsgiSmoke` and `graphUiEvidence`.
