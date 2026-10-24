@@ -29,7 +29,7 @@ public class InitialSpacingLifecycleShould {
                 assertThat(updated.positions().nodes().get(entry.getKey())).isEqualTo(entry.getValue());
             for (Map.Entry<EnclosureHullKey, LayoutPoint> entry : previous.positions().anchors().entrySet())
                 assertThat(updated.positions().anchors().get(entry.getKey())).isEqualTo(entry.getValue());
-            InitialSpacingConsumers.topology(after, engine, 24.0);
+            InitialSpacingConsumers.topology(after, engine, 24.0, 20.0);
             if (added != null) {
                 ProjectedEnclosure e = after.enclosures().get(0);
                 assertThat(e.directNodes()).hasSize(5); assertThat(e.directNodes().get(4)).isEqualTo(added);

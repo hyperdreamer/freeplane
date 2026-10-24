@@ -37,6 +37,7 @@ public class InitialSpacingAcceptanceShould {
         finally {
             if (process.isAlive()) process.destroyForcibly();
         }
+        assertThat(Files.isRegularFile(output.resolve("manifest.json"))).isTrue();
         assertThat(Files.isRegularFile(output.resolve("comparison.json"))).isTrue();
         assertThat(Files.isRegularFile(output.resolve("acceptance.md"))).isTrue();
     }

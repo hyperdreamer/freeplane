@@ -30,7 +30,7 @@ public class InitialSpacingSeedShould {
                 try (GraphStreamLayoutEngine engine = new GraphStreamLayoutEngine(LayoutCalibration.spikeDefaults())) {
                     LayoutFrame raw = engine.apply(InitialSpacingFixtures.request(p, p));
                     InitialSpacingConsumers.raw(p, raw, 24.0);
-                    InitialSpacingConsumers.topology(p, engine, 24.0);
+                    InitialSpacingConsumers.topology(p, engine, 24.0, 20.0);
                     if (previous != null) assertThat(raw.positions()).isEqualTo(previous);
                     previous = raw.positions();
                     for (Metric metric : measure(p, raw.positions()).values()) {
@@ -77,7 +77,7 @@ public class InitialSpacingSeedShould {
         try (GraphStreamLayoutEngine engine = new GraphStreamLayoutEngine(LayoutCalibration.spikeDefaults())) {
             LayoutFrame frame = engine.apply(InitialSpacingFixtures.request(p, p));
             InitialSpacingConsumers.raw(p, frame, 24.0);
-            InitialSpacingConsumers.topology(p, engine, 24.0);
+            InitialSpacingConsumers.topology(p, engine, 24.0, 20.0);
         }
     }
 
@@ -88,8 +88,81 @@ public class InitialSpacingSeedShould {
     @Test public void crossMapNodeEnclosureRest() throws Exception { matrix(true, "ne"); }
     @Test public void crossMapEnclosureEnclosureRest() throws Exception { matrix(true, "ee"); }
 
+    @Test public void keepTheRelationshipGapStrictlyBelowTheRingGap() throws Exception {
+        try {
+            java.lang.reflect.Field field = GraphStreamLayoutEngine.class.getDeclaredField("PREFERRED_EDGE_GAP");
+            field.setAccessible(true);
+            close(field.getDouble(null), 20.0);
+            assertThat(field.getDouble(null)).isLessThan(GraphStreamLayoutEngine.PREFERRED_NODE_GAP);
+        }
+        catch (NoSuchFieldException absent) {
+            throw new AssertionError("Missing 20 wu PREFERRED_EDGE_GAP relationship contract", absent);
+        }
+    }
+
+    @Test public void boundOnlyDirectSingleEnclosureRelationshipsByTheFourNodeRing() throws Exception {
+        GraphProjection defaultNodes = InitialSpacingFixtures.single(4, 1L, false, Collections.<PinProjection>emptyList());
+        ringBound(defaultNodes, 8.0, 36.0, 40.0);
+
+        // Sixteen distinct outgoing targets give the hub its real capped 14 wu radius.
+        // Only the first four nodes belong to this one ring; the remaining targets are unenclosed.
+        GraphProjection base = InitialSpacingFixtures.single(17, 1L, false, Collections.<PinProjection>emptyList());
+        List<ProjectedNodeKey> direct = new ArrayList<ProjectedNodeKey>();
+        for (int i = 0; i < 4; i++) direct.add(base.nodes().get(i).key());
+        List<ProjectedEdge> edges = new ArrayList<ProjectedEdge>();
+        for (int i = 1; i < 17; i++) edges.add(InitialSpacingFixtures.nativeEdge(i,
+            InitialSpacingFixtures.endpoint(direct.get(0)), InitialSpacingFixtures.endpoint(base.nodes().get(i).key()), true));
+        ProjectedEnclosure ring = InitialSpacingFixtures.enclosure(InitialSpacingFixtures.A, "ring", "Ring",
+            Optional.<EnclosureHullKey>empty(), direct, Collections.<EnclosureHullKey>emptyList(), true, BoundaryTier.SUBTLE);
+        GraphProjection mixed = InitialSpacingFixtures.projection(1L, base.nodes(), Collections.singletonList(ring),
+            edges, Collections.<PinProjection>emptyList());
+        close(radius(mixed, direct.get(0)), 14.0);
+        close(radius(mixed, direct.get(1)), 8.0);
+        ringBound(mixed, 14.0, 42.0, 52.0);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void ringBound(GraphProjection p, double maxRadius, double rest, double chord) throws Exception {
+        ProjectedEnclosure ring = p.enclosures().get(0);
+        assertThat(ring.directNodes()).hasSize(4);
+        assertThat(p.pins()).isEmpty();
+        for (ProjectedNodeKey node : ring.directNodes()) {
+            int memberships = 0;
+            for (ProjectedEnclosure e : p.enclosures()) if (e.directNodes().contains(node)) memberships++;
+            assertThat(memberships).isEqualTo(1);
+        }
+        GraphStreamLayoutEngine.BoundarySizes sizes = new GraphStreamLayoutEngine.BoundarySizes(p);
+        close(2.0 * sizes.contentRingRadius(ring.hullKey()) * Math.sin(Math.PI / 4.0), chord);
+        try (GraphStreamLayoutEngine engine = new GraphStreamLayoutEngine(LayoutCalibration.spikeDefaults())) {
+            engine.apply(InitialSpacingFixtures.request(p, p));
+            Map<String, GraphStreamLayoutEngine.ParticleState> particles =
+                (Map<String, GraphStreamLayoutEngine.ParticleState>) InitialSpacingConsumers.field(engine, "particles");
+            Object box = InitialSpacingConsumers.field(engine, "springBox");
+            Map<String, GraphStreamLayoutEngine.ForceLink> links =
+                (Map<String, GraphStreamLayoutEngine.ForceLink>) InitialSpacingConsumers.field(box, "typedLinks");
+            int checked = 0;
+            for (GraphStreamLayoutEngine.ForceLink link : links.values()) {
+                if (link.kind != GraphStreamLayoutEngine.ForceKind.RELATIONSHIP) continue;
+                if (!ring.directNodes().contains(particles.get(link.firstId).nodeKey)
+                        || !ring.directNodes().contains(particles.get(link.secondId).nodeKey)) continue;
+                close(link.restLength, rest);
+                assertThat(link.restLength).isLessThanOrEqualTo(2.0 * maxRadius + 20.0);
+                assertThat(2.0 * maxRadius + 20.0).isLessThan(chord);
+                checked++;
+            }
+            assertThat(checked).isGreaterThan(0);
+        }
+    }
+
     private static void matrix(boolean cross, String pair) throws Exception {
-        for (boolean reverse : new boolean[] {false, true}) check(InitialSpacingFixtures.matrix(cross, pair, reverse));
+        for (boolean reverse : new boolean[] {false, true}) {
+            GraphProjection p = InitialSpacingFixtures.matrix(cross, pair, reverse);
+            assertThat(p.edges()).hasSize(1);
+            ProjectedEdge edge = p.edges().get(0);
+            int nodeEndpoints = (edge.first().isNode() ? 1 : 0) + (edge.second().isNode() ? 1 : 0);
+            assertThat(nodeEndpoints).isEqualTo(pair.equals("nn") ? 2 : pair.equals("ne") ? 1 : 0);
+            check(p);
+        }
     }
 
     @Test public void uniformLargerDiscsStillUseAnExactTwentyFourRawGap() throws Exception {

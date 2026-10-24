@@ -127,7 +127,7 @@ final class InitialSpacingConsumers {
     }
 
     @SuppressWarnings("unchecked")
-    static void topology(GraphProjection p, GraphStreamLayoutEngine engine, double gap) throws Exception {
+    static void topology(GraphProjection p, GraphStreamLayoutEngine engine, double ringGap, double edgeGap) throws Exception {
         GraphStreamLayoutEngine.BoundarySizes sizes = new GraphStreamLayoutEngine.BoundarySizes(p);
         Map<String, GraphStreamLayoutEngine.ParticleState> particles =
             (Map<String, GraphStreamLayoutEngine.ParticleState>) field(engine, "particles");
@@ -175,9 +175,10 @@ final class InitialSpacingConsumers {
                 }
                 assertThat(matched).hasSize(1);
                 ProjectedEdge edge = matched.get(0);
-                double first = endpointRadius(p, edge.first(), gap), second = endpointRadius(p, edge.second(), gap);
-                close(link.restLength, first + second + 6.0);
-                close(link.restLength - first - second, 6.0);
+                double first = endpointRadius(p, edge.first(), ringGap), second = endpointRadius(p, edge.second(), ringGap);
+                double relationshipGap = edge.first().isNode() && edge.second().isNode() ? edgeGap : 6.0;
+                close(link.restLength, first + second + relationshipGap);
+                close(link.restLength - first - second, relationshipGap);
                 assertThat(link.crossMap).isEqualTo(!edge.first().mapReferenceId().equals(edge.second().mapReferenceId()));
                 System.out.printf(java.util.Locale.ROOT, "REST\t%s\t%s\t%s\t%.17g\t%.17g\t%.17g%n",
                     CanonicalKeys.endpoint(edge.first()), CanonicalKeys.endpoint(edge.second()), link.crossMap, first, second, link.restLength);
@@ -188,7 +189,7 @@ final class InitialSpacingConsumers {
                 ProjectedEnclosure enclosure = sizes.enclosure(particles.get(link.firstId).anchorKey);
                 assertThat(link.secondId).isEqualTo(nodeIds.get(particles.get(link.secondId).nodeKey));
                 assertThat(enclosure.directNodes()).contains(particles.get(link.secondId).nodeKey);
-                close(link.restLength, analyticRadius(p, enclosure, gap));
+                close(link.restLength, analyticRadius(p, enclosure, ringGap));
             }
             else {
                 EnclosureHullKey parent = particles.get(link.firstId).anchorKey;

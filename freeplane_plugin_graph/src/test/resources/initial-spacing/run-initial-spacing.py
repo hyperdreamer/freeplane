@@ -11,6 +11,7 @@ import tempfile
 import time
 
 BASE = 'cb8782fb3742f378b2907198fd2343292415da95'
+DELIVERY_BASE = '448c0d679d2b1d46563eaf079352e1eefb254305'
 # ruling-A-amendment-1.md condition 4: the C0 cross baseline records these figures, never rejects them.
 C0_CROSS_GATED_FRAMES = 858
 C0_CROSS_NODE_RESIDUAL_MISMATCHES = 23
@@ -19,6 +20,7 @@ JAVA = '/home/henry/.sdkman/candidates/java/21.0.8-zulu/bin/java'
 PREFIX = 'freeplane_plugin_graph/src/main/java/'
 ENGINE = PREFIX + 'org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java'
 PACKING = PREFIX + 'org/freeplane/plugin/graph/layout/graphstream/ClusterPacking.java'
+PAINTER = PREFIX + 'org/freeplane/plugin/graph/canvas/GraphPainter.java'
 FROZEN = ['freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/ReferenceRepulsionFixture.java',
           'freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/TypedForcesShould.java',
           'freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/graphstream/ClusterProximityShould.java']
@@ -65,6 +67,7 @@ def run_acceptance(repo, candidate_cp, output):
     sources = subprocess.check_output(['git', 'ls-tree', '-r', '--name-only', BASE, '--', PREFIX], cwd=repo, text=True).splitlines()
     baseline_files = []
     expected_overlay = {}
+    changed_sources = set()
     for relative in sources + FROZEN:
         if not relative.endswith('.java'): continue
         data = subprocess.check_output(['git', 'show', BASE + ':' + relative], cwd=repo)
@@ -76,15 +79,124 @@ def run_acceptance(repo, candidate_cp, output):
             if relative == ENGINE:
                 old = 'static final double NODE_RADIUS = 8.0;'
                 assert expected.count(old) == 1
-                expected = expected.replace(old, old + '\n    static final double PREFERRED_NODE_GAP = 24.0;')
+                expected = expected.replace(old, old + '\n    static final double PREFERRED_NODE_GAP = 24.0;'
+                    + '\n    static final double PREFERRED_EDGE_GAP = 20.0;')
                 old = '(2.0 * maxRadius + NodeSeparationProjection.MIN_GAP)'
                 assert expected.count(old) == 1
                 expected = expected.replace(old, '(2.0 * maxRadius + PREFERRED_NODE_GAP)')
+                old = '''                    radiusOf(first, radiusById) + radiusOf(second, radiusById)
+                        + NodeSeparationProjection.MIN_GAP));'''
+                assert expected.count(old) == 1
+                expected = expected.replace(old, '''                    radiusOf(first, radiusById) + radiusOf(second, radiusById)
+                        + (edge.first().isNode() && edge.second().isNode()
+                            ? PREFERRED_EDGE_GAP : NodeSeparationProjection.MIN_GAP)));''')
             if relative == PACKING:
                 old = 'clearanceX < gap && clearanceY < gap'
                 assert expected.count(old) == 1
                 expected = expected.replace(old, 'clearanceX < gap - CANDIDATE_EPSILON && clearanceY < gap - CANDIDATE_EPSILON')
+            if relative == PAINTER:
+                replacements = [
+                    ('''    // World units. 12.5 / 14.0 ~ 0.8929 of the maximum node radius:
+    // GraphGeometryEngine.BASE_RADIUS 8.0 x NodeProminence.MAX_SCALE 1.75 = 14.0 world.
+    private static final double ARROW_HEAD_WORLD_LENGTH = 12.5;
+    // Head base is 0.84 x length; the aspect is preserved when the cap shrinks a head.
+    private static final double ARROW_HEAD_HALF_BASE_RATIO = 0.42;''',
+                     '''    // World units.
+    private static final double ARROW_HEAD_RATIO = 0.30;
+    private static final double MIN_ARROW_HEAD_WORLD_LENGTH = 4.0;
+    private static final double MAX_ARROW_HEAD_WORLD_LENGTH = 12.5;
+    private static final double MIN_ARROW_HEAD_AVAILABILITY = 8.0;
+    // Head base is 0.84 x length; the aspect is preserved when the cap shrinks a head.
+    private static final double ARROW_HEAD_HALF_BASE_RATIO = 0.42;
+    private static final double MIN_STROKE_WORLD = 1e-6;'''),
+                    ('''    // Screen px.
+    static double arrowHeadLengthPx(final double zoom) {
+        return ARROW_HEAD_WORLD_LENGTH * zoom;
+    }
+
+    // World units in, world units out.
+    static double availableArrowHeadWorldLength(final double attachmentDistanceWorld,
+            final boolean arrowAtFirst, final boolean arrowAtSecond) {
+        return arrowAtFirst && arrowAtSecond ? attachmentDistanceWorld / 2.0 : attachmentDistanceWorld;
+    }
+
+    // Screen px.
+    static double effectiveArrowHeadLengthPx(final double zoom, final double availableWorldLength) {
+        return Math.min(arrowHeadLengthPx(zoom), availableWorldLength * zoom);
+    }
+
+    // Screen px.
+    static double arrowHeadHalfBasePx(final double lengthPx) {
+        return ARROW_HEAD_HALF_BASE_RATIO * lengthPx;
+    }''',
+                     '''    // World units in, world units out.
+    static double availableArrowHeadWorldLength(final double attachmentDistanceWorld,
+            final boolean arrowAtFirst, final boolean arrowAtSecond) {
+        return arrowAtFirst && arrowAtSecond ? attachmentDistanceWorld / 2.0 : attachmentDistanceWorld;
+    }
+
+    // Screen px.
+    static double effectiveArrowHeadLengthPx(final double zoom, final double availableWorldLength) {
+        return Math.max(MIN_ARROW_HEAD_WORLD_LENGTH,
+            Math.min(MAX_ARROW_HEAD_WORLD_LENGTH, ARROW_HEAD_RATIO * availableWorldLength)) * zoom;
+    }
+
+    // Screen px.
+    static double arrowHeadHalfBasePx(final double lengthPx) {
+        return ARROW_HEAD_HALF_BASE_RATIO * lengthPx;
+    }'''),
+                    ('''        final double availableWorldLength =
+            availableArrowHeadWorldLength(terminalSegmentLength, arrowAtFirst, arrowAtSecond);
+        final double arrowLengthPx = effectiveArrowHeadLengthPx(zoom, availableWorldLength);''',
+                     '''        final double availableWorldLength =
+            availableArrowHeadWorldLength(terminalSegmentLength, arrowAtFirst, arrowAtSecond);
+        if (availableWorldLength < MIN_ARROW_HEAD_AVAILABILITY) {
+            return;
+        }
+        final double arrowLengthPx = effectiveArrowHeadLengthPx(zoom, availableWorldLength);'''),
+                    ('        final BasicStroke leaderStroke = leaderStroke(theme, viewport.zoom());',
+                     '        final BasicStroke leaderStroke = leaderStroke(viewport.zoom());'),
+                    ('''            graphics.setColor(theme.labelColor());
+            final double anchorX = worldX(label.anchorX(), viewport, size);
+            final double anchorY = worldY(label.anchorY(), viewport, size);
+            if (label.leader().isPresent()) {
+                final LeaderLine line = label.leader().get();
+                graphics.setStroke(leaderStroke);
+                graphics.draw(new Line2D.Double(
+                    worldX(line.start().x(), viewport, size), worldY(line.start().y(), viewport, size),
+                    worldX(line.end().x(), viewport, size), worldY(line.end().y(), viewport, size)));
+            }
+            drawCentered(graphics, font, label.text(), anchorX, anchorY);''',
+                     '''            graphics.setColor(theme.labelColor());
+            final double anchorX = worldX(label.anchorX(), viewport, size);
+            final double anchorY = worldY(label.anchorY(), viewport, size);
+            if (label.leader().isPresent()) {
+                final LeaderLine line = label.leader().get();
+                graphics.setColor(theme.mutedColor());
+                graphics.setStroke(leaderStroke);
+                graphics.draw(new Line2D.Double(
+                    worldX(line.start().x(), viewport, size), worldY(line.start().y(), viewport, size),
+                    worldX(line.end().x(), viewport, size), worldY(line.end().y(), viewport, size)));
+            }
+            graphics.setColor(theme.labelColor());
+            drawCentered(graphics, font, label.text(), anchorX, anchorY);'''),
+                    ('''    static BasicStroke leaderStroke(final GraphTheme theme, final double zoom) {
+        return new BasicStroke((float) (theme.edgeStroke().getLineWidth() / zoom),
+            BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
+    }''',
+                     '''    static BasicStroke leaderStroke(final double zoom) {
+        final float width = (float) Math.max(1.0 / zoom, MIN_STROKE_WORLD);
+        final float dashOn = (float) Math.max(1.2 / zoom, MIN_STROKE_WORLD);
+        final float dashOff = (float) Math.max(2.8 / zoom, MIN_STROKE_WORLD);
+        return new BasicStroke(width, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND, 10.0f,
+            new float[] { dashOn, dashOff }, 0.0f);
+    }''')]
+                for old, new in replacements:
+                    assert expected.count(old) == 1
+                    expected = expected.replace(old, new)
             assert current == expected.encode('utf-8'), 'Unexpected production difference: ' + relative
+            if current != data:
+                changed_sources.add(relative)
             expected_overlay[relative] = digest(current)
         target = output / 'C0-src' / relative
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -92,6 +204,13 @@ def run_acceptance(repo, candidate_cp, output):
         baseline_files.append(str(target))
     current_sources = {str(p.relative_to(repo)) for p in (repo / PREFIX).rglob('*.java')}
     assert current_sources == {x for x in sources if x.endswith('.java')}, 'Production source added or removed'
+    assert changed_sources == {ENGINE, PACKING, PAINTER}, ('Unexpected cumulative C0 overlay set', changed_sources)
+    delivery_changes = set(subprocess.check_output(
+        ['git', 'diff', '--name-only', DELIVERY_BASE, '--', PREFIX], cwd=repo, text=True).splitlines())
+    assert delivery_changes == {ENGINE, PAINTER}, ('Unexpected delivery-base production diff', delivery_changes)
+    manifest['cumulative_c0_overlays'] = sorted(changed_sources)
+    manifest['delivery_base'] = DELIVERY_BASE
+    manifest['delivery_base_production_diff'] = sorted(delivery_changes)
     baseline = output / 'C0-classes'
     baseline.mkdir()
     empty = output / 'empty-sourcepath'
@@ -148,7 +267,9 @@ def run_acceptance(repo, candidate_cp, output):
                 assert int(first[0][3]) <= 600_000_000_000
                 assert int(post[0][6]) <= 600_000_000_000
             if fixture in ('S1', 'reference', 'cross'):
-                expected_step = {'S1': (84, 58), 'reference': (42, 37), 'cross': (756, 3455)}[fixture][configuration == 'candidate']
+                # Epoch-2 candidate refresh: S1 58 -> 41, initial-spacing-9087999385746809203;
+                # cross 3455 -> 3103, task5-candidate-cross-pin with that run's frozen C0 receipts.
+                expected_step = {'S1': (84, 41), 'reference': (42, 37), 'cross': (756, 3103)}[fixture][configuration == 'candidate']
                 assert int(first[0][2]) == expected_step
             if configuration == 'C0' and fixture == 'S1':
                 assert int(post[0][2]) == 184 and int(post[0][3]) == 100
@@ -286,7 +407,7 @@ def compare(reports, output):
             assert len(rows) == 1
             row = rows[0]
             pair = fixture.rsplit('-', 1)[1]
-            target = {'nn': (22.0, 22.0), 'ne': (29.556349186104047, 42.28427124746190),
+            target = {'nn': (22.0, 36.0), 'ne': (29.556349186104047, 42.28427124746190),
                       'ee': (37.112698372208094, 62.568542494923804)}[pair][config == 'candidate']
             assert abs(float(row[6]) - target) <= 1e-6
             assert row[3] == ('true' if '-cross-' in fixture else 'false')
