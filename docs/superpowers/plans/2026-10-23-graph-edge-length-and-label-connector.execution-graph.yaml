@@ -1,5 +1,7 @@
 # Execution manifest for 2026-10-23-graph-edge-length-and-label-connector.
 # Canonical scheduling source. Derived from the validated plan; every plan task maps exactly once.
+# Generation 3: topology collapsed from the 4 ownership lanes to one compressed sequential lane because
+# tracked child sessions cannot dispatch children (see the archived harness-lane CAPABILITY_BLOCKED ruling).
 source_plan:
   path: docs/superpowers/plans/2026-10-23-graph-edge-length-and-label-connector.md
   sha256: f9ec1c73d7abd5bc10fab36e3e64bf689150db749b628b62fa2cc04ef0170865
@@ -119,15 +121,6 @@ tasks:
       - argv: ["gradle", ":freeplane_plugin_graph:verifyGraphBundle"]
 
 lanes:
-  - id: harness
-    task_ids: [T-001]
-    sequence: [1]
-  - id: tests
-    task_ids: [T-002, T-004]
-    sequence: [1, 2]
-  - id: production
-    task_ids: [T-003]
-    sequence: [1]
-  - id: evidence
-    task_ids: [T-005]
-    sequence: [1]
+  - id: serial
+    task_ids: [T-001, T-002, T-003, T-004, T-005]
+    sequence: [1, 2, 3, 4, 5]
