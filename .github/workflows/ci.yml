@@ -17,6 +17,14 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Diagnostic filesystem layout
+      run: |
+        set -x
+        cat /etc/os-release | head -3
+        df -T /tmp "$HOME" /home/runner/work || true
+        findmnt -T /tmp || true
+        findmnt -T "$HOME" || true
+        java -XshowSettings:properties -version 2>&1 | grep -E "java.io.tmpdir|user.home"
     - uses: actions/setup-java@v3
       with:
         distribution: 'temurin'
