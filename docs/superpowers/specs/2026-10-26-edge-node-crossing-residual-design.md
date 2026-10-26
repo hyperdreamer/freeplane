@@ -1,313 +1,322 @@
-# Edge–node crossing residual — multi-ring relocation design
+# Graph edge–node crossings — two-stage fix (relocation expansion + off-midpoint routing)
 
 Task identifier: `2026-10-26-edge-node-crossing-residual`
 
-Status: **approved by the user on 2026-10-26, revised after independent design review rounds 1 and 2.** The
-user reported "Edges still cross over nodes" with a cropped canvas screenshot and asked whether moving node
-positions would fix it, then selected option **B — relocate the obstructing node** from a four-way
-comparison. This document is the design authority for the technical specification that follows it.
+Status: **approved by the user on 2026-10-26 at the revision-3 pivot.** The user reported "Edges still cross
+over nodes" with a cropped canvas screenshot, asked whether moving node positions would fix it, initially
+chose relocation only (**B**), and after the routing premise was measured and refuted re-scoped to **B + C**
+as the honest reading of the evidence. This document is the design authority for the technical
+specification that follows it.
 
-Revision 2 removes a clearance margin that revision 1 introduced. That margin was an invention: the shared
-clearance predicate is strict, so a disc at exactly `radius + EDGE_NODE_CLEARANCE` is legal, and any added
-margin can only *reduce* feasibility — it breaks the existing maximum-excursion fixture and can turn a
-legal A2 gap into a violation. The remaining defect is narrower and better evidenced: the C2 search never
-looks beyond its first ring. Revision 2 also replaces an undefined "free corridor" with a pre-screen that
-imitates `verify`'s exact A2/A3 sequence, makes that pre-screen ordering-only so it can never discard a
-candidate, and pins the supersession ledger.
+Revision history that matters for review:
 
-Baseline and source: `plugin/graph-workspace` at
-`bfaed5611d170b5b0b3dc93919685bd6c54035c5`. All investigation ran in the PM integration worktree; the user's
-delivery checkout and their documents were read only.
+- r1 proposed a `CLEARANCE_MARGIN` that only reduced feasibility; withdrawn.
+- r2 claimed routing could never clear an anchor chord below 36.7 wu and used that to justify
+  relocation-only. **Measured and refuted** (§2 Fact 4).
+- r3 (this revision) drops the legality pre-screen entirely and replaces the ring-reservation rule with a
+  staged search, because both were shown to destroy existing in-budget repairs. It adds the routing change
+  the measurement actually calls for.
+
+Baseline: `plugin/graph-workspace` at `bfaed5611d170b5b0b3dc93919685bd6c54035c5`. All investigation ran in
+the PM integration worktree; the user's delivery checkout and their documents were read only.
 
 ## 1. Reported defect
 
-The user's graph workspace `~/Documents/999.notebooks/01.math/math.fpg` registers three maps —
+The user's workspace `~/Documents/999.notebooks/01.math/math.fpg` registers three maps —
 `Axiomatic_Set_Theory.mm`, `Point-set_Topology.mm`, `Real_Anaylsis.mm`. In the reported canvas region a
 relationship edge is drawn as a straight line from one group disc to another and passes over a third,
 non-incident disc.
 
 ## 2. Measured evidence
 
-A read-only probe ran the unchanged production pipeline (`MapSnapshot` construction → `ProjectionEngine` →
-`LayoutWorker` → `EdgeConflictCorrection` → `EdgeRouter`) over the real map files in headless mode. Two
-consecutive runs produced identical output.
+Two read-only probes ran the unchanged production pipeline headlessly, two consecutive runs each, identical
+output.
+
+### Probe 1 — the real workspace
+
+`MapSnapshot` construction → `ProjectionEngine` → `LayoutWorker` → `EdgeConflictCorrection` → `EdgeRouter`.
 
 | Measurement | Value |
 | --- | --- |
 | Source nodes in the three maps | 26 314 |
 | Projected graph | **28 discs, 12 edges, 7 enclosures, 0 pins, 0 workspace relationships** |
 | C1/C2 conflicts detected | 1 (`crossings=0`, `edgeOverNode=1`) |
-| Relocation outcome | 1 accepted `TRANSLATION`, displacement **3.238 wu**, residual **0** |
-| Router outcome | **12 straight, 0 bow, 0 dogleg, 0 fallback**, `obstacleChecks=8` |
+| Relocation outcome | 1 accepted `TRANSLATION`, **3.238 wu**, residual **0** |
+| Router outcome | **12 straight, 0 bow, 0 dogleg, 0 fallback** |
 | Clearance audit on published paths | **0 of 12** edges violate `radius + 3` |
-| Frame flags | `detectionTruncated=false`, `indexBudgetExhausted=false`, `verificationBudgetExhausted=false` |
+| Frame flags | all three exhaustion flags false |
 
-**Fact 1 — the graph is small and the budgets are not the cause.** Only nodes carrying
-`<graph_group version="1"/>` become graph discs; every other node becomes a nested enclosure hull and a
-group node's subtree is not descended into. The reported graph is therefore 28 discs wide, so neither the
-conflict-index allowance (262 144 items) nor the routing allowance (131 072 obstacle checks) is exhausted.
+**Fact 1 — the graph is small and no budget is exhausted.** Only nodes carrying `<graph_group version="1"/>`
+become discs; every other node becomes a nested enclosure hull and a group node's subtree is not descended
+into. 28 discs cannot exhaust the conflict-index or routing allowances.
 
 **Fact 2 — the router's lateral allowance is a fraction of the anchor chord.** `EdgeRouter.anchor` returns
-`node.center()` for a node endpoint, so the length `L` used by `EdgeRouter.bestRung` is the
-**node-centre-to-centre** distance, not the distance between drawn attachment points. With that length:
+`node.center()` for a node endpoint, so `EdgeRouter.bestRung` scales offsets by the **centre-to-centre**
+distance. A bow with control offset `f·L` peaks at about `0.25·L`; a same-side dogleg displaces by `f·L`. The
+`f = 0.50` dogleg is rejected by `ROUTE_LENGTH_CAP = 1.25`, so the largest legal dogleg rung is `0.30·L`.
+Clearance is strict: a disc violates when distance `< radius + EDGE_NODE_CLEARANCE - ROUTE_EPSILON`.
 
-- a bow with control offset `f·L` has an apex of about `0.25·L`; `f = 0.50` is the largest fraction whose
-  analytic ratio 1.147 794 survives `ROUTE_LENGTH_CAP = 1.25`;
-- a same-side dogleg displaces the path by its full offset `f·L`, and the `f = 0.50` rung is rejected by the
-  same ratio cap (1.535 184 > 1.25), so the largest legal rung is `0.30·L`;
-- the clearance predicate is strict: a disc violates when its distance is
-  `< radius + EDGE_NODE_CLEARANCE - ROUTE_EPSILON`, so `11 wu` for a radius-8 disc.
+Measured anchor chords adjacent to the reported pair: 33.596, 36.182, 41.170, 44.120 wu.
 
-Measured anchor distances of the edges adjacent to the reported pair:
+### Probe 2 — router capability on exactly that geometry
 
-| Anchor chord `L` (centre to centre) | Max bow apex `0.25·L` | Max dogleg offset `0.30·L` | Required |
-| ---: | ---: | ---: | ---: |
-| 33.596 wu | 8.399 | **10.079** | 11 |
-| 36.182 wu | 9.045 | **10.854** | 11 |
-| 41.170 wu | 10.293 | 12.351 | 11 |
-| 44.120 wu | 11.030 | 13.236 | 11 |
+`RouterClearanceProbe` builds A, B (radius 8, marked `graph_group`) at the measured chord, one radius-8
+obstructing disc N, one native connector A→B, no pins, no other content, and calls the production
+`EdgeRouter`. Reported clearance is the distance from N's centre, minus N's radius.
 
-This arithmetic *suggests* that an anchor chord shorter than `11 / 0.30 = 36.7 wu` admits no legal routed
-path clear of a radius-8 disc placed on it, and the shortest edges here are in that band. It is a
-suggestion, not a proof, and it is **not** the basis of the decision: §9 Test 1 falsifies or confirms it
-through the router's own `clearsDiscs` predicate before option C is ruled out. The user's choice of B
-stands either way, because B and C act on different stages — but if Test 1 shows routing was sufficient,
-the specification must say so instead of claiming an impossibility it never demonstrated.
+| Anchor chord | N at chord midpoint | N at 25 % along the drawn chord |
+| ---: | --- | --- |
+| 33.596 wu | `STRAIGHT`, clearance **−8.000** | `STRAIGHT`, clearance **−8.000** |
+| 36.182 wu | **`BOW`, clearance +3.183** | `STRAIGHT`, clearance **−8.000** |
+| 41.170 wu | **`BOW`, clearance +4.729** | `STRAIGHT`, clearance **−8.000** |
+| 44.120 wu | **`BOW`, clearance +5.445** | `STRAIGHT`, clearance **−8.000** |
 
-**Fact 3 — the accepted repair sits exactly on the boundary, which is legal.** The one accepted relocation
-places the disc at perpendicular offset `11.000 wu` against a threshold of `11.000 wu`. The strict predicate
-permits that, so the boundary landing is not itself a defect; what the measurement does show is how little
-the search has to work with — one blocked ring and the family is empty.
+**Fact 3 — the router's blind spot is symmetry, not magnitude.** Every bow and every dogleg in the live
+ladder is built from the **chord midpoint** and the **midpoint normal** (`EdgeRouter.bowPath`: control point
+at the midpoint plus normal×offset; `EdgeRouter.doglegPath`: bends at 1/3 and 2/3 on the same normal). The
+family is therefore symmetric about the midpoint. An obstacle displaced along the chord defeats **every**
+rung of both ladders even when there is ample lateral room — clearance stays at −8.000 in all four
+off-midpoint rows above.
+
+**Fact 4 — the r2 routing-impossibility claim is refuted.** r2 asserted no anchor chord under 36.7 wu could
+be routed clear. The 36.182 wu chord is cleared by a legal `0.50` bow with 3.183 wu of clearance. The real
+floor is between 33.596 and 36.182 wu. The r2 premise — and therefore the argument that relocation is the
+only possible mechanism — is withdrawn.
+
+**Fact 5 — the accepted relocation lands exactly on the boundary.** The one accepted repair in probe 1 puts
+the disc at perpendicular offset `11.000 wu` against a threshold of `11.000 wu`. The strict predicate permits
+that, so boundary landing is not itself a defect. What the number shows is how little room the search has:
+one blocked region empties the family.
 
 ## 3. Root-cause hypothesis
 
-`EdgeConflictCorrection.addEdgeOverNodeCandidates` proposes exactly six C2 targets: two perpendicular senses
-crossed with the along-chord offsets `{0, −h, +h}` where `h = 2r + MIN_GAP + 3 = 25`. Every target aims at
-signed distance `rho = r + EDGE_NODE_CLEARANCE` — one ring, never a second. Senses are ordered by
-displacement, not by whether the move is legal.
+Two independent stages can each leave a crossing, with different failure modes.
 
-Inside nested enclosures a perpendicular move grows the disc's parent-hull extent, so the A3 veto
-(`hullPairs_out ⊆ hullPairs_in`) can reject it; a move toward a neighbour trips the A2 veto
-(`gapPairs_out ⊆ gapPairs_in`). Because all six candidates lie in the same ring, one blocked region can
-reject the whole family. The conflict then becomes a residual, and the router — whose allowance is
-proportional to the chord — cannot rescue a short edge, leaving the straight fallback.
+**Relocation (C2) exhausts its only ring.** `addEdgeOverNodeCandidates` proposes exactly six targets — two
+perpendicular senses × the along-chord offsets `{0, −h, +h}` with `h = 2r + MIN_GAP + 3 = 25` — and every
+target aims at signed distance `rho = r + EDGE_NODE_CLEARANCE`, one ring and never a second. Inside nested
+enclosures a perpendicular move grows the disc's parent-hull extent, so A3 (`hullPairs_out ⊆ hullPairs_in`)
+can reject it; a move toward a neighbour trips A2 (`gapPairs_out ⊆ gapPairs_in`). All six share one ring, so
+one blocked region empties the family and the conflict becomes a residual.
 
-This is a **hypothesis**, not an established finding. The probe did not reproduce the user's exact
-arrangement: on a fresh settle the single conflict is accepted and no edge violates clearance. §9 Tests 1
-and 2 are the experiment that decides it.
+**Routing exhausts a midpoint-symmetric ladder.** Fact 3: for an obstacle away from the chord midpoint, no
+rung of either ladder can reach it, regardless of available length.
+
+These are hypotheses. Probe 1 did not reproduce the user's exact arrangement — on a fresh settle the single
+conflict is accepted and nothing is violated — so which stage produced the screenshot is still open (§10).
 
 ## 4. Goals
 
-1. A C2 conflict whose obstructing disc has a retained candidate that passes the full A1–A4 verification,
-   while the frame's verification budget remains, is relocated rather than published as a residual. Budget
-   exhaustion, pinning, ineligible geometry, excursion overflow and all-candidates-vetoed remain legal
-   residual outcomes, reported through the existing flags.
-2. Expanding the search ring never removes a repair the current search would have found, and never changes a
-   legal target's coordinates for the ring the current search already probes.
-3. The frozen settled-position evidence does not change: `settled-reference.csv` stays byte-identical and
-   the pinned first-idle results stay exact.
+1. **Relocation never loses ground.** For every input on which the current search accepts a repair, the new
+   search accepts the same repair at the same coordinates with the same verification count and the same
+   reported work. Expansion is attempted only where the current search fails.
+2. **Routing never loses ground.** For every edge the current router clears on a midpoint rung, the new
+   ladder keeps that exact path, classification and sample list. Off-midpoint rungs are tried only after the
+   midpoint rungs fail.
+3. **Off-midpoint obstacles become routable.** An obstacle displaced along the chord — measured above at
+   −8.000 wu clearance and `STRAIGHT` — is cleared by a legal routed path where one exists.
+4. **Relocation reaches a second ring.** A conflict whose every ring-0 target is vetoed by A2 or A3 but
+   whose ring 1–4 target is legal is repaired rather than published as a residual.
+5. Frozen evidence does not change: `settled-reference.csv` stays byte-identical, `TWO_MAP_FIRST_IDLE_STEP =
+   3103` still holds, and `stopsAtFourAcceptedRoundsWithoutClaimingExhaustion` keeps `verifications = 4`
+   with `repairs = 32`.
 
-## 5. Non-goals and deferrals
+## 5. Non-goals
 
-- **No routing change.** Option C (an absolute bend budget) is deferred as a separate future task. §9 Test 1
-  decides whether it is also *insufficient*; the design does not assume it.
-- **No clearance-margin change.** The strict `clearance < EDGE_NODE_CLEARANCE - ROUTE_EPSILON` test in both
-  `EdgeConflictCorrection` and `EdgeRouter.clearsDiscs` stays exactly as it is, and C2 targets keep aiming at
-  `radius + EDGE_NODE_CLEARANCE`. Revision 1's `CLEARANCE_MARGIN` is withdrawn.
-- **No layout-force change.** Option D (edge–node repulsion during relaxation) is deferred: it changes every
-  settled position and invalidates `settled-reference.csv`, the first-idle pins and the 2000-node gates.
-- **No change to pins.** An actively pinned disc remains immovable and still publishes a residual (E9).
-- **No change to enclosure membership, node radii, prominence, label placement or the settlement policy.**
+- **No legality pre-screen.** r2's A2/A3 pre-screen is withdrawn. It starves the shared verification-work
+  allowance and can stop a frame with zero repairs, so it is not an optimisation worth having.
+- **No clearance-margin change.** The strict predicate is untouched; C2 keeps aiming at
+  `radius + EDGE_NODE_CLEARANCE`.
+- **No layout-force change.** Option D stays deferred: it moves every settled position and invalidates
+  `settled-reference.csv`, the first-idle pins and the performance gates.
+- **No new public API.** Both changes are internal to `EdgeConflictCorrection` and `EdgeRouter`; no
+  `freeplane_api` or core-module change.
+- **No change to pins, enclosure membership, node radii, prominence, label placement or settlement policy.**
+  A pinned disc remains immovable and still publishes a residual (E9).
+- **No guarantee of completeness.** Residuals remain a legal outcome and the authoritative observable.
 
 ## 6. Design
 
-### 6.1 Five rings per slot
+The two stages are independent; neither depends on the other's outcome.
 
-Keep the existing six slots — `(sense σ ∈ {+1, −1}) × (along t ∈ {0, −h, +h})`, `h = 2r + MIN_GAP +
-EDGE_NODE_CLEARANCE = 25` unchanged — and let each slot search five rings:
+### 6.1 Routing: an apex-positioned bend family
 
-```
-rho_k = disc.radius + EDGE_NODE_CLEARANCE + k * MAX_CLEARANCE_STEP      # k = 0 .. MAX_CLEARANCE_STEPS-1
-target(σ, t, k) = centre + (σ * rho_k − projection) * normal + t * alongTangent
-```
-
-with `MAX_CLEARANCE_STEPS = 5` and `MAX_CLEARANCE_STEP = 3.0 wu`. For a radius-8 disc the rings sit at
-11, 14, 17, 20 and 23 wu of perpendicular offset. `k = 0` reproduces today's target exactly, so Goal 2
-holds by construction. A proposal is discarded when any component is non-finite, when movement is zero, or
-when movement exceeds `MAX_EDGE_NODE_EXCURSION = 64` — the same rules as today, unchanged.
-
-**Reservation rule.** For each slot, retain the candidate with the smallest `k`; that is one candidate per
-slot and therefore **at most six per family**. The family bound the governing specification already pins is
-preserved, so `MAX_CANDIDATE_FAMILIES_PER_ROUND × 6 = 48` pool entries is also preserved and no budget
-contract changes. A later ring is only retained when every earlier ring in the same slot overflowed the
-excursion cap or was ineligible; it is never dropped because a *different* slot was chosen.
-
-**Ordering.** Slots are ordered pre-screened-legal first, then by the existing total order: stage (`t = 0`
-before diagonals), displacement within the retained ring, `sideRank`, `alongRank`, then `CandidateIdentity`.
-Because a slot contributes exactly one candidate, a legal diagonal can never be crowded out by the direct
-targets.
-
-**Bounded retry.** Within one round a slot does not advance past the ring it retained: A1 and A4 are decided
-only by `verify`, so a retained ring that `verify` rejects makes that slot contribute nothing further and
-the round ends as it does today. Later rounds exist only after an acceptance, as now. This is a deliberate
-bound, not a guarantee: the design claims improvement, not completeness, and the residual set stays the
-authoritative observable. Post-rejection ring advancement is out of scope for this task.
-
-### 6.2 Ordering-only legality pre-screen
-
-There is no "largest legal displacement" query to build: the veto entry points test a concrete candidate
-position and legality is not known to be monotone along the normal. The pre-screen therefore evaluates
-**each concrete proposal** with the same sequence `verify` runs, restricted to A2 and A3:
+Keep the live midpoint ladder exactly as it is, and extend it **after** it fails. For a chord with normal `n`,
+tangent `u`, chord length `L`, anchors `p0`, `p1`:
 
 ```
-candidatePositions = positions with only this proposal applied
-changed            = BoundaryInvariants.changedHulls(nodeHullsByKey, currentPositions, candidatePositions)
-candidateGeometry  = GraphGeometryEngine.recomputeHulls(projection, candidatePositions, currentGeometry,
-                                                        changed, metrics)
-A2legal  := NodeSeparationProjection.violatingPairsCounted(projection, candidatePositions, allowance)
-                .pairs()  ⊆  baseline A2 pairs
-A3legal  := BoundaryInvariants.detectPairKeys(projection, candidateGeometry, allowance)
-                .pairKeys()  ⊆  baseline A3 keys
+apex(t) = p0 + A * (p1 - p0) + t * L * n          A = apex fraction along the chord
 ```
 
-The specification must pin the exact overloads, argument order, the identity form used for each subset test
-(`pairs()` vs `pairKeys()`), and truncation handling; the sketches above name the production entry points,
-not new geometry. `violatingPairsCounted` takes no `pinned` argument — the pinned exclusion stays where it
-is today, in candidate generation.
+and build a quadratic Bézier from the trimmed attachments to `apex(t)`. The family is:
 
-Binding rules:
+```
+APEX_FRACTIONS   = { 0.5, 0.25, 0.75, 1.0/3.0, 2.0/3.0 }     # 0.5 first: today's midpoint bows
+SIDE_ORDER       = { +1, -1 }
+OFFSET_FRACTIONS = the live bow list, {0.15, -0.15, 0.30, -0.30, 0.50, -0.50}
+```
 
-- **Ordering-only.** An `ILLEGAL` verdict *demotes* the candidate to the end of the pool; it never removes
-  it. Nothing is filtered out, so a combination that only works as a batch is still available to
-  `greedyDisjoint`, and the pre-screen can never contradict an acceptance.
-- **Baselines are per accepted-position snapshot.** The baseline A2 pair set and A3 key set are computed
-  once from `currentPositions`/`currentGeometry` at the start of each round and cached for that round, not
-  recomputed per proposal. Candidate-side scans are per proposal.
-- **The pre-screen is singleton-only.** Batch legality is still decided by `verify` on the combined
-  positions; a batch may therefore succeed where each member alone is pre-screened `ILLEGAL`, and that is
-  correct behaviour.
-- **Tri-state result.** `LEGAL`, `ILLEGAL`, and `STOP`. `STOP` means the pre-screen's own work exhausted the
-  frame allowance; it stops candidate generation and verification for the frame, keeps the last complete
-  `C_in` as the residual, sets `verificationBudgetExhausted`, and charges every consumed unit to
-  `verificationWork` exactly as `verify` does. Partial A2/A3 sets never influence ordering or publication.
-- **A1 and A4 are not pre-screened.** A2/A3 feasibility does not imply acceptance; only `verify` accepts.
-- Candidates are regenerated from a fresh complete detection after every accepted round, as today.
+`A = 0.5` with the bow list **is** today's bow rung set, so Goal 2 holds by construction provided the ladder
+tries the entire `A = 0.5` group first. The extended ladder therefore keeps the published order
+`straight → bow ladder (A = 0.5) → dogleg ladder → apex families (A ≠ 0.5)` exactly as `EdgeRouter.route`
+sequences them today, and only the last group is new. Every candidate is subject to the existing, unchanged
+gates: `|offset| <= MAX_BEND`, `analyticRatio(fraction, bow) <= ROUTE_LENGTH_CAP`, sampled
+`length <= ROUTE_LENGTH_CAP * chordLength`, and `clearsDiscs` against all discs and edges.
 
-### 6.3 Unchanged verification and budgets
+Iteration order within the new group is total and deterministic: `A` in `APEX_FRACTIONS` order (skipping the
+`A = 0.5` entry already consumed by the bow ladder), then `fraction` in `OFFSET_FRACTIONS` order, then side by
+the sign already carried by the fraction. A dogleg analogue is **not** added: the dogleg's bends are already at
+1/3 and 2/3, and the apex families at `A = 1/3` and `A = 2/3` cover the same reach with one bend instead of
+two, which keeps the added work small.
 
-A1–A4, the counted index and verification scans, `greedyDisjoint` batching with singleton retries,
-`MAX_RELOCATION_ROUNDS = 4`, `MAX_VERIFICATIONS_PER_FRAME = 64`,
-`EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME = 65 536`, `MAX_CANDIDATE_FAMILIES_PER_ROUND = 8`,
-`MAX_CANDIDATES_PER_BATCH = 8` and `MAX_EDGE_NODE_EXCURSION = 64` all stay as they are. The pre-screen draws
-its work from the same verification-work allowance, so the frame total remains bounded by the existing cap.
-The cap is a bound on counted work, not a latency guarantee: the pre-screen adds up to five singleton A2/A3
-scans per slot before `verify` runs, and §9 Test 8 must measure the added cost on a workload containing an
-actual C2 conflict rather than on a crossing-only workload.
+The off-midpoint `analyticRatio` is not the circular-arc ratio of the midpoint bow, so the specification must
+derive it and pin the exact per-`A` values, and must prove each `A = 0.5` entry reproduces today's ratio test
+result bit-for-bit before the extension is reachable. Where an off-midpoint family member would fail the
+length ratio it is skipped exactly as today's rungs are.
 
-### 6.4 Legacy removal
+Fallback behaviour is unchanged: if every rung in the extended ladder fails, the straight chord is published
+and `edgesFallback` is incremented.
 
-Per the repository's legacy-removal policy the single-ring construction is deleted, not retained behind a
-flag: one active path, no compatibility branch, no parallel old/new implementation. Fixtures that pin exact
-C2 selection counts, pool size, ordering or verification-work totals are re-pinned deliberately and
-reconciled against §11, each re-pin justified by the new search rather than by an unexplained number.
+### 6.2 Relocation: a staged search
+
+Replace the single-ring family with two stages. **No pre-screen; no slot reservation.**
+
+**Stage 0 — today's search, unchanged.** Generate today's six ring-0 candidates with today's code path,
+today's ordering (`stage, movement, sideRank, alongRank, CandidateIdentity`), and today's batch-then-singleton
+attempt schedule. Stage 0 consumes exactly the verification count and reported work it consumes today, so
+Goal 1 holds by construction.
+
+**Stage 1 — ring expansion, only if stage 0 fails.** Reached only when stage 0 produced no acceptance in this
+round, which is exactly the case that yields a residual today. For `k = 1 .. MAX_CLEARANCE_STEPS - 1`:
+
+```
+rho_k = radius + EDGE_NODE_CLEARANCE + k * MAX_CLEARANCE_STEP          # radius 8 -> 14, 17, 20, 23
+```
+
+with `MAX_CLEARANCE_STEPS = 5` and `MAX_CLEARANCE_STEP = 3.0 wu`, generate the same six slots at `rho_k`,
+discard non-finite / zero-movement / over-`MAX_EDGE_NODE_EXCURSION` proposals, and attempt them with the same
+batch-then-singleton schedule. Rings are tried in ascending `k`, and within a ring by the existing total
+order. A slot may therefore contribute at each ring, and a ring rejected by `verify` does not prevent later
+rings from being tried — the limitation r2's reservation rule created.
+
+Bound: `stage1Candidates = (MAX_CLEARANCE_STEPS - 1) * 6 = 24` per round, and the whole round remains subject
+to the unchanged `MAX_VERIFICATIONS_PER_FRAME = 64`, `EDGE_CONFLICT_MAX_VERIFICATION_WORK_PER_FRAME = 65 536`,
+`MAX_RELOCATION_ROUNDS = 4`, `MAX_CANDIDATE_FAMILIES_PER_ROUND = 8` and `MAX_CANDIDATES_PER_BATCH = 8`.
+Stage 1 is only attempted while the frame's allowance remains; a stop sets the existing
+`verificationBudgetExhausted` contract and publishes the complete residual that stage 0 would have published.
+
+Why this ordering matters: `stopsAtFourAcceptedRoundsWithoutClaimingExhaustion` accepts in every round, so
+stage 1 never runs there and its `verifications = 4` is preserved. `E1`/`E2`/`E3` accept at ring 0, so their
+accepted positions and work totals are preserved. Only fixtures that produce a residual today can spend the
+extra work — and those fixtures are precisely where a residual was previously unavoidable, so any resulting
+change to their counters is an improvement, not a regression, and must be re-pinned as such.
+
+### 6.3 Interaction
+
+None required. Relocation works on positions before routing; routing works on the published positions. The
+design does not claim that one makes the other unnecessary, and each must be independently sufficient for
+its own fixture.
 
 ## 7. Recorded decision and mockup
 
-The user chose option B from a four-way composite comparison. The mockup is committed as the design record
-at `docs/superpowers/specs/assets/2026-10-26-edge-node-crossing-residual-options.png` (sha256
-`b3a00d4af68a4e55854b419fa386fc6fc60480eef47cee1d8798b31223d212b6`). The alternatives were: **A** keep as
-today (repair nodes, publish the residual); **B** relocate the obstructing node (chosen); **C** absolute
-bend budget for the path; **D** push discs off edges while settling.
+The user chose **B + C** at the revision-3 pivot. The four-way mockup that framed the original choice is
+committed as `docs/superpowers/specs/assets/2026-10-26-edge-node-crossing-residual-options.png` (sha256
+`b3a00d4af68a4e55854b419fa386fc6fc60480eef47cee1d8798b31223d212b6`): **A** keep as today; **B** relocate the
+obstructing node; **C** absolute bend budget for the path; **D** push discs off edges while settling. The
+screenshot's blue/orange pair is the reported edge; the dashed disc is the obstruction.
 
 ## 8. Error handling
 
-- Ineligible geometry (non-finite coordinates, zero-length chord, non-positive radius) emits no candidates
-  and keeps the conflict as a residual, exactly as today. It is not budget exhaustion.
-- A pinned disc emits no candidates and keeps the conflict as a residual (E9).
-- A slot whose every ring exceeds `MAX_EDGE_NODE_EXCURSION` contributes no candidate.
-- A candidate rejected by `verify` is rejected like today; batch-then-singleton retry and the round limit are
-  unchanged, and the slot does not advance.
-- Exhausting the verification allowance, the round limit, the frame work cap or a pre-screen `STOP` publishes
-  the conflict as a residual with the existing flags and never as an exception.
-- Existing malformed-input exceptions are unchanged.
+- Non-finite geometry, zero-length chord and non-positive radius emit no candidates, exactly as today.
+- A pinned disc emits no candidates for relocation and keeps the conflict as a residual (E9).
+- A routing candidate whose trimmed attachments are unavailable returns `null` and is skipped, as today.
+- Exhausting any allowance publishes a residual with the existing flags, never an exception.
+- Existing malformed-input exceptions in `EdgeConflictCorrection` and `EdgeRouter` are unchanged.
 
 ## 9. Test strategy
 
-Red first, in this order:
+Red first.
 
-1. **Routing falsification.** Checked-in fixture, fully pinned: the four reported edges' anchor chords and
-   disc coordinates, both endpoints at radius 8, one obstructing disc of radius 8 centred on the 36.182 wu
-   chord, map identity `00000000-0000-0000-0000-000000000001`, generation 1, `AwtGeometryTextMetrics`
-   Dialog/plain/12 with an antialiased `FontRenderContext`, all nodes visible, no pins, no enclosures unless
-   a sub-case needs them. (a) Assert through `EdgeRouter.clearsDiscs` whether any legal rung clears the disc
-   and record `edgesStraight`/`edgesBow`/`edgesDogleg`/`edgesFallback`. This confirms or refutes Fact 2; the
-   specification must state which, and the decision to keep C deferred must be restated against the outcome.
-   (b) With an active pin on the obstructing disc, assert the published path violates clearance — proving the
-   symptom is reachable from the router stage. (c) With the pin dormant, assert the conflict is relocated and
-   the published path clears the disc.
-2. **Veto attribution.** A test-only oracle that runs A2 and A3 independently on each of the six baseline
-   targets and records every observed veto, not only the first, because `verify` short-circuits internally.
-   The oracle must be built on the production geometry entry points listed in §6.2. Its output confirms §3 or
-   replaces it with the measured reason. If it shows that relocation already succeeds and the crossing
-   arrives by another route, the specification stops and re-scopes.
-3. **Boundary predicate.** A disc at exactly `radius + EDGE_NODE_CLEARANCE - ROUTE_EPSILON` is **not** a
-   conflict (the predicate compares equal values); a disc at
-   `radius + EDGE_NODE_CLEARANCE - ROUTE_EPSILON - delta` with a measured positive `delta` **is** a conflict.
-   Rings are `k * 3.0` from `radius + EDGE_NODE_CLEARANCE`, so no ring lands on the epsilon boundary.
-4. **Ring expansion.** A fixture where all six ring-0 targets are vetoed by A2 or A3 and the ring-1 or ring-2
-   target in one slot is legal must resolve in one accepted round, with the repair's displacement equal to
-   the expected ring.
-5. **Pre-screen cannot discard.** A fixture where the only workable candidate is pre-screened `ILLEGAL` alone
-   but accepted in a batch, asserting the candidate was still present in the pool and the batch was accepted.
-   Plus a fixture asserting `ILLEGAL` candidates are demoted, not removed, from the pool order.
-6. **Pre-screen stop.** A fixture whose pre-screen alone exhausts the verification allowance must produce
-   `verificationBudgetExhausted=true`, an unchanged complete residual, `detection=false`, and no retry.
-7. **Invariants preserved.** Every existing A2/A3/A4 rejection fixture, the pinned-disc E9 fixture, the
-   maximum-excursion fixture `acceptsTheC2TargetAtExactlyTheMaximumExcursion`, the budget and cap
-   reconciliation fixtures and the crossing-family fixtures stay green with unchanged accepted positions.
-8. **No layout drift and budget evidence.** `src/test/resources/performance/settled-reference.csv` (sha256
-   `e9e988b7967ea6bb4f503dfb4c5af7d3e74a3328e28e0987e71ff0f0b8ac0578`) stays byte-identical; the pinned
-   first-idle results — `TypedForcesShould`'s two-map result at **3103** steps and the initial-spacing
-   **3455** pin — are re-measured and must be unchanged. On the reported-geometry fixture and the 2000-node
-   reference scenario, record `verifications`, `verificationWork` and `verificationBudgetExhausted` to show
-   the pre-screen does not exhaust the frame allowance.
+**Routing (C).**
+1. `RouterClearanceProbe` geometry as a checked-in fixture: chord 36.182 wu, radius-8 endpoints, radius-8
+   obstacle at 25 % along the drawn chord. Today it yields `STRAIGHT` with −8.000 clearance; after the change
+   it must yield a non-fallback path whose clearance is `>= radius + EDGE_NODE_CLEARANCE`. Record the shape
+   and apex fraction actually chosen.
+2. `A = 0.5` preservation: for the `settled-reference.csv` workload and for the existing `EdgeRouterShould`
+   ladders, assert identical `edgesStraight`/`edgesBow`/`edgesDogleg`/`edgesFallback`, identical accepted
+   paths and identical sample lists. This test must fail if the midpoint group is not tried first.
+3. Clamping: an off-midpoint candidate that trips `ROUTE_LENGTH_CAP` or `MAX_BEND` is skipped, and the ladder
+   continues rather than falling back.
+4. Budget: `routeBudgetExhausted` and `detectionTruncated` behaviour on the 2000-node reference scenario with
+   the extended ladder, showing the extra rungs do not exhaust the frame allowance.
 
-Characterisation, not a gate: sweep sibling distance and along-offset to record where the baseline gives up
-and where the multi-ring search still succeeds, and record the numbers in the acceptance evidence.
+**Relocation (B).**
+5. Ring expansion: a fixture whose every ring-0 target is vetoed by A2 and whose ring-1 or ring-2 target in
+   one slot is legal must be repaired in one accepted round, with the repair displacement equal to the
+   expected ring.
+6. A1-rejected retained ring: a fixture where ring 0 fails A1 but a later ring clears every chord must be
+   repaired — the case r2's reservation rule could not reach.
+7. Goal-1 preservation: `E1`, `E2`, `E3`, the prominence fixture, `stopsAtFourAcceptedRoundsWithoutClaimingExhaustion`
+   (`verifications = 4`, `repairs = 32`) and the maximum-excursion fixture
+   `acceptsTheC2TargetAtExactlyTheMaximumExcursion` keep their accepted positions, verification counts and
+   work totals exactly. Any re-pinned number must be shown to come from a fixture that previously produced a
+   residual.
+8. Exhaustion: a fixture where stage 1 consumes the remaining allowance must set
+   `verificationBudgetExhausted=true`, publish the complete residual that stage 0 would have published, leave
+   `detectionTruncated=false`, and not retry.
+
+**Cross-cutting.**
+9. Frozen evidence: `src/test/resources/performance/settled-reference.csv` sha256
+   `e9e988b7967ea6bb4f503dfb4c5af7d3e74a3328e28e0987e71ff0f0b8ac0578`; `TypedForcesShould`'s
+   `TWO_MAP_FIRST_IDLE_STEP = 3103` exact; `INITIAL_SPACING_FIRST_IDLE_LIMIT = 6000` still holds. Re-measured,
+   not inferred.
+10. The reported workspace: re-run the real-map probe and record conflicts, repairs, router classifications
+    and the clearance audit, so the acceptance evidence covers the actual maps rather than a synthetic
+    analogue.
 
 ## 10. Containment
 
-The single open question is whether the reported picture is produced by the C2 single-ring exhaustion of §3.
-Tests 1 and 2 answer it before any behaviour change, and the specification must refuse to proceed if they
-contradict §3. That is a stop-and-re-scope gate: no implementation step may be reordered ahead of it.
+Which stage produced the user's screenshot is still unknown, because settling is path-dependent and probe 1
+settles clean. The design therefore does not depend on that answer: it hardens both stages independently, and
+each has its own red fixture. Test 10's real-map run is the acceptance check against the user's own data.
+
+If the real-map run still shows a violated published path after both changes, the task stops and reports the
+remaining residual — with the exact edge, disc and shortfall — rather than claiming success.
 
 ## 11. Supersession ledger
 
-This design supersedes, in `docs/superpowers/specs/2026-10-16-edge-node-clearance-spec.md`:
+Routing, in `docs/superpowers/specs/2026-10-12-graph-edge-crossing-avoidance-spec.md`:
 
-- **§3.2 Targets and bounds** — the six single-ring targets and `MAX_EDGE_NODE_EXCURSION` as the only spatial
-  bound are replaced by §6.1's five rings per slot. `rho = radius + EDGE_NODE_CLEARANCE` is retained
-  unchanged as ring 0; the `n`/`u` basis, the zero normalization, the finite checks, the "do not invent a
-  direction" rule and the 64-unit inclusive excursion test are retained unchanged.
-- **§3.3 Total order and deduplication** — `(stage, movement, sideRank, alongRank, candidateIdentity)` is
-  retained as the intra-family order; the pre-screened-legal-first key of §6.1 is prepended to it.
-- **§4.1 Selection** — the eight-family bound, the conflict-key ordering and "incomplete initial detection
-  never enters selection" are retained. The "at most six C2 candidates per family" and "at most 48 pool
-  entries" numbers are retained by construction under the reservation rule.
-- **§4.2 Pool lifecycle** — the schedule, batch-then-singleton attempts and the round/attempt limits are
-  retained; §6.1's bounded no-retry rule and §6.2's tri-state pre-screen result are added.
-- **§6.1–§6.4 fixtures** — `E1 — nine independent obstructions`,
-  `E2 — preferred side blocked`, `E3 — seven-node column/diagonal`, the prominence fixture and the
-  no-candidate control keep their coordinates for the ring they select. `E1`'s target moves from
-  `150i + 11` only if a later ring is selected; `E2` retains `(0, -11)` and `E3` retains `(-25, -11)` when
-  ring 0 succeeds. **What changes is the selection count, the verification count and the
-  `verificationWork` totals** (today `E2 = 30` and `E3 = 252`), which the specification must recompute and
-  re-pin, together with `E11`'s `432`, `E12`'s `660` and the prominence fixture's `1 755`.
-- **§7.1 controls** — the counters/stops probes and their cap reconciliation are retained; every pinned
-  `verificationWork` total is recomputed for the added pre-screen charge.
-- **§8.4 evidence** — the installed E3 replay and its published-position assertions are re-pinned against the
-  positions the new search accepts.
+- **§1.4 Live rung list derived from `ROUTE_LENGTH_CAP`** — the eight-entry live ladder is extended by the
+  off-midpoint apex families of §6.1. The `A = 0.5` prefix, its order and its `analyticRatio` values are
+  retained and remain the first group tried.
+- **§6.3 Candidate ladder, item 2 "Single bow"** — "control point at the chord midpoint plus the chord normal
+  times the offset" becomes "control point at apex fraction `A` along the chord plus the chord normal times
+  the offset", with `A = 0.5` first. Dogleg item and its ordering are unchanged.
+- **§6.1–§6.3 processing, ladder, caps** — the caps `ROUTE_LENGTH_CAP`, `MAX_BEND`, and the counted routing
+  allowances are retained unchanged; only the rung set grows.
+- Fixtures that pin the live ladder's exact length, rung count or budget totals are re-pinned, and the
+  `settled-reference.csv` workload's classifications must remain 21 straight / 1 bow / 0 dogleg / 0 fallback.
 
-Retained without change: the `2026-10-16` amendment 1 relationship fixture, the
-`2026-10-12-graph-edge-crossing-avoidance-spec.md` A1–A4 contract, the C1 crossing geometry and family, pin
-semantics, the EdgeRouter rules and rungs, and the counted-budget framework.
+Relocation, in `docs/superpowers/specs/2026-10-16-edge-node-clearance-spec.md`:
+
+- **§3.2 Targets and bounds** — the single-ring six-target family is superseded by §6.2's staged search. The
+  basis construction, zero normalization, finite checks, the "do not invent a direction" rule,
+  `rho = radius + EDGE_NODE_CLEARANCE` for ring 0, and the inclusive `MAX_EDGE_NODE_EXCURSION = 64` test are
+  retained unchanged.
+- **§3.3 Total order and deduplication** — retained unchanged; it now orders candidates within each ring.
+- **§4.1 Selection** — the eight-family bound, conflict-key ordering and "incomplete detection never enters
+  selection" are retained. The six-per-family and 48-per-pool bounds are retained *per stage*; stage 1 scans
+  at most 24 further proposals per round.
+- **§4.2 Pool lifecycle** — the schedule, batch-then-singleton attempts and round/attempt limits are retained;
+  the stage boundary of §6.2 is added.
+- **§6.1–§6.4 fixtures** — `E1`, `E2`, `E3`, the prominence fixture and both §7.1 controls keep their
+  coordinates, verification counts and work totals because they accept at ring 0. Their numbers are assertions
+  of Goal 1, not casualties of this change.
+- **§7.1 controls / counters** — the counted units, caps and cap-reconciliation probes are retained; the
+  `verificationWork` totals stay identical for every ring-0-accepting fixture.
+- **§8.4 installed E3 evidence** — retained unchanged, including `verifications = 3` and
+  `verificationWork = 252`, because installed E3 accepts at ring 0.
+
+Retained without change: the `2026-10-16` amendment 1 relationship fixture, the A1–A4 verification contract,
+C1 crossing geometry and its family, pin semantics, and the counted-budget framework.
