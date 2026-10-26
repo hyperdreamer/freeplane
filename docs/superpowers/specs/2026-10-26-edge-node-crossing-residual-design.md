@@ -16,6 +16,9 @@ Revision history that matters for review:
   repairs, and adopted a staged search plus an off-midpoint routing family.
 - r4 narrows two preservation goals that were over-claimed, corrects the routing evidence, and fixes the
   supersession and fixture requirements raised by review rounds 3 and 4.
+- r5 corrects test 7's residual assertion, which contradicted its own acceptance criterion, and replaces
+  test 8's claimed A2/A3 fixture with a construct-or-declare requirement, because the existence of that
+  fixture was asserted without being checked.
 
 Baseline: `plugin/graph-workspace` at `bfaed5611d170b5b0b3dc93919685bd6c54035c5`. All investigation ran in the
 PM integration worktree; the user's delivery checkout and their documents were read only.
@@ -297,10 +300,19 @@ Red first. Every fixture is committed with explicit coordinates, radii, pins and
    `(-100,0) → (100,0)`, `(-140,11) → (140,11)`, `(-140,-11) → (140,-11)`; all six edge endpoints actively
    pinned. Initially only the central edge conflicts with `N`. Every ring 0–3 candidate introduces a conflict
    with an upper or lower edge and fails A1; ring 4 at `rho = 23` clears all three chords. Assert the initial
-   conflict set, all six ring-0 A1 rejections, acceptance at ring 4, and a final conflict set identical to the
-   initial one. Under the stated schedule the first acceptance is verification 25; pin that number.
-8. **Ring expansion under A2/A3.** A second fixture whose ring-0 targets are vetoed by A2 and A3 rather than
-   A1, with the same identity, rejection and acceptance assertions.
+   conflict set of exactly one identity, all six ring-0 A1 rejections, acceptance at ring 4, and a **complete
+   final conflict set that is empty** — the accepted move removes the only conflict rather than preserving it.
+   (An earlier draft of this design said "identical to the initial one"; that contradicted the acceptance and
+   was wrong.) Under the stated schedule the first acceptance is verification 25; pin that number.
+8. **Ring expansion under A2/A3 — requirement, not a claimed geometry.** A second fixture in which all six
+   ring-0 targets are vetoed by A2 or A3 and some later-ring target in the same slot is legal. The design does
+   **not** assert that such a fixture exists. With radius-8 discs, `MIN_GAP = 6` and a ring step of only 3 wu, a
+   blocker that is within `r_i + r_j + MIN_GAP = 22` of a ring-`k` target is within 25 of the ring-`k+1` target
+   in the same slot, so a pure-A2 ring-0-only veto is not obviously constructible, and A3's dependence on hull
+   extents is not monotone either. The specification must therefore construct the fixture by search over a
+   pinned family and pin the concrete coordinates and expected counters it finds, or — if no such fixture
+   exists — record that the A2/A3 case is a search limit and let test 7 (A1) carry Goal 4 on its own. Claiming
+   an unverified geometry here would be the same error r2 made about routing.
 9. **Goal-1 preservation.** `E1`, `E2`, `E3`, the prominence fixture,
    `stopsAtFourAcceptedRoundsWithoutClaimingExhaustion` (`verifications = 4`, `repairs = 32`) and
    `acceptsTheC2TargetAtExactlyTheMaximumExcursion` keep accepted positions, verification counts and work
