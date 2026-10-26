@@ -1,0 +1,16 @@
+=== anchor chord 36.182 wu, radius 8 endpoints ===
+  obstacle at (0.000, 0.000) [midpoint of drawn chord]: shape=BOW fallback=false clearance=3.183141
+  obstacle at (0.000, 0.000) [anchor midpoint]: shape=BOW fallback=false clearance=3.183141
+  obstacle at (-5.046, 0.000) [quarter along drawn chord]: shape=STRAIGHT fallback=true clearance=-8.000000
+=== anchor chord 33.596 wu, radius 8 endpoints ===
+  obstacle at (0.000, 0.000) [midpoint of drawn chord]: shape=STRAIGHT fallback=true clearance=-8.000000
+  obstacle at (0.000, 0.000) [anchor midpoint]: shape=STRAIGHT fallback=true clearance=-8.000000
+  obstacle at (-4.399, 0.000) [quarter along drawn chord]: shape=STRAIGHT fallback=true clearance=-8.000000
+=== anchor chord 41.170 wu, radius 8 endpoints ===
+  obstacle at (0.000, 0.000) [midpoint of drawn chord]: shape=BOW fallback=false clearance=4.729169
+  obstacle at (0.000, 0.000) [anchor midpoint]: shape=BOW fallback=false clearance=4.729169
+  obstacle at (-6.293, 0.000) [quarter along drawn chord]: shape=STRAIGHT fallback=true clearance=-8.000000
+=== anchor chord 44.120 wu, radius 8 endpoints ===
+  obstacle at (0.000, 0.000) [midpoint of drawn chord]: shape=BOW fallback=false clearance=5.444649
+  obstacle at (0.000, 0.000) [anchor midpoint]: shape=BOW fallback=false clearance=5.444649
+  obstacle at (-7.030, 0.000) [quarter along drawn chord]: shape=STRAIGHT fallback=true clearance=-8.000000

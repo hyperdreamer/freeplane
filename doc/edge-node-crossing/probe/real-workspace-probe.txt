@@ -1,0 +1,85 @@
+map[1] Axiomatic_Set_Theory.mm      sourceNodes=  7455 projectedNodes= 171 connectors=1445 graphGroups=10
+map[2] Point-set_Topology.mm        sourceNodes=  9025 projectedNodes= 247 connectors=1229 graphGroups=11
+map[3] Real_Anaylsis.mm             sourceNodes=  9834 projectedNodes= 150 connectors=1474 graphGroups=7
+projection: nodes=28 edges=12 enclosures=7 pins=0
+settle: steps=178 idle=true residualViolations=1
+
+=== projected discs (settled positions) ===
+  ID_1133378501                              label=Fundation / Regularity                         center=LayoutPoint{x=104.46420667902956, y=-224.98453805640872} r=9.6 group=true
+  ID_822182441                               label=Replacement Scheme                             center=LayoutPoint{x=85.44637197392952, y=-171.213919652232} r=8.0 group=true
+  ID_130337169                               label=Axiom of Choice                                center=LayoutPoint{x=38.686598760115714, y=-190.87219907996854} r=8.0 group=true
+  ID_1901523076                              label=Theorem                                        center=LayoutPoint{x=62.1007476684317, y=-237.31087846818235} r=8.0 group=true
+  ID_1387156674                              label=Theorem                                        center=LayoutPoint{x=80.82661318591157, y=-248.85825741845753} r=8.0 group=true
+  ID_297617399                               label=Theorem: Equivalence of $\leqslant$ and $...   center=LayoutPoint{x=-48.564075160622956, y=-226.99190477383434} r=8.0 group=true
+  ID_215702338                               label=Theorem: $ON$ is well-ordered by $\in$         center=LayoutPoint{x=-69.314297361256, y=-175.6251405199732} r=8.0 group=true
+  ID_1887656421                              label=Theorem: initial segement                      center=LayoutPoint{x=-104.03334197218959, y=-185.80824711206662} r=8.0 group=true
+  ID_1222855984                              label=Theorem: $\bigcup\alpha\leqslant\alpha$        center=LayoutPoint{x=-86.91931900152834, y=-241.9541706754423} r=8.0 group=true
+  ID_1732260180                              label=Theorem                                        center=LayoutPoint{x=-63.74403616437911, y=-244.72090126759775} r=8.0 group=true
+  ID_8832923                                 label=synthetic basis                                center=LayoutPoint{x=72.14806255041611, y=2.287330526987308} r=8.0 group=true
+  ID_379163670                               label=analytic subbasis                              center=LayoutPoint{x=61.411732222969285, y=37.962643425551825} r=8.0 group=true
+  ID_1007737944                              label=Theorem                                        center=LayoutPoint{x=28.979107583160594, y=65.76607944656138} r=8.0 group=true
+  ID_1121122434                              label=Theorem: Comparison between Topologies         center=LayoutPoint{x=-9.106924386746634, y=70.781811456558} r=8.0 group=true
+  ID_845954544                               label=Theorem                                        center=LayoutPoint{x=-48.043796232606226, y=52.21036969085537} r=8.0 group=true
+  ID_626846666                               label=Theorem                                        center=LayoutPoint{x=-67.10495944993325, y=21.938948894707615} r=8.0 group=true
+  ID_801357044                               label=Theorem                                        center=LayoutPoint{x=-67.72638078532272, y=-18.86339907897916} r=8.0 group=true
+  ID_675241169                               label=Theorem I                                      center=LayoutPoint{x=-45.25948235692915, y=-53.73579569443794} r=8.0 group=true
+  ID_192579155                               label=Theorem II                                     center=LayoutPoint{x=-12.66973172580646, y=-69.18415891974112} r=8.0 group=true
+  ID_1955681225                              label=Theorem                                        center=LayoutPoint{x=30.451499009403825, y=-64.22102140846964} r=8.0 group=true
+  ID_43431859                                label=Theorem                                        center=LayoutPoint{x=61.10465422634267, y=-37.66520173144638} r=8.0 group=true
+  ID_295118693                               label=Lemma II                                       center=LayoutPoint{x=57.23077385749022, y=239.58716715471076} r=8.0 group=true
+  ID_1721568649                              label=Theorem                                        center=LayoutPoint{x=47.50276098490488, y=274.28645323541446} r=8.0 group=true
+  ID_309040602                               label=Theorem                                        center=LayoutPoint{x=-41.72104675149096, y=233.4548674053434} r=10.53594000115385 group=true
+  ID_1165913806                              label=Theorem                                        center=LayoutPoint{x=-40.763714615787414, y=271.0586070339917} r=8.0 group=true
+  ID_1763143138                              label=Theorem                                        center=LayoutPoint{x=-39.998245070825966, y=199.91460123363362} r=9.6 group=true
+  ID_1437543342                              label=Corllary                                       center=LayoutPoint{x=-12.872196010357943, y=204.99102482375477} r=8.0 group=true
+  ID_792798100                               label=Theorem                                        center=LayoutPoint{x=-0.1460685129971556, y=187.04539363059476} r=8.0 group=true
+
+=== projected edges ===
+  ProjectedEdgeKey{first=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000001, kind=node}, second=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000001, kind=node}}  ID_1133378501[Fundation / Regularity] -> ID_1387156674[Theorem]
+  ProjectedEdgeKey{first=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000001, kind=node}, second=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000001, kind=node}}  ID_1133378501[Fundation / Regularity] -> ID_1901523076[Theorem]
+  ProjectedEdgeKey{first=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000001, kind=node}, second=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000001, kind=node}}  ID_1222855984[Theorem: $\bigcup\alpha\leqslant\alpha$] -> ID_297617399[Theorem: Equivalence of $\leqslant$ and $...]
+  ProjectedEdgeKey{first=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000001, kind=node}, second=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000001, kind=node}}  ID_1887656421[Theorem: initial segement] -> ID_215702338[Theorem: $ON$ is well-ordered by $\in$]
+  ProjectedEdgeKey{first=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000002, kind=node}, second=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000002, kind=node}}  ID_192579155[Theorem II] -> ID_675241169[Theorem I]
+  ProjectedEdgeKey{first=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000002, kind=node}, second=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000002, kind=node}}  ID_626846666[Theorem] -> ID_845954544[Theorem]
+  ProjectedEdgeKey{first=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000003, kind=node}, second=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000003, kind=node}}  ID_1165913806[Theorem] -> ID_309040602[Theorem]
+  ProjectedEdgeKey{first=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000003, kind=node}, second=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000003, kind=node}}  ID_1437543342[Corllary] -> ID_1763143138[Theorem]
+  ProjectedEdgeKey{first=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000003, kind=node}, second=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000003, kind=node}}  ID_1437543342[Corllary] -> ID_309040602[Theorem]
+  ProjectedEdgeKey{first=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000003, kind=node}, second=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000003, kind=node}}  ID_1721568649[Theorem] -> ID_295118693[Lemma II]
+  ProjectedEdgeKey{first=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000003, kind=node}, second=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000003, kind=node}}  ID_1763143138[Theorem] -> ID_309040602[Theorem]
+  ProjectedEdgeKey{first=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000003, kind=node}, second=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000003, kind=node}}  ID_1763143138[Theorem] -> ID_792798100[Theorem]
+
+=== EdgeConflictCorrection (node relocation) on the settled frame ===
+  conflictsDetected=1 (crossings=0 edgeOverNode=1)
+  crossingsResolved=0 edgeOverNodeResolved=1 residual=0
+  rounds=1 verifications=1 repairs=1
+  detectionTruncated=false indexBudgetExhausted=false verificationBudgetExhausted=false
+  repair TRANSLATION batch=0 node=ID_1732260180 move=(1.177,-3.016) |d|=3.238
+  indexInsertedItems=300 indexPairChecks=84 verificationWork=1207 subdivisions=0
+
+=== EdgeRouter on the settled (post-relocation) frame ===
+  straights=12 bows=0 doglegs=0 fallbacks=0
+  routeBudgetExhausted=false detectionTruncated=false obstacleChecks=8 pairChecks=0 indexItems=2156
+
+=== geometry of the reported edge ===
+  chord length between attachment points = 33.596 wu
+  required clearance = r + 3 = 11 wu; max bow apex = 0.25*L = 8.399 wu; max dogleg offset = 0.30*L = 10.079 wu
+  disc ID_1901523076 r=8.00  perpOffset=21.431  distToFirstAnchor=44.120  distToSecondAnchor=22.000  required=11.000  routable=true
+  chord length between attachment points = 44.120 wu
+  required clearance = r + 3 = 11 wu; max bow apex = 0.25*L = 11.030 wu; max dogleg offset = 0.30*L = 13.236 wu
+  disc ID_1387156674 r=8.00  perpOffset=16.319  distToFirstAnchor=33.596  distToSecondAnchor=22.000  required=11.000  routable=true
+  disc ID_297617399 r=8.00  perpOffset=40.826  distToFirstAnchor=153.041  distToSecondAnchor=111.145  required=11.000  routable=true
+  disc ID_1222855984 r=8.00  perpOffset=37.175  distToFirstAnchor=192.134  distToSecondAnchor=149.092  required=11.000  routable=true
+  disc ID_1732260180 r=8.00  perpOffset=28.044  distToFirstAnchor=169.362  distToSecondAnchor=126.063  required=11.000  routable=true
+  chord length between attachment points = 41.170 wu
+  required clearance = r + 3 = 11 wu; max bow apex = 0.25*L = 10.293 wu; max dogleg offset = 0.30*L = 12.351 wu
+  disc ID_822182441 r=8.00  perpOffset=3.262  distToFirstAnchor=186.317  distToSecondAnchor=145.155  required=11.000  routable=false
+  disc ID_130337169 r=8.00  perpOffset=1.941  distToFirstAnchor=135.596  distToSecondAnchor=94.432  required=11.000  routable=false
+  disc ID_1901523076 r=8.00  perpOffset=49.832  distToFirstAnchor=149.092  distToSecondAnchor=111.145  required=11.000  routable=true
+  disc ID_1732260180 r=8.00  perpOffset=11.000  distToFirstAnchor=23.340  distToSecondAnchor=23.340  required=11.000  routable=true
+  chord length between attachment points = 36.182 wu
+  required clearance = r + 3 = 11 wu; max bow apex = 0.25*L = 9.045 wu; max dogleg offset = 0.30*L = 10.854 wu
+  disc ID_822182441 r=8.00  perpOffset=39.324  distToFirstAnchor=190.041  distToSecondAnchor=154.824  required=11.000  routable=true
+  disc ID_130337169 r=8.00  perpOffset=45.027  distToFirstAnchor=142.810  distToSecondAnchor=109.072  required=11.000  routable=true
+
+=== published-path clearance audit (radius + 3 wu) ===
+  edges violating node clearance: 0 of 12
