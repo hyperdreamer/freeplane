@@ -55,6 +55,8 @@ public final class EdgeConflictCorrection {
     static final double MAX_EDGE_NODE_EXCURSION = 64.0;
     static final int MAX_CANDIDATE_FAMILIES_PER_ROUND = 8;
     static final int MAX_CANDIDATES_PER_BATCH = 8;
+    private static final int MAX_CLEARANCE_STEPS = 5;
+    private static final double MAX_CLEARANCE_STEP = 3.0;
 
     private static final double OUTERMOST_CELL_INDEX_DOUBLE = OUTERMOST_CELL_INDEX;
     private static final Comparator<ProjectedNodeKey> NODE_ORDER =
@@ -137,10 +139,18 @@ public final class EdgeConflictCorrection {
             if (conflicts.keys().isEmpty()) {
                 break;
             }
-            final List<Candidate> pool = generateCandidates(conflicts, currentPositions, pinned,
+            final PoolGeneration generated = generateCandidates(conflicts, currentPositions, pinned,
                 enclosurePaths);
+            final List<Candidate> pool = generated.pool;
             boolean acceptedThisRound = false;
-            while (!pool.isEmpty() && !verificationStopped
+            for (int searchStage = 0; searchStage < 2 && !acceptedThisRound
+                    && !verificationStopped && rounds < MAX_RELOCATION_ROUNDS
+                    && verifications < MAX_VERIFICATIONS_PER_FRAME; searchStage++) {
+                if (searchStage == 1) {
+                    pool.addAll(expandSelectedFamiliesByRing(generated.selectedFamilies,
+                        currentPositions, pinned));
+                }
+                while (!pool.isEmpty() && !verificationStopped
                     && verifications < MAX_VERIFICATIONS_PER_FRAME) {
                 final List<Candidate> batch = greedyDisjoint(pool);
                 if (batch.isEmpty()) {
@@ -189,6 +199,7 @@ public final class EdgeConflictCorrection {
                     break;
                 }
             }
+        }
             if (!acceptedThisRound) {
                 break;
             }
@@ -360,10 +371,11 @@ public final class EdgeConflictCorrection {
      * pool. Unselected conflicts stay in the detection and the reported residual; this is a
      * candidate-generation bound, never a detection or verification bound.
      */
-    private static List<Candidate> generateCandidates(final Detection conflicts,
+    private static PoolGeneration generateCandidates(final Detection conflicts,
             final LayoutPositions positions, final Set<ProjectedNodeKey> pinned,
             final Map<ProjectedNodeKey, List<EnclosureHullKey>> enclosurePaths) {
         final List<Candidate> pool = new ArrayList<Candidate>();
+        final List<SelectedFamily> selectedFamilies = new ArrayList<SelectedFamily>();
         final Set<CandidateIdentity> retained = new HashSet<CandidateIdentity>();
         int families = 0;
         for (final Conflict conflict : conflicts.conflicts()) {
@@ -374,18 +386,21 @@ public final class EdgeConflictCorrection {
             else {
                 addEdgeOverNodeCandidates(family, conflict, positions, pinned);
             }
-            boolean nonempty = false;
+            final List<Candidate> retainedFamily = new ArrayList<Candidate>(family.size());
             for (final Candidate candidate : family) {
                 if (retained.add(new CandidateIdentity(candidate))) {
                     pool.add(candidate);
-                    nonempty = true;
+                    retainedFamily.add(candidate);
                 }
             }
-            if (nonempty && ++families == MAX_CANDIDATE_FAMILIES_PER_ROUND) {
-                break;
+            if (!retainedFamily.isEmpty()) {
+                selectedFamilies.add(new SelectedFamily(conflict, retainedFamily));
+                if (++families == MAX_CANDIDATE_FAMILIES_PER_ROUND) {
+                    break;
+                }
             }
         }
-        return pool;
+        return new PoolGeneration(pool, selectedFamilies);
     }
 
     private static void addCrossingCandidates(final List<Candidate> candidates, final Conflict conflict,
@@ -532,6 +547,12 @@ public final class EdgeConflictCorrection {
     private static void addEdgeOverNodeCandidates(final List<Candidate> candidates,
             final Conflict conflict, final LayoutPositions positions,
             final Set<ProjectedNodeKey> pinned) {
+        addEdgeOverNodeCandidatesAtRing(candidates, conflict, positions, pinned, 0);
+    }
+
+    private static void addEdgeOverNodeCandidatesAtRing(final List<Candidate> candidates,
+            final Conflict conflict, final LayoutPositions positions,
+            final Set<ProjectedNodeKey> pinned, final int ring) {
         final Chord chord = conflict.firstChord();
         final Disc disc = conflict.disc();
         if (pinned.contains(disc.key)) {
@@ -572,7 +593,8 @@ public final class EdgeConflictCorrection {
             return;
         }
         final double projection = projectedX * normalX + projectedY * normalY;
-        final double rho = disc.radius + EDGE_NODE_CLEARANCE;
+        final double rho = ring == 0 ? disc.radius + EDGE_NODE_CLEARANCE
+            : disc.radius + EDGE_NODE_CLEARANCE + ring * MAX_CLEARANCE_STEP;
         final double halfHeight = 2.0 * disc.radius + NodeSeparationProjection.MIN_GAP
             + EDGE_NODE_CLEARANCE;
         if (!Double.isFinite(projection) || !Double.isFinite(rho) || !Double.isFinite(halfHeight)) {
@@ -627,6 +649,27 @@ public final class EdgeConflictCorrection {
         }
     }
 
+    private static List<Candidate> expandSelectedFamiliesByRing(
+            final List<SelectedFamily> selectedFamilies, final LayoutPositions positions,
+            final Set<ProjectedNodeKey> pinned) {
+        final List<Candidate> expanded = new ArrayList<Candidate>();
+        for (int ring = 1; ring < MAX_CLEARANCE_STEPS; ring++) {
+            final Set<CandidateIdentity> retained = new HashSet<CandidateIdentity>();
+            for (final SelectedFamily family : selectedFamilies) {
+                if (family.conflict.isCrossing()) {
+                    continue;
+                }
+                final List<Candidate> candidates = new ArrayList<Candidate>(6);
+                addEdgeOverNodeCandidatesAtRing(candidates, family.conflict, positions, pinned, ring);
+                for (final Candidate candidate : candidates) {
+                    if (retained.add(new CandidateIdentity(candidate))) {
+                        expanded.add(candidate);
+                    }
+                }
+            }
+        }
+        return expanded;
+    }
     private static double zeroNormalized(final double value) {
         return value == 0.0 ? 0.0 : value;
     }
@@ -1391,6 +1434,27 @@ public final class EdgeConflictCorrection {
 
         Disc disc() {
             return disc;
+        }
+    }
+
+    static final class SelectedFamily {
+        final Conflict conflict;
+        final List<Candidate> candidates;
+
+        SelectedFamily(final Conflict conflict, final List<Candidate> candidates) {
+            this.conflict = conflict;
+            this.candidates = Collections.unmodifiableList(new ArrayList<Candidate>(candidates));
+        }
+    }
+
+    private static final class PoolGeneration {
+        final List<Candidate> pool;
+        final List<SelectedFamily> selectedFamilies;
+
+        PoolGeneration(final List<Candidate> pool, final List<SelectedFamily> selectedFamilies) {
+            this.pool = pool;
+            this.selectedFamilies = Collections.unmodifiableList(
+                new ArrayList<SelectedFamily>(selectedFamilies));
         }
     }
 

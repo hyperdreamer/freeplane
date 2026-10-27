@@ -291,6 +291,77 @@ public class EdgeConflictCorrectionShould {
     }
 
     @Test
+    public void expandsTheA1RejectedFamilyToTheFourthRing() throws Exception {
+        final Fixture fixture = fixture(1L,
+            new String[] {"A", "B", "N", "U", "V", "D", "E"},
+            new double[] {-100, 0, 100, 0, 0, 0, -140, 11, 140, 11, -140, -11, 140, -11},
+            new int[][] {{0, 1}, {3, 4}, {5, 6}}, 8.0);
+        final List<PinProjection> pins = fixture.pinsFor(0, 1, 3, 4, 5, 6);
+        final String initialConflict = CanonicalKeys.edgeNodePair(
+            fixture.projection.edges().get(0).key(), fixture.key(2));
+        final String upperConflict = CanonicalKeys.edgeNodePair(
+            fixture.projection.edges().get(1).key(), fixture.key(2));
+        final String lowerConflict = CanonicalKeys.edgeNodePair(
+            fixture.projection.edges().get(2).key(), fixture.key(2));
+        final EdgeConflictCorrection.Detection initial = EdgeConflictCorrection.detectConflicts(
+            fixture.projection, fixture.boundary.positions(), fixture.boundary.geometry(),
+            fixture.visible);
+        assertThat(initial.keys()).containsExactly(initialConflict);
+        assertThat(NodeSeparationProjection.violatingPairs(fixture.projection,
+            fixture.boundary.positions())).isEmpty();
+        assertThat(new BoundaryInvariants().detectPairKeys(fixture.projection,
+            fixture.boundary.geometry())).isEmpty();
+
+        final Set<String> introduced = new LinkedHashSet<String>();
+        final List<Object> ringZero = familyOf(fixture, fixture.key(2));
+        assertThat(ringZero).hasSize(6);
+        for (final Object candidate : ringZero) {
+            final LayoutPositions candidatePositions = candidatePositions(fixture, candidate);
+            final GraphGeometry candidateGeometry = new GraphGeometryEngine().computeHulls(
+                fixture.projection, candidatePositions, METRICS);
+            final EdgeConflictCorrection.Detection candidateDetection = EdgeConflictCorrection.detectConflicts(
+                fixture.projection, candidatePositions, candidateGeometry, fixture.visible);
+            for (final String key : candidateDetection.keys()) {
+                if (!initial.keys().contains(key)) {
+                    introduced.add(key);
+                }
+            }
+            assertThat(candidateDetection.keys())
+                .as("ring-0 candidate %s must fail A1", candidate)
+                .containsAnyOf(upperConflict, lowerConflict);
+        }
+        assertThat(introduced).containsExactlyInAnyOrder(upperConflict, lowerConflict);
+
+        final EdgeConflictResult result = new EdgeConflictCorrection().apply(fixture.projection,
+            fixture.boundary.positions(), METRICS, pins, fixture.visible, fixture.boundary);
+        assertThat(result.positions().nodes().get(fixture.key(2)))
+            .isEqualTo(LayoutPoint.of(0.0, -23.0));
+        assertThat(result.diagnostics().verifications()).isEqualTo(25);
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().conflictsResidual()).isEmpty();
+        assertThat(result.diagnostics().repairsApplied()).hasSize(1);
+    }
+    @Test
+    public void startsTheNextRoundWithFreshStageZeroSelection() {
+        final Fixture fixture = nineObstructionsFixture();
+        final EdgeConflictResult result = apply(fixture);
+
+        assertThat(result.diagnostics().rounds()).isEqualTo(2);
+        assertThat(result.diagnostics().verifications()).isEqualTo(2);
+        assertThat(result.diagnostics().repairsApplied()).hasSize(9);
+        assertThat(result.diagnostics().conflictsResidual()).isEmpty();
+        final EdgeConflictDiagnostics.Repair lastRepair =
+            result.diagnostics().repairsApplied().get(8);
+        assertThat(lastRepair.batchIndex()).isEqualTo(1);
+        assertThat(lastRepair.nodeKeys()).containsExactly(fixture.key(26));
+        assertThat(lastRepair.fromCentres().get(fixture.key(26)))
+            .isEqualTo(LayoutPoint.of(0.0, 1205.0));
+        assertThat(lastRepair.toCentres().get(fixture.key(26)))
+            .isEqualTo(LayoutPoint.of(0.0, 1211.0));
+        assertThat(result.positions().nodes().get(fixture.key(26)))
+            .isEqualTo(LayoutPoint.of(0.0, 1211.0));
+    }
+    @Test
     public void keepsAResidualWhenEveryLocalAlternativeBreaksTheGap() {
         final Fixture fixture = fullyBlockedFixture();
         final ProjectedEdgeKey edgeKey = fixture.projection.edges().get(0).key();
@@ -308,11 +379,11 @@ public class EdgeConflictCorrectionShould {
 
         final EdgeConflictResult result = apply(fixture);
 
-        // Six finite-family targets exist and every one of them adds a node gap: the run is
-        // finite-search failure, not budget exhaustion. A pre-scan that skipped them, or a
-        // "nothing can ever be repaired" suppression, would show fewer than six attempts.
-        assertThat(result.diagnostics().verifications()).isEqualTo(6);
-        assertThat(result.diagnostics().verificationWork()).isEqualTo(432);
+        // The finite-family search submits the six ring-0 targets and the four expanded rings,
+        // for thirty attempts total; every target adds a node gap. This is finite-search failure,
+        // not budget exhaustion.
+        assertThat(result.diagnostics().verifications()).isEqualTo(30);
+        assertThat(result.diagnostics().verificationWork()).isEqualTo(2_160);
         assertThat(result.diagnostics().rounds()).isZero();
         assertThat(result.diagnostics().repairsApplied()).isEmpty();
         assertThat(result.diagnostics().edgeOverNodeDetected()).isEqualTo(1);
@@ -379,11 +450,10 @@ public class EdgeConflictCorrectionShould {
             fixture.boundary.positions(), METRICS, fixture.pinsFor(0, 1, 2, 3), fixture.visible,
             fixture.boundary);
 
-        // Both chords generate the same six N targets and the pinned endpoints emit nothing, so
-        // only the six deduplicated entries can be attempted. Twelve attempts would prove the
-        // pool kept one family per generating conflict key.
-        assertThat(result.diagnostics().verifications()).isEqualTo(6);
-        assertThat(result.diagnostics().verificationWork()).isEqualTo(660);
+        // Both chords generate the same six targets at each of five rings. The family is selected
+        // once, so the staged search submits thirty deduplicated attempts rather than sixty.
+        assertThat(result.diagnostics().verifications()).isEqualTo(30);
+        assertThat(result.diagnostics().verificationWork()).isEqualTo(3_300);
         assertThat(result.diagnostics().rounds()).isZero();
         assertThat(result.diagnostics().repairsApplied()).isEmpty();
         assertThat(result.diagnostics().conflictsDetected()).isEqualTo(4);
@@ -1126,8 +1196,8 @@ public class EdgeConflictCorrectionShould {
 
         final EdgeConflictResult blocked = apply(fullyBlockedFixture());
         assertThat(blocked.diagnostics().rounds()).isZero();
-        assertThat(blocked.diagnostics().verifications()).isEqualTo(6);
-        assertThat(blocked.diagnostics().verificationWork()).isEqualTo(432L);
+        assertThat(blocked.diagnostics().verifications()).isEqualTo(30);
+        assertThat(blocked.diagnostics().verificationWork()).isEqualTo(2_160L);
         assertThat(blocked.diagnostics().repairsApplied()).isEmpty();
         assertThat(blocked.diagnostics().verificationBudgetExhausted()).isFalse();
         assertThat(blocked.diagnostics().detectionTruncated()).isFalse();
@@ -1137,8 +1207,8 @@ public class EdgeConflictCorrectionShould {
             duplicateChordFixture().projection, duplicateChordFixture().boundary.positions(), METRICS,
             duplicateChordFixture().pinsFor(0, 1, 2, 3), duplicateChordFixture().visible,
             duplicateChordFixture().boundary);
-        assertThat(deduplicated.diagnostics().verifications()).isEqualTo(6);
-        assertThat(deduplicated.diagnostics().verificationWork()).isEqualTo(660L);
+        assertThat(deduplicated.diagnostics().verifications()).isEqualTo(30);
+        assertThat(deduplicated.diagnostics().verificationWork()).isEqualTo(3_300L);
         assertThat(deduplicated.diagnostics().rounds()).isZero();
         assertThat(deduplicated.diagnostics().verificationBudgetExhausted()).isFalse();
         assertThat(deduplicated.diagnostics().detectionTruncated()).isFalse();
@@ -2647,9 +2717,8 @@ public class EdgeConflictCorrectionShould {
     @Test
     public void keepsTheFiniteC2FamilyWithinItsStatedBounds() throws Exception {
         // The public outcome controls above prove no ineligible target is ever accepted. The family
-        // itself is private, so this reflection probe pins the two structural bounds that public
-        // counters cannot distinguish: at most six members per family, and no member whose target
-        // equals its own current centre.
+        // itself is private, so inspect the real PoolGeneration record and ring expansion to pin
+        // the structural bounds that public counters cannot distinguish.
         final Fixture blocked = fullyBlockedFixture();
         final Fixture single = blockedColumnFixture();
         assertThat(familyOf(single, single.key(2))).hasSize(6);
@@ -2664,6 +2733,57 @@ public class EdgeConflictCorrectionShould {
         final BoundarySeparationResult poisoned = zero.boundaryWithNodeCentreAndRadius(
             zero.key(2), LayoutPoint.of(0.0, 0.0), 8.0);
         assertThat(familyOf(zero, poisoned, zero.key(2))).hasSize(5);
+
+        final EdgeConflictCorrection.Detection selectedDetection =
+            EdgeConflictCorrection.detectConflicts(single.projection, single.boundary.positions(),
+                single.boundary.geometry(), single.visible);
+        final Object selectedGeneration = generateCandidates(single, selectedDetection);
+        final List<?> selectedFamilies = selectedFamilies(selectedGeneration);
+        assertThat(selectedFamilies).hasSize(1);
+        for (final Object family : selectedFamilies) {
+            assertThat(familyCandidates(family)).hasSize(6);
+        }
+        assertThat(selectedFamilyConflict(selectedFamilies.get(0)))
+            .isSameAs(selectedDetection.conflicts().get(0));
+
+        // The nine-row frame exercises the original eight-family selection bound and the full
+        // 4 * 6 * 8 stage-1 proposal ceiling. Each ring gets its own CandidateIdentity set.
+        final Fixture dense = nineObstructionsFixture();
+        final EdgeConflictCorrection.Detection denseDetection = EdgeConflictCorrection.detectConflicts(
+            dense.projection, dense.boundary.positions(), dense.boundary.geometry(), dense.visible);
+        final Object denseGeneration = generateCandidates(dense, denseDetection);
+        final List<?> denseFamilies = selectedFamilies(denseGeneration);
+        assertThat(denseFamilies).hasSize(8);
+        for (int index = 0; index < denseFamilies.size(); index++) {
+            assertThat(selectedFamilyConflict(denseFamilies.get(index)))
+                .isSameAs(denseDetection.conflicts().get(index));
+            assertThat(familyCandidates(denseFamilies.get(index))).hasSize(6);
+        }
+        final List<?> expanded = expandedCandidates(dense, denseFamilies);
+        assertThat(expanded).hasSize(192);
+        for (final Object candidate : expanded) {
+            assertThat(candidateFromCentres(candidate)).isNotEqualTo(candidateToCentres(candidate));
+        }
+        for (int ring = 1; ring < 5; ring++) {
+            for (final Object family : denseFamilies) {
+                assertThat(ringCandidates(dense, selectedFamilyConflict(family), ring)).hasSize(6);
+            }
+        }
+
+        // This is a real generated C1 family, not a fabricated record. Stage 1 must filter it by
+        // the recorded Conflict provenance, while its stage-0 candidates remain present.
+        final Fixture crossing = reportedQuad();
+        final EdgeConflictCorrection.Detection crossingDetection = EdgeConflictCorrection.detectConflicts(
+            crossing.projection, crossing.boundary.positions(), crossing.boundary.geometry(),
+            crossing.visible);
+        assertThat(crossingDetection.crossings()).isEqualTo(1);
+        final Object crossingGeneration = generateCandidates(crossing, crossingDetection);
+        final List<?> crossingFamilies = selectedFamilies(crossingGeneration);
+        assertThat(crossingFamilies).hasSize(1);
+        assertThat(selectedFamilyConflict(crossingFamilies.get(0)))
+            .isSameAs(crossingDetection.conflicts().get(0));
+        assertThat(familyCandidates(crossingFamilies.get(0))).isNotEmpty();
+        assertThat(expandedCandidates(crossing, crossingFamilies)).isEmpty();
     }
 
     /**
@@ -2676,8 +2796,22 @@ public class EdgeConflictCorrectionShould {
         return familyOf(fixture, fixture.boundary, obstructing);
     }
 
+    private static LayoutPositions candidatePositions(final Fixture fixture, final Object candidate)
+            throws Exception {
+        final java.lang.reflect.Field field = candidate.getClass().getDeclaredField("toCentres");
+        field.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        final Map<ProjectedNodeKey, LayoutPoint> toCentres =
+            (Map<ProjectedNodeKey, LayoutPoint>) field.get(candidate);
+        final Map<ProjectedNodeKey, LayoutPoint> nodes =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>(fixture.boundary.positions().nodes());
+        nodes.putAll(toCentres);
+        return LayoutPositions.of(nodes, fixture.boundary.positions().anchors());
+    }
+
     private static List<Object> familyOf(final Fixture fixture,
-            final BoundarySeparationResult boundary, final ProjectedNodeKey obstructing) throws Exception {        final EdgeConflictCorrection.Detection detection = EdgeConflictCorrection.detectConflicts(
+            final BoundarySeparationResult boundary, final ProjectedNodeKey obstructing) throws Exception {
+        final EdgeConflictCorrection.Detection detection = EdgeConflictCorrection.detectConflicts(
             fixture.projection, boundary.positions(), boundary.geometry(), fixture.visible);
         final List<?> conflicts = detection.conflicts();
         assertThat(conflicts).hasSize(1);
@@ -2693,6 +2827,104 @@ public class EdgeConflictCorrectionShould {
         }
         assertThat(family).isNotEmpty();
         return family;
+    }
+
+    private static Object generateCandidates(final Fixture fixture,
+            final EdgeConflictCorrection.Detection detection) throws Exception {
+        final java.lang.reflect.Method method = EdgeConflictCorrection.class.getDeclaredMethod(
+            "generateCandidates", EdgeConflictCorrection.Detection.class, LayoutPositions.class,
+            Set.class, Map.class);
+        method.setAccessible(true);
+        return method.invoke(null, detection, fixture.boundary.positions(),
+            Collections.<ProjectedNodeKey>emptySet(),
+            Collections.<ProjectedNodeKey, List<EnclosureHullKey>>emptyMap());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<?> selectedFamilies(final Object generation) throws Exception {
+        final java.lang.reflect.Field field = generation.getClass().getDeclaredField("selectedFamilies");
+        field.setAccessible(true);
+        return (List<?>) field.get(generation);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Object> familyCandidates(final Object family) {
+        try {
+            final java.lang.reflect.Field field = family.getClass().getDeclaredField("candidates");
+            field.setAccessible(true);
+            return (List<Object>) field.get(family);
+        }
+        catch (final IllegalAccessException exception) {
+            throw new AssertionError(exception);
+        }
+        catch (final NoSuchFieldException exception) {
+            throw new AssertionError(exception);
+        }
+    }
+
+    private static Object selectedFamilyConflict(final Object family) {
+        try {
+            final java.lang.reflect.Field field = family.getClass().getDeclaredField("conflict");
+            field.setAccessible(true);
+            return field.get(family);
+        }
+        catch (final IllegalAccessException exception) {
+            throw new AssertionError(exception);
+        }
+        catch (final NoSuchFieldException exception) {
+            throw new AssertionError(exception);
+        }
+    }
+
+    private static List<?> expandedCandidates(final Fixture fixture, final List<?> selectedFamilies)
+            throws Exception {
+        final java.lang.reflect.Method method = EdgeConflictCorrection.class.getDeclaredMethod(
+            "expandSelectedFamiliesByRing", List.class, LayoutPositions.class, Set.class);
+        method.setAccessible(true);
+        return (List<?>) method.invoke(null, selectedFamilies, fixture.boundary.positions(),
+            Collections.<ProjectedNodeKey>emptySet());
+    }
+
+    private static List<Object> ringCandidates(final Fixture fixture, final Object conflict,
+            final int ring) throws Exception {
+        final java.lang.reflect.Method method = EdgeConflictCorrection.class.getDeclaredMethod(
+            "addEdgeOverNodeCandidatesAtRing", List.class,
+            conflict.getClass(), LayoutPositions.class, Set.class, int.class);
+        method.setAccessible(true);
+        final List<Object> candidates = new ArrayList<Object>();
+        method.invoke(null, candidates, conflict, fixture.boundary.positions(),
+            Collections.<ProjectedNodeKey>emptySet(), Integer.valueOf(ring));
+        return candidates;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<ProjectedNodeKey, LayoutPoint> candidateFromCentres(final Object candidate) {
+        try {
+            final java.lang.reflect.Field field = candidate.getClass().getDeclaredField("fromCentres");
+            field.setAccessible(true);
+            return (Map<ProjectedNodeKey, LayoutPoint>) field.get(candidate);
+        }
+        catch (final IllegalAccessException exception) {
+            throw new AssertionError(exception);
+        }
+        catch (final NoSuchFieldException exception) {
+            throw new AssertionError(exception);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<ProjectedNodeKey, LayoutPoint> candidateToCentres(final Object candidate) {
+        try {
+            final java.lang.reflect.Field field = candidate.getClass().getDeclaredField("toCentres");
+            field.setAccessible(true);
+            return (Map<ProjectedNodeKey, LayoutPoint>) field.get(candidate);
+        }
+        catch (final IllegalAccessException exception) {
+            throw new AssertionError(exception);
+        }
+        catch (final NoSuchFieldException exception) {
+            throw new AssertionError(exception);
+        }
     }
 
     @Test
