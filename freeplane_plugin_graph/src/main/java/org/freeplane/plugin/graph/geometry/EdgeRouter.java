@@ -315,6 +315,27 @@ public final class EdgeRouter {
         return 2.0 * Math.sqrt(1.0 / 9.0 + magnitude * magnitude) + 1.0 / 3.0;
     }
 
+    private static double controlPositionRatio(final double controlFraction,
+            final double offsetFraction) {
+        final double slope = 1.0 - 2.0 * controlFraction;
+        final double squaredOffset = offsetFraction * offsetFraction;
+        final double a = slope * slope + 4.0 * squaredOffset;
+        final double b = 2.0 * controlFraction * slope - 4.0 * squaredOffset;
+        final double c = controlFraction * controlFraction + squaredOffset;
+        return 2.0 * (controlRatioPrimitive(1.0, a, b, c)
+            - controlRatioPrimitive(0.0, a, b, c));
+    }
+
+    private static double controlRatioPrimitive(final double t, final double a,
+            final double b, final double c) {
+        final double rootA = Math.sqrt(a);
+        final double root = Math.sqrt(a * t * t + b * t + c);
+        final double linear = 2.0 * a * t + b;
+        return linear * root / (4.0 * a)
+            + (4.0 * a * c - b * b) / (8.0 * a * rootA)
+                * Math.log(2.0 * rootA * root + linear);
+    }
+
     private static EdgePath bowPath(final Resolved current, final LayoutPoint normal, final double offset,
             final GraphGeometry geometry) {
         final LayoutPoint midpoint = LayoutPoint.of(

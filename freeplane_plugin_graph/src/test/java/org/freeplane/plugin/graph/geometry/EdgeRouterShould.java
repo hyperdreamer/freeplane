@@ -2,18 +2,48 @@ package org.freeplane.plugin.graph.geometry;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.awt.Font;
+import java.awt.font.FontRenderContext;
+import java.awt.geom.AffineTransform;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
+import org.freeplane.plugin.graph.performance.SettledReferenceFixture;
 import org.freeplane.plugin.graph.projection.CanonicalKeys;
+import org.freeplane.plugin.graph.projection.GraphProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEdgeKey;
+import org.freeplane.plugin.graph.projection.ProjectedEndpointVisibility;
 import org.junit.Test;
 
 public class EdgeRouterShould {
+    @Test
+    public void computesTheControlPositionRatioTable() throws Exception {
+        final java.lang.reflect.Method method = EdgeRouter.class.getDeclaredMethod(
+            "controlPositionRatio", double.class, double.class);
+        method.setAccessible(true);
+        final double[] controls = {0.25, 0.75, 1.0 / 3.0, 2.0 / 3.0};
+        final double[] offsets = {0.50, -0.50, 0.30, -0.30, 0.15, -0.15};
+        final double[][] expected = {
+            {1.159854311690731, 1.064241004799091, 1.017221360974041},
+            {1.159854311690841, 1.064241004799023, 1.017221360974069},
+            {1.153020461743610, 1.060106539650193, 1.015781166936747},
+            {1.153020461743631, 1.060106539650204, 1.015781166936771}
+        };
+        for (int row = 0; row < controls.length; row++) {
+            for (int column = 0; column < offsets.length; column++) {
+                final double actual = ((Double) method.invoke(null,
+                    controls[row], offsets[column])).doubleValue();
+                assertThat(actual).isCloseTo(expected[row][column / 2],
+                    org.assertj.core.data.Offset.offset(1e-9));
+                assertThat(actual).isLessThan(1.25);
+            }
+        }
+    }
+
     @Test
     public void exposeEdgePathsInCanonicalEdgeOrder() {
         final ProjectedEdgeKey first = EdgeRouterFixture.exitEdge("a", "b");
@@ -424,5 +454,57 @@ public class EdgeRouterShould {
             }
         }
         return new ArrayList<String>(crossings);
+    }
+
+    private static String residualRoutePins() {
+        final StringBuilder output = new StringBuilder();
+        appendPathPins(output, "laterChordBow", route(EdgeRouterFixture.laterChordBow()));
+        appendPathPins(output, "doglegAccepting", route(EdgeRouterFixture.doglegAccepting()));
+        appendPathPins(output, "tightFan", route(EdgeRouterFixture.tightFan()));
+        appendPathPins(output, "reportedConvexQuad", route(EdgeRouterFixture.reportedConvexQuad()));
+        appendPathPins(output, "cellCornerFan", route(EdgeRouterFixture.cellCornerFan()));
+        appendPathPins(output, "closeParallelPaths", route(EdgeRouterFixture.closeParallelPaths()));
+
+        final SettledReferenceFixture settled = SettledReferenceFixture.load();
+        final GraphProjection projection = settled.projection();
+        final LayoutPositions positions = settled.positions();
+        final AwtGeometryTextMetrics metrics = new AwtGeometryTextMetrics(
+            new Font("Dialog", Font.PLAIN, 12),
+            new FontRenderContext(new AffineTransform(), false, false));
+        final GraphGeometry geometry = new GraphGeometryEngine().computeHulls(
+            projection, positions, metrics);
+        final Set<org.freeplane.plugin.graph.projection.ProjectedEndpointKey> visibleEndpoints =
+            ProjectedEndpointVisibility.visibleEndpoints(projection.nodes(), projection.enclosures());
+        appendPathPins(output, "settled-reference", new EdgeRouter().route(projection, positions,
+            geometry, visibleEndpoints));
+        return output.toString();
+    }
+
+    private static EdgePaths route(final EdgeRouterFixture fixture) {
+        return new EdgeRouter().route(fixture.projection, fixture.positions,
+            fixture.geometry, fixture.visibleEndpoints);
+    }
+
+    private static void appendPathPins(final StringBuilder output, final String name,
+            final EdgePaths paths) {
+        output.append(name).append('\n');
+        for (final Map.Entry<ProjectedEdgeKey, EdgePath> entry : paths.byEdge().entrySet()) {
+            final EdgePath path = entry.getValue();
+            output.append(CanonicalKeys.edge(entry.getKey())).append('|')
+                .append(path.shape()).append('|').append(Double.toHexString(path.length()));
+            for (final List<LayoutPoint> points : Arrays.asList(
+                    path.definingPoints(), path.samples())) {
+                output.append('|');
+                for (final LayoutPoint point : points) {
+                    output.append(Double.toHexString(point.x())).append(',')
+                        .append(Double.toHexString(point.y())).append(';');
+                }
+            }
+            output.append('\n');
+        }
+        output.append("classes=").append(paths.diagnostics().edgesStraight()).append(',')
+            .append(paths.diagnostics().edgesBow()).append(',')
+            .append(paths.diagnostics().edgesDogleg()).append(',')
+            .append(paths.diagnostics().edgesFallback()).append('\n');
     }
 }
