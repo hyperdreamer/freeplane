@@ -402,6 +402,33 @@ public class EdgeConflictCorrectionShould {
     }
 
     @Test
+    public void stopsStage1AtTheRemainingVerificationAllowance() {
+        final Fixture fixture = fullyBlockedFixture();
+        final ProjectedEdgeKey edgeKey = fixture.projection.edges().get(0).key();
+        final ProjectedNodeKey obstructing = fixture.key(2);
+        final String initialConflict = CanonicalKeys.edgeNodePair(edgeKey, obstructing);
+        final EdgeConflictCorrection correction = new EdgeConflictCorrection();
+        final EdgeConflictResult result = correction.apply(fixture.projection,
+            fixture.boundary.positions(), METRICS, Collections.<PinProjection>emptyList(),
+            seedVerificationsAtDetection(correction, fixture, 57), fixture.boundary);
+
+        assertThat(result.diagnostics().verifications()).isEqualTo(64);
+        assertThat(result.diagnostics().verificationBudgetExhausted()).isTrue();
+        assertThat(result.diagnostics().detectionTruncated()).isFalse();
+        assertThat(result.diagnostics().rounds()).isZero();
+        assertThat(result.diagnostics().repairsApplied()).isEmpty();
+        assertThat(result.diagnostics().conflictsResidual()).containsExactly(initialConflict);
+        assertThat(result.diagnostics().crossingsDetected()).isZero();
+        assertThat(result.diagnostics().edgeOverNodeDetected()).isEqualTo(1);
+        assertThat(result.diagnostics().edgeOverNodeResolved()).isZero();
+        assertThat(result.appliedDisplacements()).isEmpty();
+        assertThat(result.positions()).isEqualTo(fixture.boundary.positions());
+        assertThat(result.positions().anchors()).isEqualTo(fixture.boundary.positions().anchors());
+        assertThat(result.boundaryDiagnostics()).isSameAs(fixture.boundary.diagnostics());
+        assertThat(result.timings().rebuildNanos()).isZero();
+    }
+
+    @Test
     public void keepsAResidualWhenEveryLocalAlternativeBreaksTheGap() {
         final Fixture fixture = fullyBlockedFixture();
         final ProjectedEdgeKey edgeKey = fixture.projection.edges().get(0).key();
@@ -1407,6 +1434,7 @@ public class EdgeConflictCorrectionShould {
         // its terminal rebuild (34 work units in total). Seeding 65,536, 65,535 or 65,525 leaves
         // 0 or 1 units, so the hull stage stops and the pre-existing residual pair survives.
         final A3SubsetFixture fixture = preExistingSiblingResidualFixture(0.0, 30.0, 100.0);
+        assertThat(fixture.projection.generation()).isEqualTo(10L);
         final String residualPair = CanonicalKeys.hullPair(fixture.aHull, fixture.cHull);
         assertThat(fixture.boundary.diagnostics().residualHullPairs()).containsExactly(residualPair);
         assertThat(fixture.boundary.nodeResidualViolations()).isZero();
@@ -1450,6 +1478,12 @@ public class EdgeConflictCorrectionShould {
         assertThat(control.diagnostics().verificationWork()).isEqualTo(65_535L);
         assertThat(control.diagnostics().verificationBudgetExhausted()).isFalse();
         assertThat(control.diagnostics().detectionTruncated()).isFalse();
+        assertThat(control.diagnostics().rounds()).isEqualTo(1);
+        assertThat(control.diagnostics().conflictsResidual()).isEmpty();
+        assertThat(control.diagnostics().edgeOverNodeResolved()).isEqualTo(1);
+        assertThat(control.positions().nodes().get(fixture.aKey)).isEqualTo(fixture.unsafeTarget);
+        assertThat(control.appliedDisplacements()).hasSize(1);
+        assertThat(control.nodeResidualViolations()).isZero();
         assertThat(control.boundaryDiagnostics()).isNotSameAs(fixture.boundary.diagnostics());
         assertThat(control.boundaryDiagnostics().residualHullPairs()).containsExactly(residualPair);
         assertThat(control.timings().rebuildNanos()).isGreaterThanOrEqualTo(0L);
