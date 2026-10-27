@@ -187,6 +187,34 @@ public class PerformanceTripwiresShould {
     }
 
     @Test
+    public void preservesSettledAndRawPerformanceModesSeparately() throws Exception {
+        assertThat(referenceDiagnostic.settledReferenceSamples()).hasSize(300);
+        for (final GraphWorkspacePerformanceDiagnostic.SettledReferenceSample sample
+                : referenceDiagnostic.settledReferenceSamples()) {
+            assertThat(sample.edgeDiagnostics().detectionTruncated()
+                || sample.edgeDiagnostics().verificationBudgetExhausted()
+                || sample.edgeDiagnostics().indexBudgetExhausted()
+                || sample.routeDiagnostics().routeBudgetExhausted()
+                || sample.routeDiagnostics().detectionTruncated())
+                .as("settled samples must never include an exhausted raw observation").isFalse();
+            assertThat(sample.routeDiagnostics().edgesStraight()).isEqualTo(21);
+            assertThat(sample.routeDiagnostics().edgesBow()).isEqualTo(1);
+            assertThat(sample.routeDiagnostics().edgesDogleg()).isZero();
+            assertThat(sample.routeDiagnostics().edgesFallback()).isZero();
+        }
+        for (final PerformanceMeasurements.Stage stage : Arrays.asList(
+                PerformanceMeasurements.Stage.EDGE_CONFLICT,
+                PerformanceMeasurements.Stage.EDGE_ROUTING)) {
+            assertThat(referenceMeasurements.measuredCount(stage)).isEqualTo(300);
+            assertThat(referenceMeasurements.discardCount(stage)).isZero();
+        }
+        assertThat(GraphWorkspacePerformanceDiagnostic.RAW_REFERENCE_MAX_FRAME_NANOS)
+            .isEqualTo(5_000_000_000L);
+        referenceFixtureStaysInsideTheStrictWorkerAndFirstFrameGates();
+        referenceFixtureStaysBoundedAndFlagVisible();
+    }
+
+    @Test
     public void rejectsAFrameWhoseRoutingExceedsTheCompleteFrameBound() throws Exception {
         final RoutingDelayClock clock = new RoutingDelayClock();
         final GraphWorkspacePerformanceDiagnostic diagnostic = new GraphWorkspacePerformanceDiagnostic(
