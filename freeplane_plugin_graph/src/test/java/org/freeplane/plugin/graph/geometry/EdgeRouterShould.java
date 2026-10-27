@@ -419,6 +419,23 @@ public class EdgeRouterShould {
     }
 
     @Test
+    public void preservesTheSettledReferenceAndNamedLadderFixtures() throws Exception {
+        final String resource = "/geometry/edge-node-crossing-residual-legacy-paths.txt";
+        final java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+        try (java.io.InputStream input = getClass().getResourceAsStream(resource)) {
+            assertThat(input).as(resource).isNotNull();
+            final byte[] buffer = new byte[8192];
+            int count;
+            while ((count = input.read(buffer)) >= 0) {
+                bytes.write(buffer, 0, count);
+            }
+        }
+        final String expected = new String(bytes.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(expected).isNotEmpty();
+        assertThat(residualRoutePins()).isEqualTo(expected);
+    }
+
+    @Test
     public void findEveryCrossingWhenAllChordsMeetAtTheSameCellCorner() {
         final EdgeRouterFixture fixture = EdgeRouterFixture.cellCornerFan();
         final EdgePaths paths = new EdgeRouter().route(fixture.projection, fixture.positions,
@@ -430,7 +447,7 @@ public class EdgeRouterShould {
     }
 
     @Test
-    public void keepClearOfAParallelPathInTheNeighbouringCell() {
+    public void keepsClearOfAParallelPathInTheNeighbouringCell() {
         final EdgeRouterFixture fixture = EdgeRouterFixture.closeParallelPaths();
         final EdgePaths paths = new EdgeRouter().route(fixture.projection, fixture.positions,
             fixture.geometry, fixture.visibleEndpoints);
