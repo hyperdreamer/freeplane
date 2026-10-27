@@ -123,6 +123,65 @@ final class EdgeRouterFixture {
             Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), radii);
     }
 
+    static EdgeRouterFixture offMidpointObstacle() {
+        final ProjectedNodeKey a = node("A");
+        final ProjectedNodeKey b = node("B");
+        final ProjectedNodeKey n = node("N");
+        final Map<ProjectedNodeKey, Double> radii = new LinkedHashMap<ProjectedNodeKey, Double>();
+        for (final ProjectedNodeKey key : Arrays.asList(a, b, n)) {
+            radii.put(key, Double.valueOf(8.0));
+        }
+        return new EdgeRouterFixture(projection(Arrays.asList(a, b, n),
+            Collections.singletonList(edge(a, b))), LayoutPositions.of(
+            points(a, -18.091, 0.0, b, 18.091, 0.0, n, -5.0455, 0.0),
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), radii);
+    }
+
+    static EdgeRouterFixture midpointOrdering() {
+        final ProjectedNodeKey a = node("A");
+        final ProjectedNodeKey b = node("B");
+        final ProjectedNodeKey n = node("N");
+        final Map<ProjectedNodeKey, Double> radii = new LinkedHashMap<ProjectedNodeKey, Double>();
+        for (final ProjectedNodeKey key : Arrays.asList(a, b, n)) {
+            radii.put(key, Double.valueOf(8.0));
+        }
+        return new EdgeRouterFixture(projection(Arrays.asList(a, b, n),
+            Collections.singletonList(edge(a, b))), LayoutPositions.of(
+            points(a, -50.0, 0.0, b, 50.0, 0.0, n, 0.0, 0.0),
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), radii);
+    }
+
+    static EdgeRouterFixture maxBendObstacle() {
+        final ProjectedNodeKey a = node("A");
+        final ProjectedNodeKey b = node("B");
+        final ProjectedNodeKey n = node("N");
+        final Map<ProjectedNodeKey, Double> radii = new LinkedHashMap<ProjectedNodeKey, Double>();
+        for (final ProjectedNodeKey key : Arrays.asList(a, b, n)) {
+            radii.put(key, Double.valueOf(8.0));
+        }
+        return new EdgeRouterFixture(projection(Arrays.asList(a, b, n),
+            Collections.singletonList(edge(a, b))), LayoutPositions.of(
+            points(a, -100.0, 0.0, b, 100.0, 0.0, n, -84.5, 0.0),
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), radii);
+    }
+
+    static EdgeRouterFixture controlPositionBarrier() {
+        final ProjectedNodeKey a = node("A");
+        final ProjectedNodeKey b = node("B");
+        final ProjectedNodeKey n = node("N");
+        final ProjectedNodeKey z0 = node("Z0");
+        final ProjectedNodeKey z1 = node("Z1");
+        final Map<ProjectedNodeKey, Double> radii = new LinkedHashMap<ProjectedNodeKey, Double>();
+        for (final ProjectedNodeKey key : Arrays.asList(a, b, n, z0, z1)) {
+            radii.put(key, Double.valueOf(8.0));
+        }
+        return new EdgeRouterFixture(projection(Arrays.asList(a, b, n, z0, z1),
+            Arrays.asList(edge(a, b), edge(z0, z1))), LayoutPositions.of(
+            points(a, -18.091, 0.0, b, 18.091, 0.0, n, -5.0455, 0.0,
+                z0, 0.0, -100.0, z1, 0.0, 100.0),
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap()), radii);
+    }
+
     /**
      * F-1 fixture: one edge whose straight chord and every live bow pass within the
      * clearance of one of two mirrored obstacle discs while the live same-side dogleg 0.30

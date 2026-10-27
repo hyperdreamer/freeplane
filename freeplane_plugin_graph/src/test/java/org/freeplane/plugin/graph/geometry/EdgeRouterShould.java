@@ -45,6 +45,110 @@ public class EdgeRouterShould {
     }
 
     @Test
+    public void routesTheMeasuredOffMidpointObstacleWithAControlPositionBow() {
+        final EdgeRouterFixture fixture = EdgeRouterFixture.offMidpointObstacle();
+        final EdgePaths paths = route(fixture);
+        final EdgePath path = paths.byEdge().get(EdgeRouterFixture.exitEdge("A", "B"));
+
+        assertThat(path.shape()).isEqualTo(EdgePath.Shape.BOW);
+        assertThat(path.control()).contains(LayoutPoint.of(-9.0455, 18.091));
+        assertThat(minimumCentreDistance(path, LayoutPoint.of(-5.0455, 0.0)))
+            .as("defining=%s samples=%s", path.definingPoints(), path.samples())
+            .isCloseTo(11.21717990714938, org.assertj.core.data.Offset.offset(1e-9));
+        assertThat(minimumCentreDistance(path, LayoutPoint.of(-5.0455, 0.0)) - 8.0)
+            .isGreaterThanOrEqualTo(EdgeRouter.EDGE_NODE_CLEARANCE - EdgeRouter.ROUTE_EPSILON);
+        assertThat(paths.diagnostics().edgesBow()).isEqualTo(1);
+        assertThat(paths.diagnostics().edgesStraight()).isZero();
+        assertThat(paths.diagnostics().edgesDogleg()).isZero();
+        assertThat(paths.diagnostics().edgesFallback()).isZero();
+    }
+
+    @Test
+    public void rejectsMovingControlPositionGroupAheadOfMidpointBows() {
+        final EdgeRouterFixture fixture = EdgeRouterFixture.midpointOrdering();
+        final EdgePaths paths = route(fixture);
+        final EdgePath path = paths.byEdge().get(EdgeRouterFixture.exitEdge("A", "B"));
+        final ProjectedEdgeKey key = EdgeRouterFixture.exitEdge("A", "B");
+        final LayoutPoint control = LayoutPoint.of(-25.0, 50.0);
+        final EdgePath legalControlBow = EdgePath.bow(
+            fixture.geometry.edgeAttachment(key.first(), control), control,
+            fixture.geometry.edgeAttachment(key.second(), control));
+
+        assertThat(path.shape()).isEqualTo(EdgePath.Shape.BOW);
+        assertThat(path.control()).contains(LayoutPoint.of(0.0, 30.0));
+        assertThat(path.definingPoints()).isEqualTo(Arrays.asList(
+            LayoutPoint.of(-0x1.591ed5fde0d95p5, 0x1.076bfcd6fbeccp2),
+            LayoutPoint.of(0.0, 30.0),
+            LayoutPoint.of(0x1.591ed5fde0d95p5, 0x1.076bfcd6fbeccp2)));
+        assertThat(path.samples()).isEqualTo(Arrays.asList(
+            LayoutPoint.of(-0x1.591ed5fde0d95p5, 0x1.076bfcd6fbeccp2),
+            LayoutPoint.of(-0x1.9e2500ca4104ep4, 0x1.8cc36f90c64b7p3),
+            LayoutPoint.of(-0x1.1418ab3180adcp3, 0x1.08a51411b53afp4),
+            LayoutPoint.of(0x1.1418ab3180adcp3, 0x1.08a51411b53afp4),
+            LayoutPoint.of(0x1.9e2500ca4104ep4, 0x1.8cc36f90c64b5p3),
+            LayoutPoint.of(0x1.591ed5fde0d95p5, 0x1.076bfcd6fbeccp2)));
+        assertThat(path.samples()).isNotEqualTo(legalControlBow.samples());
+    }
+
+    @Test
+    public void keepsTheDoglegLadderAheadOfTheControlPositionGroup() {
+        final EdgeRouterFixture fixture = EdgeRouterFixture.doglegAccepting();
+        final EdgePaths paths = route(fixture);
+        final EdgePath path = paths.byEdge().get(EdgeRouterFixture.exitEdge("ID_A", "ID_B"));
+        final List<LayoutPoint> expected = Arrays.asList(
+            LayoutPoint.of(0x1.4cfeeb46850a2p3, 0x1.2bb23a25de22bp3),
+            LayoutPoint.of(0x1.0aaaaaaaaaaabp5, 0x1.ep4),
+            LayoutPoint.of(0x1.0aaaaaaaaaaabp6, 0x1.ep4),
+            LayoutPoint.of(0x1.666022972f5ecp6, 0x1.2bb23a25de22cp3));
+
+        assertThat(path.shape()).isEqualTo(EdgePath.Shape.DOGLEG);
+        assertThat(path.definingPoints()).isEqualTo(expected);
+        assertThat(path.samples()).isEqualTo(expected);
+        assertThat(path.definingPoints()).doesNotContain(LayoutPoint.of(75.0, 50.0));
+        assertThat(paths.diagnostics().edgesDogleg()).isEqualTo(1);
+        assertThat(paths.diagnostics().edgesStraight()).isZero();
+        assertThat(paths.diagnostics().edgesBow()).isZero();
+        assertThat(paths.diagnostics().edgesFallback()).isZero();
+    }
+
+    @Test
+    public void skipsControlPositionCandidatesThatExceedMaxBend() {
+        final EdgeRouterFixture fixture = EdgeRouterFixture.maxBendObstacle();
+        final EdgePaths paths = route(fixture);
+        final EdgePath path = paths.byEdge().get(EdgeRouterFixture.exitEdge("A", "B"));
+
+        assertThat(0.50 * 200.0).isGreaterThan(EdgeRouter.MAX_BEND);
+        assertThat(path.shape()).isEqualTo(EdgePath.Shape.BOW);
+        assertThat(path.control()).contains(LayoutPoint.of(-50.0, 60.0));
+        assertThat(minimumCentreDistance(path, LayoutPoint.of(-84.5, 0.0)))
+            .isGreaterThanOrEqualTo(11.163);
+        assertThat(paths.diagnostics().edgesFallback()).isZero();
+    }
+
+    @Test
+    public void usesTheFullClearPredicateForControlPositionCandidates() {
+        final EdgeRouterFixture fixture = EdgeRouterFixture.controlPositionBarrier();
+        final EdgePaths paths = route(fixture);
+        final ProjectedEdgeKey firstKey = EdgeRouterFixture.exitEdge("A", "B");
+        final ProjectedEdgeKey secondKey = EdgeRouterFixture.exitEdge("Z0", "Z1");
+        final EdgePath first = paths.byEdge().get(firstKey);
+        final EdgePath laterStraight = EdgePath.straight(
+            fixture.geometry.edgeAttachment(secondKey.first(), LayoutPoint.of(0.0, 100.0)),
+            fixture.geometry.edgeAttachment(secondKey.second(), LayoutPoint.of(0.0, -100.0)));
+
+        assertThat(CanonicalKeys.edge(firstKey).compareTo(CanonicalKeys.edge(secondKey)))
+            .isLessThan(0);
+        assertThat(first.shape()).isEqualTo(EdgePath.Shape.STRAIGHT);
+        assertThat(paths.diagnostics().edgesFallback()).isGreaterThanOrEqualTo(1);
+        assertThat(EdgeRouter.properlyCross(first, laterStraight))
+            .as("first=%s laterStraight=%s", first.samples(), laterStraight.samples())
+            .isTrue();
+
+        final EdgePaths unbarred = route(EdgeRouterFixture.offMidpointObstacle());
+        assertThat(unbarred.byEdge().get(EdgeRouterFixture.exitEdge("A", "B")).shape())
+            .isEqualTo(EdgePath.Shape.BOW);
+    }
+    @Test
     public void exposeEdgePathsInCanonicalEdgeOrder() {
         final ProjectedEdgeKey first = EdgeRouterFixture.exitEdge("a", "b");
         final ProjectedEdgeKey second = EdgeRouterFixture.exitEdge("a", "c");
@@ -456,6 +560,23 @@ public class EdgeRouterShould {
         return new ArrayList<String>(crossings);
     }
 
+    private static double minimumCentreDistance(final EdgePath path, final LayoutPoint centre) {
+        double minimum = Double.POSITIVE_INFINITY;
+        final List<LayoutPoint> samples = path.samples();
+        for (int index = 1; index < samples.size(); index++) {
+            final LayoutPoint first = samples.get(index - 1);
+            final LayoutPoint second = samples.get(index);
+            final double dx = second.x() - first.x();
+            final double dy = second.y() - first.y();
+            final double squared = dx * dx + dy * dy;
+            final double t = squared == 0.0 ? 0.0 : Math.max(0.0, Math.min(1.0,
+                ((centre.x() - first.x()) * dx + (centre.y() - first.y()) * dy) / squared));
+            final double distance = Math.hypot(centre.x() - (first.x() + t * dx),
+                centre.y() - (first.y() + t * dy));
+            minimum = Math.min(minimum, distance);
+        }
+        return minimum;
+    }
     private static String residualRoutePins() {
         final StringBuilder output = new StringBuilder();
         appendPathPins(output, "laterChordBow", route(EdgeRouterFixture.laterChordBow()));

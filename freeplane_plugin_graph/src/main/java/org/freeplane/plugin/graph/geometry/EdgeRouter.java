@@ -64,6 +64,9 @@ public final class EdgeRouter {
      */
     private static final double[] DOGLEG_FRACTIONS = {0.15, -0.15, 0.30, -0.30, 0.50, -0.50};
 
+    private static final double[] CONTROL_FRACTIONS = {0.25, 0.75, 1.0 / 3.0, 2.0 / 3.0};
+    private static final double[] OFFSET_FRACTIONS = {0.50, -0.50, 0.30, -0.30, 0.15, -0.15};
+
     /** Below this squared length a sample segment is treated as a point. */
     private static final double SEGMENT_EPSILON = 1e-30;
     /**
@@ -171,6 +174,15 @@ public final class EdgeRouter {
                 byEdge.put(current.edge.key(), dogleg);
                 edgesDogleg++;
                 continue;
+            }
+            if (!budget.routeBudgetExhausted()) {
+                final EdgePath controlPosition = bestControlPositionRung(current, grid, geometry, budget);
+                if (controlPosition != null) {
+                    grid.publish(current.edge.key(), controlPosition);
+                    byEdge.put(current.edge.key(), controlPosition);
+                    edgesBow++;
+                    continue;
+                }
             }
             grid.publish(current.edge.key(), current.straight);
             byEdge.put(current.edge.key(), current.straight);
@@ -298,6 +310,50 @@ public final class EdgeRouter {
             }
         }
         return null;
+    }
+
+    private static EdgePath bestControlPositionRung(final Resolved current, final QueryGrid grid,
+            final GraphGeometry geometry, final RouterBudget budget) {
+        final double chordLength = distance(current.firstAnchor, current.secondAnchor);
+        if (chordLength == 0.0) {
+            return null;
+        }
+        final LayoutPoint normal = chordNormal(current.firstAnchor, current.secondAnchor);
+        for (final double controlFraction : CONTROL_FRACTIONS) {
+            for (final double offsetFraction : OFFSET_FRACTIONS) {
+                final double offset = offsetFraction * chordLength;
+                if (Math.abs(offset) > MAX_BEND) {
+                    continue;
+                }
+                if (controlPositionRatio(controlFraction, offsetFraction) > ROUTE_LENGTH_CAP) {
+                    continue;
+                }
+                final EdgePath candidate = controlPositionPath(current, normal,
+                    controlFraction, offset, geometry);
+                if (candidate == null || candidate.length() > ROUTE_LENGTH_CAP * chordLength) {
+                    continue;
+                }
+                if (clears(candidate, current.edge, grid, geometry, budget)) {
+                    return candidate;
+                }
+                if (budget.routeBudgetExhausted()) {
+                    return null;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static EdgePath controlPositionPath(final Resolved current, final LayoutPoint normal,
+            final double controlFraction, final double offset, final GraphGeometry geometry) {
+        final LayoutPoint control = LayoutPoint.of(
+            current.firstAnchor.x() + controlFraction * (current.secondAnchor.x() - current.firstAnchor.x())
+                + offset * normal.x(),
+            current.firstAnchor.y() + controlFraction * (current.secondAnchor.y() - current.firstAnchor.y())
+                + offset * normal.y());
+        final LayoutPoint start = attachment(current.edge.first(), control, geometry);
+        final LayoutPoint end = attachment(current.edge.second(), control, geometry);
+        return start == null || end == null ? null : EdgePath.bow(start, control, end);
     }
 
     /**
