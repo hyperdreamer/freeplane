@@ -1,0 +1,183 @@
+map[1] Axiomatic_Set_Theory.mm      sourceNodes=  7455 projectedNodes= 204 connectors=1445 graphGroups=11
+map[2] Point-set_Topology.mm        sourceNodes=  9025 projectedNodes= 247 connectors=1229 graphGroups=11
+map[3] Real_Anaylsis.mm             sourceNodes=  9834 projectedNodes= 150 connectors=1474 graphGroups=7
+projection: nodes=29 edges=12 enclosures=7 pins=0
+  ... step 1000
+  ... step 2000
+  ... step 3000
+  ... step 4000
+  ... step 5000
+  ... step 6000
+  ... step 7000
+  ... step 8000
+  ... step 9000
+  ... step 10000
+  ... step 11000
+  ... step 12000
+  ... step 13000
+  ... step 14000
+  ... step 15000
+  ... step 16000
+  ... step 17000
+  ... step 18000
+  ... step 19000
+  ... step 20000
+  ... step 21000
+  ... step 22000
+  ... step 23000
+  ... step 24000
+  ... step 25000
+  ... step 26000
+  ... step 27000
+  ... step 28000
+  ... step 29000
+  ... step 30000
+  ... step 31000
+settle: steps=31680 idle=false residualViolations=2
+
+=== projected discs (settled positions) ===
+  ID_1133378501                              label=Fundation / Regularity                         center=LayoutPoint{x=-54.63143034933479, y=-10.795130095117322} r=9.6 group=true
+  ID_822182441                               label=Replacement Scheme                             center=LayoutPoint{x=-46.05940339812774, y=11.19305659564415} r=8.0 group=true
+  ID_130337169                               label=Axiom of Choice                                center=LayoutPoint{x=-109.77870476862306, y=34.16592315492259} r=8.0 group=true
+  ID_1901523076                              label=Theorem                                        center=LayoutPoint{x=-87.38388732203732, y=-27.217509244361942} r=8.0 group=true
+  ID_1387156674                              label=Theorem                                        center=LayoutPoint{x=-66.02577551899776, y=-32.49302440488056} r=8.0 group=true
+  ID_297617399                               label=Theorem: Equivalence of $\leqslant$ and $...   center=LayoutPoint{x=5.170371915798461, y=50.68529876242888} r=8.0 group=true
+  ID_215702338                               label=Theorem: $ON$ is well-ordered by $\in$         center=LayoutPoint{x=56.485689262877244, y=10.361439401421466} r=8.0 group=true
+  ID_1887656421                              label=Theorem: initial segement                      center=LayoutPoint{x=33.59808422850383, y=71.10429736852588} r=8.0 group=true
+  ID_1222855984                              label=Theorem: $\bigcup\alpha\leqslant\alpha$        center=LayoutPoint{x=45.81594375338337, y=7.481339853870182} r=8.0 group=true
+  ID_1732260180                              label=Theorem                                        center=LayoutPoint{x=24.248191392091663, y=-14.642199797195394} r=8.0 group=true
+  ID_1271861869                              label=Theorem                                        center=LayoutPoint{x=70.59655387849335, y=-41.83475750415676} r=8.0 group=true
+  ID_8832923                                 label=synthetic basis                                center=LayoutPoint{x=-477.8761209881029, y=-19.091790381644206} r=8.0 group=true
+  ID_379163670                               label=analytic subbasis                              center=LayoutPoint{x=-486.27616706368536, y=35.44525564689242} r=8.0 group=true
+  ID_1007737944                              label=Theorem                                        center=LayoutPoint{x=-518.3836078081735, y=63.42613153475925} r=8.0 group=true
+  ID_1121122434                              label=Theorem: Comparison between Topologies         center=LayoutPoint{x=-562.3003509989521, y=67.60791151181674} r=8.0 group=true
+  ID_845954544                               label=Theorem                                        center=LayoutPoint{x=-606.518567308029, y=36.799601592359} r=8.0 group=true
+  ID_626846666                               label=Theorem                                        center=LayoutPoint{x=-617.5486121645233, y=10.884149201227896} r=8.0 group=true
+  ID_801357044                               label=Theorem                                        center=LayoutPoint{x=-618.2426080060419, y=-11.104901932733183} r=8.0 group=true
+  ID_675241169                               label=Theorem I                                      center=LayoutPoint{x=-603.6791782112552, y=-44.75961661220423} r=8.0 group=true
+  ID_192579155                               label=Theorem II                                     center=LayoutPoint{x=-575.3807228702133, y=-67.19826456305303} r=8.0 group=true
+  ID_1955681225                              label=Theorem                                        center=LayoutPoint{x=-533.5576363937618, y=-72.0076772202679} r=8.0 group=true
+  ID_43431859                                label=Theorem                                        center=LayoutPoint{x=-499.035357789683, y=-54.85424666481407} r=8.0 group=true
+  ID_295118693                               label=Lemma II                                       center=LayoutPoint{x=521.0699084297897, y=45.95746638887882} r=8.0 group=true
+  ID_1721568649                              label=Theorem                                        center=LayoutPoint{x=491.0973514588853, y=66.29260073775711} r=8.0 group=true
+  ID_309040602                               label=Theorem                                        center=LayoutPoint{x=435.08629536026893, y=-2.7308823842737313} r=10.53594000115385 group=true
+  ID_1165913806                              label=Theorem                                        center=LayoutPoint{x=430.3474107326937, y=35.49112537430581} r=8.0 group=true
+  ID_1763143138                              label=Theorem                                        center=LayoutPoint{x=444.55635539983473, y=-35.72925345335292} r=9.6 group=true
+  ID_1437543342                              label=Corllary                                       center=LayoutPoint{x=469.8388971274703, y=-26.030134437095708} r=8.0 group=true
+  ID_792798100                               label=Theorem                                        center=LayoutPoint{x=486.9386872770857, y=-39.87199763679236} r=8.0 group=true
+
+=== projected edges ===
+  ProjectedEdgeKey{first=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000001, kind=node}, second=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000001, kind=node}}  ID_1133378501[Fundation / Regularity] -> ID_1387156674[Theorem]
+  ProjectedEdgeKey{first=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000001, kind=node}, second=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000001, kind=node}}  ID_1133378501[Fundation / Regularity] -> ID_1901523076[Theorem]
+  ProjectedEdgeKey{first=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000001, kind=node}, second=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000001, kind=node}}  ID_1222855984[Theorem: $\bigcup\alpha\leqslant\alpha$] -> ID_297617399[Theorem: Equivalence of $\leqslant$ and $...]
+  ProjectedEdgeKey{first=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000001, kind=node}, second=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000001, kind=node}}  ID_1887656421[Theorem: initial segement] -> ID_215702338[Theorem: $ON$ is well-ordered by $\in$]
+  ProjectedEdgeKey{first=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000002, kind=node}, second=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000002, kind=node}}  ID_192579155[Theorem II] -> ID_675241169[Theorem I]
+  ProjectedEdgeKey{first=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000002, kind=node}, second=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000002, kind=node}}  ID_626846666[Theorem] -> ID_845954544[Theorem]
+  ProjectedEdgeKey{first=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000003, kind=node}, second=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000003, kind=node}}  ID_1165913806[Theorem] -> ID_309040602[Theorem]
+  ProjectedEdgeKey{first=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000003, kind=node}, second=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000003, kind=node}}  ID_1437543342[Corllary] -> ID_1763143138[Theorem]
+  ProjectedEdgeKey{first=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000003, kind=node}, second=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000003, kind=node}}  ID_1437543342[Corllary] -> ID_309040602[Theorem]
+  ProjectedEdgeKey{first=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000003, kind=node}, second=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000003, kind=node}}  ID_1721568649[Theorem] -> ID_295118693[Lemma II]
+  ProjectedEdgeKey{first=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000003, kind=node}, second=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000003, kind=node}}  ID_1763143138[Theorem] -> ID_309040602[Theorem]
+  ProjectedEdgeKey{first=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000003, kind=node}, second=ProjectedEndpointKey{mapReferenceId=00000000-0000-0000-0000-000000000003, kind=node}}  ID_1763143138[Theorem] -> ID_792798100[Theorem]
+
+=== EdgeConflictCorrection (node relocation) on the settled frame ===
+  conflictsDetected=3 (crossings=1 edgeOverNode=2)
+  crossingsResolved=1 edgeOverNodeResolved=2 residual=0
+  rounds=3 verifications=8 repairs=6
+  detectionTruncated=false indexBudgetExhausted=false verificationBudgetExhausted=false
+  repair MIRROR batch=0 node=ID_1222855984 move=(18.989,-17.249) |d|=25.653
+  repair MIRROR batch=0 node=ID_1887656421 move=(-13.700,43.995) |d|=46.079
+  repair MIRROR batch=0 node=ID_297617399 move=(-36.135,32.824) |d|=48.818
+  repair MIRROR batch=0 node=ID_215702338 move=(8.752,-28.105) |d|=29.436
+  repair SWAP batch=1 node=ID_1887656421 move=(28.428,20.419) |d|=35.001
+  repair SWAP batch=1 node=ID_297617399 move=(-28.428,-20.419) |d|=35.001
+  repair TRANSLATION batch=2 node=ID_1222855984 move=(-2.902,-1.094) |d|=3.101
+  indexInsertedItems=1009 indexPairChecks=283 verificationWork=3718 subdivisions=0
+
+=== EdgeRouter on the settled (post-relocation) frame ===
+  straights=12 bows=0 doglegs=0 fallbacks=0
+  routeBudgetExhausted=false detectionTruncated=false obstacleChecks=19 pairChecks=4 indexItems=978
+
+=== geometry of the reported edge ===
+  chord length between attachment points = 24.508 wu
+  required clearance = r + 3 = 11 wu; max bow apex = 0.25*L = 6.127 wu; max dogleg offset = 0.30*L = 7.352 wu
+  disc ID_822182441 r=8.00  perpOffset=2.634  distToFirstAnchor=23.600  distToSecondAnchor=48.033  required=11.000  routable=false
+  disc ID_1901523076 r=8.00  perpOffset=21.362  distToFirstAnchor=36.639  distToSecondAnchor=22.000  required=11.000  routable=true
+  disc ID_297617399 r=8.00  perpOffset=24.361  distToFirstAnchor=85.768  distToSecondAnchor=109.488  required=11.000  routable=true
+  disc ID_1887656421 r=8.00  perpOffset=40.036  distToFirstAnchor=120.383  distToSecondAnchor=143.727  required=11.000  routable=true
+  chord length between attachment points = 36.639 wu
+  required clearance = r + 3 = 11 wu; max bow apex = 0.25*L = 9.160 wu; max dogleg offset = 0.30*L = 10.992 wu
+  disc ID_822182441 r=8.00  perpOffset=15.814  distToFirstAnchor=23.600  distToSecondAnchor=56.419  required=11.000  routable=true
+  disc ID_1387156674 r=8.00  perpOffset=14.289  distToFirstAnchor=24.508  distToSecondAnchor=22.000  required=11.000  routable=true
+  disc ID_297617399 r=8.00  perpOffset=28.154  distToFirstAnchor=85.768  distToSecondAnchor=120.976  required=11.000  routable=true
+  disc ID_215702338 r=8.00  perpOffset=30.893  distToFirstAnchor=113.113  distToSecondAnchor=148.696  required=11.000  routable=true
+  disc ID_1887656421 r=8.00  perpOffset=33.665  distToFirstAnchor=120.383  distToSecondAnchor=155.897  required=11.000  routable=true
+  disc ID_1222855984 r=8.00  perpOffset=28.685  distToFirstAnchor=102.097  distToSecondAnchor=137.645  required=11.000  routable=true
+  disc ID_1732260180 r=8.00  perpOffset=38.794  distToFirstAnchor=78.973  distToSecondAnchor=112.338  required=11.000  routable=true
+  chord length between attachment points = 59.318 wu
+  required clearance = r + 3 = 11 wu; max bow apex = 0.25*L = 14.830 wu; max dogleg offset = 0.30*L = 17.795 wu
+  disc ID_215702338 r=8.00  perpOffset=9.745  distToFirstAnchor=11.052  distToSecondAnchor=65.263  required=11.000  routable=false
+  disc ID_1887656421 r=8.00  perpOffset=34.696  distToFirstAnchor=64.785  distToSecondAnchor=35.001  required=11.000  routable=true
+  disc ID_1732260180 r=8.00  perpOffset=30.868  distToFirstAnchor=30.897  distToSecondAnchor=68.056  required=11.000  routable=true
+  disc ID_1271861869 r=8.00  perpOffset=15.743  distToFirstAnchor=55.192  distToSecondAnchor=113.316  required=11.000  routable=true
+  chord length between attachment points = 64.912 wu
+  required clearance = r + 3 = 11 wu; max bow apex = 0.25*L = 16.228 wu; max dogleg offset = 0.30*L = 19.474 wu
+  disc ID_297617399 r=8.00  perpOffset=33.802  distToFirstAnchor=35.001  distToSecondAnchor=65.263  required=11.000  routable=true
+  disc ID_1222855984 r=8.00  perpOffset=11.000  distToFirstAnchor=64.785  distToSecondAnchor=11.052  required=11.000  routable=false
+  disc ID_1732260180 r=8.00  perpOffset=38.983  distToFirstAnchor=86.255  distToSecondAnchor=40.798  required=11.000  routable=true
+  disc ID_1271861869 r=8.00  perpOffset=5.200  distToFirstAnchor=118.845  distToSecondAnchor=54.070  required=11.000  routable=false
+
+=== published-path clearance audit (radius + 3 wu) ===
+  edges violating node clearance: 0 of 12
+  auditedEdges=12 auditedDiscPairs=324
+
+=== full-precision replay signatures (hexadecimal doubles) ===
+NODE n:m:00000000-0000-0000-0000-000000000001|p:ID_1133378501 centre=(-0x1.b50d2b5ae0c22p5,-0x1.5971b4ab53044p3) radius=0x1.3333333333333p3
+NODE n:m:00000000-0000-0000-0000-000000000001|p:ID_822182441 centre=(-0x1.7079a87d21d6ep5,0x1.662d85069232fp3) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000001|p:ID_130337169 centre=(-0x1.b71d64c869e6bp6,0x1.1153cf84e0555p5) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000001|p:ID_1901523076 centre=(-0x1.5d8919c215ff5p6,-0x1.b37aeaf931cbap4) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000001|p:ID_1387156674 centre=(-0x1.081a64e5cc88p6,-0x1.03f1b6c778bc2p5) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000001|p:ID_297617399 centre=(0x1.4ae75f9ba0b87p2,0x1.957b7deae4f87p5) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000001|p:ID_215702338 centre=(0x1.c3e2b10d609bep5,0x1.4b90e95d12e99p3) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000001|p:ID_1887656421 centre=(0x1.0cc8e0624d6b3p5,0x1.1c6accedeb829p6) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000001|p:ID_1222855984 centre=(0x1.6e870d84c141bp5,0x1.dece45aca891p2) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000001|p:ID_1732260180 centre=(0x1.83f8978982eb2p4,-0x1.d48ce696ce773p3) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000001|p:ID_1271861869 centre=(0x1.1a62df0519b94p6,-0x1.4ead9557a38d1p5) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000002|p:ID_8832923 centre=(-0x1.dde049770f3dcp8,-0x1.3177f930f3fcdp4) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000002|p:ID_379163670 centre=(-0x1.e646b2e27ac2dp8,0x1.1b8fe2314e192p5) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000002|p:ID_1007737944 centre=(-0x1.03311a0f874c3p9,0x1.fb68b7a66caeap5) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000002|p:ID_1121122434 centre=(-0x1.192671e6cae9p9,0x1.0e6e805af8759p6) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000002|p:ID_845954544 centre=(-0x1.2f426069de613p9,0x1.2665958508176p5) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000002|p:ID_626846666 centre=(-0x1.34c638ec64686p9,0x1.5c4af34401ddep3) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000002|p:ID_801357044 centre=(-0x1.351f0dc775d95p9,-0x1.635b5b4c4c09fp3) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000002|p:ID_675241169 centre=(-0x1.2dd6ef4fc6bfap9,-0x1.6613b1dfd752fp5) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000002|p:ID_192579155 centre=(-0x1.1fb0bb86ea33ep9,-0x1.0ccb05dd9912fp6) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000002|p:ID_1955681225 centre=(-0x1.0ac760a11d221p9,-0x1.2007dc8987e63p6) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000002|p:ID_43431859 centre=(-0x1.f3090d354658fp8,-0x1.b6d57f4680bf8p5) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000003|p:ID_295118693 centre=(0x1.0488f2c269d4bp9,0x1.6fa8e4235a07bp5) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000003|p:ID_1721568649 centre=(0x1.eb18ec0674216p8,0x1.092b9f871dcf2p6) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000003|p:ID_309040602 centre=(0x1.b3161773e626dp8,-0x1.5d8d8dd0d6ceap1) radius=0x1.51266ba5325e2p3
+NODE n:m:00000000-0000-0000-0000-000000000003|p:ID_1165913806 centre=(0x1.ae58efe8e732ep8,0x1.1bedd323e708ap5) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000003|p:ID_1763143138 centre=(0x1.bc8e6d4eb73e4p8,-0x1.1dd582d5a52abp5) radius=0x1.3333333333333p3
+NODE n:m:00000000-0000-0000-0000-000000000003|p:ID_1437543342 centre=(0x1.d5d6c1f64f318p8,-0x1.a07b6e3f5cf37p4) radius=0x1.0p3
+NODE n:m:00000000-0000-0000-0000-000000000003|p:ID_792798100 centre=(0x1.e6f04dcf34412p8,-0x1.3ef9d9e5a1b32p5) radius=0x1.0p3
+REPAIR MIRROR batch=0 node=n:m:00000000-0000-0000-0000-000000000001|p:ID_1222855984 from=(0x1.dbabcf84a549ap4,0x1.9d2cf4c0a5494p4) to=(0x1.85bebf3139f29p5,0x1.12655a51cfac9p3)
+REPAIR MIRROR batch=0 node=n:m:00000000-0000-0000-0000-000000000001|p:ID_1887656421 from=(0x1.2dec5b90cf341p4,0x1.ac2e881c0c75p2) to=(0x1.4ae75f9ba0b87p2,0x1.957b7deae4f87p5)
+REPAIR MIRROR batch=0 node=n:m:00000000-0000-0000-0000-000000000001|p:ID_297617399 from=(0x1.16eedb7252cbp6,0x1.323e6e0fb62eep5) to=(0x1.0cc8e0624d6b3p5,0x1.1c6accedeb829p6)
+REPAIR MIRROR batch=0 node=n:m:00000000-0000-0000-0000-000000000001|p:ID_215702338 from=(0x1.7ddf51304f733p5,0x1.33ba754aeb2d5p5) to=(0x1.c3e2b10d609bep5,0x1.4b90e95d12e99p3)
+REPAIR SWAP batch=1 node=n:m:00000000-0000-0000-0000-000000000001|p:ID_1887656421 from=(0x1.4ae75f9ba0b87p2,0x1.957b7deae4f87p5) to=(0x1.0cc8e0624d6b3p5,0x1.1c6accedeb829p6)
+REPAIR SWAP batch=1 node=n:m:00000000-0000-0000-0000-000000000001|p:ID_297617399 from=(0x1.0cc8e0624d6b3p5,0x1.1c6accedeb829p6) to=(0x1.4ae75f9ba0b87p2,0x1.957b7deae4f87p5)
+REPAIR TRANSLATION batch=2 node=n:m:00000000-0000-0000-0000-000000000001|p:ID_1222855984 from=(0x1.85bebf3139f29p5,0x1.12655a51cfac9p3) to=(0x1.6e870d84c141bp5,0x1.dece45aca891p2)
+PATH n:m:00000000-0000-0000-0000-000000000001|p:ID_1133378501~n:m:00000000-0000-0000-0000-000000000001|p:ID_1387156674 shape=STRAIGHT defining=[(-0x1.d8c20800e6d16p5,-0x1.34b62a9af73d2p4), (-0x1.f27367413eadfp5,-0x1.9690555530b1cp4)] samples=[(-0x1.d8c20800e6d16p5,-0x1.34b62a9af73d2p4), (-0x1.f27367413eadfp5,-0x1.9690555530b1cp4)] minimumSurfaceClearance=0x1.1247fe1ea2fc2p4
+PATH n:m:00000000-0000-0000-0000-000000000001|p:ID_1133378501~n:m:00000000-0000-0000-0000-000000000001|p:ID_1901523076 shape=STRAIGHT defining=[(-0x1.f9b46808abab2p5,-0x1.e3233d34fc928p3), (-0x1.40ee15cf01739p6,-0x1.7a1b9cbfd5d06p4)] samples=[(-0x1.f9b46808abab2p5,-0x1.e3233d34fc928p3), (-0x1.40ee15cf01739p6,-0x1.7a1b9cbfd5d06p4)] minimumSurfaceClearance=0x1.927fea3b564a4p2
+PATH n:m:00000000-0000-0000-0000-000000000001|p:ID_1222855984~n:m:00000000-0000-0000-0000-000000000001|p:ID_297617399 shape=STRAIGHT defining=[(0x1.42ac8643350b5p5,0x1.a9dbcfad4fa7bp3), (0x1.54ddccd40135cp3,0x1.66de52b52620ap5)] samples=[(0x1.42ac8643350b5p5,0x1.a9dbcfad4fa7bp3), (0x1.54ddccd40135cp3,0x1.66de52b52620ap5)] minimumSurfaceClearance=0x1.0d609341ad8b2p3
+PATH n:m:00000000-0000-0000-0000-000000000001|p:ID_1887656421~n:m:00000000-0000-0000-0000-000000000001|p:ID_215702338 shape=STRAIGHT defining=[(0x1.2359cdaa1eb0cp5,0x1.fcf1d9be5baf4p5), (0x1.ad51c3c58f565p5,0x1.1d8ff4e980209p4)] samples=[(0x1.2359cdaa1eb0cp5,0x1.fcf1d9be5baf4p5), (0x1.ad51c3c58f565p5,0x1.1d8ff4e980209p4)] minimumSurfaceClearance=0x1.402a157e78c1ep2
+PATH n:m:00000000-0000-0000-0000-000000000002|p:ID_192579155~n:m:00000000-0000-0000-0000-000000000002|p:ID_675241169 shape=STRAIGHT defining=[(-0x1.22d31a401db74p9,-0x1.f1d27ea675dc2p5), (-0x1.2ab49096933c4p9,-0x1.8dd73ef4939cbp5)] samples=[(-0x1.22d31a401db74p9,-0x1.f1d27ea675dc2p5), (-0x1.2ab49096933c4p9,-0x1.8dd73ef4939cbp5)] minimumSurfaceClearance=0x1.1f141385fa90dp5
+PATH n:m:00000000-0000-0000-0000-000000000002|p:ID_626846666~n:m:00000000-0000-0000-0000-000000000002|p:ID_845954544 shape=STRAIGHT defining=[(-0x1.333533ce843bep9,0x1.23ec2ed922592p4), (-0x1.30d36587be8dbp9,0x1.d70475d2eec49p4)] samples=[(-0x1.333533ce843bep9,0x1.23ec2ed922592p4), (-0x1.30d36587be8dbp9,0x1.d70475d2eec49p4)] minimumSurfaceClearance=0x1.59938122471fep4
+PATH n:m:00000000-0000-0000-0000-000000000003|p:ID_1165913806~n:m:00000000-0000-0000-0000-000000000003|p:ID_309040602 shape=STRAIGHT defining=[(0x1.af54ecdd46cc3p8,0x1.b8d4a2727ea7ap4), (0x1.b1ca39a4b2b21p8,0x1.ee666b18addfp2)] samples=[(0x1.af54ecdd46cc3p8,0x1.b8d4a2727ea7ap4), (0x1.b1ca39a4b2b21p8,0x1.ee666b18addfp2)] minimumSurfaceClearance=0x1.195862c983aep5
+PATH n:m:00000000-0000-0000-0000-000000000003|p:ID_1437543342~n:m:00000000-0000-0000-0000-000000000003|p:ID_1763143138 shape=STRAIGHT defining=[(0x1.ce5ea27bee592p8,-0x1.ce542acbd6188p4), (0x1.c584f97b2b751p8,-0x1.0253781af6147p5)] samples=[(0x1.ce5ea27bee592p8,-0x1.ce542acbd6188p4), (0x1.c584f97b2b751p8,-0x1.0253781af6147p5)] minimumSurfaceClearance=0x1.2e8d29162cab9p4
+PATH n:m:00000000-0000-0000-0000-000000000003|p:ID_1437543342~n:m:00000000-0000-0000-0000-000000000003|p:ID_309040602 shape=STRAIGHT defining=[(0x1.cf31ae3836662p8,-0x1.59342121cabbep4), (0x1.bbd665bd5bf71p8,-0x1.132281988dddbp3)] samples=[(0x1.cf31ae3836662p8,-0x1.59342121cabbep4), (0x1.bbd665bd5bf71p8,-0x1.132281988dddbp3)] minimumSurfaceClearance=0x1.911f22eea8bd3p3
+PATH n:m:00000000-0000-0000-0000-000000000003|p:ID_1721568649~n:m:00000000-0000-0000-0000-000000000003|p:ID_295118693 shape=STRAIGHT defining=[(0x1.f1b7ae6b29d09p8,0x1.ee68a7eef8887p5), (0x1.013991900efd1p9,0x1.93977b429d1d8p5)] samples=[(0x1.f1b7ae6b29d09p8,0x1.ee68a7eef8887p5), (0x1.013991900efd1p9,0x1.93977b429d1d8p5)] minimumSurfaceClearance=0x1.014d1332e1af4p6
+PATH n:m:00000000-0000-0000-0000-000000000003|p:ID_1763143138~n:m:00000000-0000-0000-0000-000000000003|p:ID_309040602 shape=STRAIGHT defining=[(0x1.b9e87f01c1068p8,-0x1.a80714e3bc1eep4), (0x1.b5fe1dd2b07fep8,-0x1.9b75016b9856fp3)] samples=[(0x1.b9e87f01c1068p8,-0x1.a80714e3bc1eep4), (0x1.b5fe1dd2b07fep8,-0x1.9b75016b9856fp3)] minimumSurfaceClearance=0x1.3ef47db025a1p4
+PATH n:m:00000000-0000-0000-0000-000000000003|p:ID_1763143138~n:m:00000000-0000-0000-0000-000000000003|p:ID_792798100 shape=STRAIGHT defining=[(0x1.c61c5eb2f1988p8,-0x1.254e2dd3117d7p5), (0x1.defa04a658f5ep8,-0x1.38bff6127218dp5)] samples=[(0x1.c61c5eb2f1988p8,-0x1.254e2dd3117d7p5), (0x1.defa04a658f5ep8,-0x1.38bff6127218dp5)] minimumSurfaceClearance=0x1.0736332b22b4cp2
+REPLAY VERDICT: all published paths clear
