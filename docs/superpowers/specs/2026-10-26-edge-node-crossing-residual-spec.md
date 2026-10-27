@@ -1,9 +1,9 @@
 # Graph edge-node crossings - residual-fix technical specification
 
-**Task:** `2026-10-26-edge-node-crossing-residual`  
-**Status:** implementation-ready amendment, subject to the reviewer items in the final section  
-**Baseline:** `bfaed5611d170b5b0b3dc93919685bd6c54035c5` (`plugin/graph-workspace`)  
-**Runtime target:** Java 8  
+**Task:** `2026-10-26-edge-node-crossing-residual`
+**Status:** implementation-ready amendment, subject to the reviewer items in the final section
+**Baseline:** `bfaed5611d170b5b0b3dc93919685bd6c54035c5` (`plugin/graph-workspace`)
+**Runtime target:** Java 8
 **Authority:** `docs/superpowers/specs/2026-10-26-edge-node-crossing-residual-design.md` (approved by the user at the revision-3 pivot on 2026-10-26)
 
 This document specifies the only implementation permitted for the residual edge-node crossing defect. It changes the internal relocation search in `EdgeConflictCorrection` and the internal routing ladder in `EdgeRouter`. It does not change the public API, layout-force policy, pins, enclosure membership, prominence, label placement, settlement policy, strict clearance predicate, or the existing counted-budget framework. [Design §§5, 6.1-6.3, 8]

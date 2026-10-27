@@ -557,6 +557,62 @@ public class EdgeConflictCorrectionShould {
     }
 
     @Test
+    public void deduplicatesRingOneTargetsFromDistinctSelectedFamilies() throws Exception {
+        // Radius 17 clips the endpoint rims to integer coordinates, keeping collisions exact.
+        final Fixture base = fixture(1L, new String[] {"A", "B", "C", "D", "N"},
+            new double[] {-80, -150, 80, 150, -80, 150, 80, -150, 0, 0},
+            new int[][] {{0, 1}, {2, 3}}, 17.0);
+        final Fixture fixture = new Fixture(base.projection,
+            base.boundaryWithNodeRadius(base.key(4), 18.0), base.visible, base.keys());
+        final ProjectedNodeKey node = fixture.key(4);
+        final Map<ProjectedNodeKey, LayoutPoint> from =
+            Collections.singletonMap(node, LayoutPoint.of(0.0, 0.0));
+        final EdgeConflictCorrection.Detection detection = EdgeConflictCorrection.detectConflicts(
+            fixture.projection, fixture.boundary.positions(), fixture.boundary.geometry(),
+            fixture.visible);
+        assertThat(detection.edgeOverNodes()).isEqualTo(2);
+
+        final List<Object> families = new ArrayList<Object>();
+        final Object generation = generateCandidates(fixture, detection);
+        for (final Object family : selectedFamilies(generation)) {
+            if (candidateFromCentres(familyCandidates(family).get(0)).equals(from)) {
+                families.add(family);
+            }
+        }
+        assertThat(families).hasSize(2);
+        final Set<LayoutPoint> ringZeroTargets = new LinkedHashSet<LayoutPoint>();
+        for (final Object family : families) {
+            assertThat(familyCandidates(family)).hasSize(6);
+            for (final Object candidate : familyCandidates(family)) {
+                ringZeroTargets.add(candidateToCentres(candidate).get(node));
+            }
+        }
+        assertThat(ringZeroTargets).hasSize(12);
+
+        // With rho = 24, h = 45 and the symmetric 8:15:17 chord bases, each family
+        // proposes (0,-51) and (0,51) at ring 1, although their ring-0 targets differ.
+        for (final Object family : families) {
+            final List<LayoutPoint> targets = new ArrayList<LayoutPoint>();
+            for (final Object candidate : ringCandidates(fixture, selectedFamilyConflict(family), 1)) {
+                assertThat(candidateFromCentres(candidate)).isEqualTo(from);
+                targets.add(candidateToCentres(candidate).get(node));
+            }
+            assertThat(targets).hasSize(6)
+                .containsOnlyOnce(LayoutPoint.of(0.0, -51.0), LayoutPoint.of(0.0, 51.0));
+        }
+
+        final List<LayoutPoint> expandedTargets = new ArrayList<LayoutPoint>();
+        for (final Object candidate : expandedCandidates(fixture, families)) {
+            assertThat(candidateFromCentres(candidate)).isEqualTo(from);
+            assertThat(candidateToCentres(candidate)).containsOnlyKeys(node);
+            expandedTargets.add(candidateToCentres(candidate).get(node));
+        }
+        assertThat(expandedTargets).as("shared ring-1 identities must be retained only once")
+            .containsOnlyOnce(LayoutPoint.of(0.0, -51.0), LayoutPoint.of(0.0, 51.0));
+        assertThat(expandedTargets).hasSize(46);
+    }
+
+    @Test
     public void keepsTheCompleteCrowdedResidualWhenGlobalVerificationCannotFinish() {
         // E1 plus 230 isolated nodes Xi = (10000 + 100*i, 10000). Selecting the first eight C2
         // families does not avoid the two global A2 scans, and 2*C(257,2) = 65,792 already

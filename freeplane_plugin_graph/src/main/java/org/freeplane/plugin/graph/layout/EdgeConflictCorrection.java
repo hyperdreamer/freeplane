@@ -152,54 +152,54 @@ public final class EdgeConflictCorrection {
                 }
                 while (!pool.isEmpty() && !verificationStopped
                     && verifications < MAX_VERIFICATIONS_PER_FRAME) {
-                final List<Candidate> batch = greedyDisjoint(pool);
-                if (batch.isEmpty()) {
-                    break;
-                }
-                pool.removeAll(batch);
-                final List<List<Candidate>> attempts = new ArrayList<List<Candidate>>();
-                attempts.add(batch);
-                if (batch.size() > 1) {
-                    for (final Candidate candidate : batch) {
-                        attempts.add(Collections.singletonList(candidate));
+                    final List<Candidate> batch = greedyDisjoint(pool);
+                    if (batch.isEmpty()) {
+                        break;
                     }
-                }
-                for (final List<Candidate> attempt : attempts) {
-                    verifications++;
-                    final Evaluation evaluation = verify(attempt, projection, currentPositions,
-                        currentGeometry, metrics, visibleEndpoints, conflicts, boundaryInvariants,
-                        nodeHullsByKey, enclosurePaths);
-                    if (evaluation.outcome == Evaluation.Outcome.ACCEPT) {
-                        recordRepair(repairs, attempt, rounds);
-                        currentPositions = evaluation.positions;
-                        currentGeometry = evaluation.geometry;
-                        conflicts = evaluation.conflicts;
-                        rounds++;
-                        acceptedThisRound = true;
-                        if (verifications >= MAX_VERIFICATIONS_PER_FRAME) {
-                            verificationStopped = true;
+                    pool.removeAll(batch);
+                    final List<List<Candidate>> attempts = new ArrayList<List<Candidate>>();
+                    attempts.add(batch);
+                    if (batch.size() > 1) {
+                        for (final Candidate candidate : batch) {
+                            attempts.add(Collections.singletonList(candidate));
                         }
+                    }
+                    for (final List<Candidate> attempt : attempts) {
+                        verifications++;
+                        final Evaluation evaluation = verify(attempt, projection, currentPositions,
+                            currentGeometry, metrics, visibleEndpoints, conflicts, boundaryInvariants,
+                            nodeHullsByKey, enclosurePaths);
+                        if (evaluation.outcome == Evaluation.Outcome.ACCEPT) {
+                            recordRepair(repairs, attempt, rounds);
+                            currentPositions = evaluation.positions;
+                            currentGeometry = evaluation.geometry;
+                            conflicts = evaluation.conflicts;
+                            rounds++;
+                            acceptedThisRound = true;
+                            if (verifications >= MAX_VERIFICATIONS_PER_FRAME) {
+                                verificationStopped = true;
+                            }
+                            break;
+                        }
+                        if (evaluation.outcome == Evaluation.Outcome.DETECTION_STOP
+                                || verificationWorkAtCap()) {
+                            verificationStopped = true;
+                            verificationBudgetExhausted = true;
+                            reconcileStopFlags();
+                            break;
+                        }
+                        if (verifications >= MAX_VERIFICATIONS_PER_FRAME) {
+                            // Transition to the attempt cap: the rejected cap attempt leaves the
+                            // frame with conflicts and the final check below sets the flag.
+                            verificationStopped = true;
+                            break;
+                        }
+                    }
+                    if (acceptedThisRound || verificationStopped) {
                         break;
                     }
-                    if (evaluation.outcome == Evaluation.Outcome.DETECTION_STOP
-                            || verificationWorkAtCap()) {
-                        verificationStopped = true;
-                        verificationBudgetExhausted = true;
-                        reconcileStopFlags();
-                        break;
-                    }
-                    if (verifications >= MAX_VERIFICATIONS_PER_FRAME) {
-                        // Transition to the attempt cap: the rejected cap attempt leaves the
-                        // frame with conflicts and the final check below sets the flag.
-                        verificationStopped = true;
-                        break;
-                    }
-                }
-                if (acceptedThisRound || verificationStopped) {
-                    break;
                 }
             }
-        }
             if (!acceptedThisRound) {
                 break;
             }
