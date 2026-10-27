@@ -1,0 +1,35 @@
+digraph execution_graph {
+  rankdir=TB;
+  node [shape=box, style=rounded];
+  subgraph cluster_routing {
+    label="routing";
+    "T-001" [label="Task 1: Pin the control-position ratios and capture pre-extension paths\nStandard"];
+    "T-002" [label="Task 2: Append the control-position routing group and its geometry guards\nFrontier"];
+    "T-003" [label="Task 3: Close the routing preservation gate before relocation\nStandard"];
+  }
+  subgraph cluster_relocation {
+    label="relocation";
+    "T-004" [label="Task 4: Expand selected relocation families after a failed round\nFrontier"];
+    "T-005" [label="Task 5: Execute the A2/A3 construct-or-declare search\nStandard"];
+    "T-006" [label="Task 6: Pin stage-1 allowance stops and complete-state publication\nStandard"];
+  }
+  subgraph cluster_acceptance {
+    label="acceptance";
+    "T-007" [label="Task 7: Measure frozen-fixture preservation and the two performance modes\nStandard"];
+    "T-008" [label="Task 8: Replay the reported workspace and audit every published path\nStandard"];
+  }
+  "T-002" -> "T-001";
+  "T-003" -> "T-001";
+  "T-003" -> "T-002";
+  "T-004" -> "T-003";
+  "T-005" -> "T-004";
+  "T-006" -> "T-004";
+  "T-006" -> "T-005";
+  "T-007" -> "T-001";
+  "T-007" -> "T-002";
+  "T-007" -> "T-003";
+  "T-007" -> "T-004";
+  "T-007" -> "T-005";
+  "T-007" -> "T-006";
+  "T-008" -> "T-007";
+}

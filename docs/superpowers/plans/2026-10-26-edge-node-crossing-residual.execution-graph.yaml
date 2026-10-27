@@ -1,0 +1,763 @@
+source_plan:
+  path: "docs/superpowers/plans/2026-10-26-edge-node-crossing-residual.md"
+  sha256: 59f8c6f3bea1cbc2f191c4808c0ad10abd6cbacafb877150d171e7eb5097f96f
+  commit: 2b1257463326cbc283f81a7d737a38effde89e71
+  commit_oid: 2b1257463326cbc283f81a7d737a38effde89e71
+  parsed_tasks: [1, 2, 3, 4, 5, 6, 7, 8]
+  task_numbers: [1, 2, 3, 4, 5, 6, 7, 8]
+  task_count: 8
+schema_version: 1
+module: freeplane_plugin_graph
+baseline: bfaed5611d170b5b0b3dc93919685bd6c54035c5
+binding_inputs:
+  specification:
+    path: "docs/superpowers/specs/2026-10-26-edge-node-crossing-residual-spec.md"
+    commit: f823834243
+    sha256: 9b090c18a6ce254e683a8cad6352f0c06e42631ba023d63ffe18dbbf90fa8978
+  design:
+    path: "docs/superpowers/specs/2026-10-26-edge-node-crossing-residual-design.md"
+    commit: c6bfd3a0c6
+    sha256: 38097d653702024973d3d9c89c7a93cb6d233c719b4dd6b467b4735e7326e642
+validation_env:
+  JAVA_HOME: "~/.sdkman/candidates/java/21.0.8-zulu"
+  source_target: "Java 8"
+lanes:
+  - lane_id: routing
+    id: routing
+    task_ids: [T-001, T-002, T-003]
+    sequence: [1, 2, 3]
+    exclusive_resources: ["gradle-daemon", "freeplane_plugin_graph/build/"]
+  - lane_id: relocation
+    id: relocation
+    task_ids: [T-004, T-005, T-006]
+    sequence: [1, 2, 3]
+    exclusive_resources: ["gradle-daemon", "freeplane_plugin_graph/build/"]
+  - lane_id: acceptance
+    id: acceptance
+    task_ids: [T-007, T-008]
+    sequence: [1, 2]
+    exclusive_resources: ["gradle-daemon", "freeplane_plugin_graph/build/"]
+produces:
+  - task: T-001
+    id: routing.control-position
+    name: routing.control-position
+    interface: routing.control-position
+    digest: sha256:9a1cbcd49565afff9d4f51332655d5e02571bb10e4bcc2c184be895131511534
+    sha256: sha256:9a1cbcd49565afff9d4f51332655d5e02571bb10e4bcc2c184be895131511534
+    signature: "EdgeRouter.controlPositionRatio(double controlFraction,double offsetFraction): double; EdgeRouter.controlRatioPrimitive(double t,double a,double b,double c): double; Java 8 private static helpers; ratio table is evaluated without changing existing analyticRatio."
+  - task: T-001
+    id: routing.legacy-route-pins
+    name: routing.legacy-route-pins
+    interface: routing.legacy-route-pins
+    digest: sha256:f4f92f0de722e912f3d22d96d21e265b0a4842a6257bf122b233eaaa4dddbea0
+    sha256: sha256:f4f92f0de722e912f3d22d96d21e265b0a4842a6257bf122b233eaaa4dddbea0
+    signature: "EdgeRouterShould.residualRoutePins(): String; EdgeRouterShould.appendPathPins(StringBuilder output,String name,EdgePaths paths): void; UTF-8 LF resource freeplane_plugin_graph/src/test/resources/geometry/edge-node-crossing-residual-legacy-paths.txt contains canonical seven-workload defining/sample hexadecimal path pins and classifications."
+  - task: T-002
+    id: routing.control-position-group
+    name: routing.control-position-group
+    interface: routing.control-position-group
+    digest: sha256:0fd27f920e2ebbf88164d3d05f5c54af6b6611a700eec051f6685f290444a799
+    sha256: sha256:0fd27f920e2ebbf88164d3d05f5c54af6b6611a700eec051f6685f290444a799
+    signature: "EdgeRouter.bestControlPositionRung(Resolved,QueryGrid,GraphGeometry,RouterBudget): EdgePath; EdgeRouter.controlPositionPath(Resolved,LayoutPoint,double,double,GraphGeometry): EdgePath; EdgeRouterFixture.offMidpointObstacle(),midpointOrdering(),maxBendObstacle(),controlPositionBarrier(); EdgeRouterShould.minimumCentreDistance(EdgePath,LayoutPoint): double."
+  - task: T-003
+    id: routing.preservation-gate
+    name: routing.preservation-gate
+    interface: routing.preservation-gate
+    digest: sha256:4d9a6a08dc9f55c642c29b9d02e3bbc011f00e578462ed075f22da114a346d9d
+    sha256: sha256:4d9a6a08dc9f55c642c29b9d02e3bbc011f00e578462ed075f22da114a346d9d
+    signature: "EdgeRouterShould.preservesTheSettledReferenceAndNamedLadderFixtures(): void; routing preservation gate covers the immutable legacy path resource, named ladder fixtures, settled-reference.csv and route totals 21/1/0/0 before relocation."
+  - task: T-004
+    id: relocation.ring-expansion
+    name: relocation.ring-expansion
+    interface: relocation.ring-expansion
+    digest: sha256:c0015bcbaabdd499cf4d72afc13b993d3361e3d52d1248268b4b4e4a71d7e828
+    sha256: sha256:c0015bcbaabdd499cf4d72afc13b993d3361e3d52d1248268b4b4e4a71d7e828
+    signature: "EdgeConflictCorrection.PoolGeneration.generateCandidates(Detection,LayoutPositions,Set<ProjectedNodeKey>,Map<ProjectedNodeKey,List<EnclosureHullKey>>): PoolGeneration; EdgeConflictCorrection.SelectedFamily(Conflict,List<Candidate>); EdgeConflictCorrection.expandSelectedFamiliesByRing(List<SelectedFamily>,LayoutPositions,Set<ProjectedNodeKey>): List<Candidate>; EdgeConflictCorrection.addEdgeOverNodeCandidatesAtRing(List<Candidate>,Conflict,LayoutPositions,Set<ProjectedNodeKey>,int): void."
+  - task: T-005
+    id: relocation.a2-a3-evidence
+    name: relocation.a2-a3-evidence
+    interface: relocation.a2-a3-evidence
+    digest: sha256:6057b9520e6c2e1bd899c5ef590b002c8903d537a500a5f8d71066b069eddd05
+    sha256: sha256:6057b9520e6c2e1bd899c5ef590b002c8903d537a500a5f8d71066b069eddd05
+    signature: "EdgeConflictCorrectionShould.expandsTheA2RejectedFamilyWithoutReselectingIt(): void; EdgeConflictCorrectionShould.vetoesTheUnsafeSiblingTargetWithA3Subset(): void; resource freeplane_plugin_graph/src/test/resources/geometry/edge-node-crossing-residual-a2-a3-search.txt records the deterministic 59-case and 1770-target construct-or-declare result."
+  - task: T-006
+    id: relocation.stage1-publication-gate
+    name: relocation.stage1-publication-gate
+    interface: relocation.stage1-publication-gate
+    digest: sha256:e6ee418bd3f1f0555ad321c7bbf97bda6eeb0c9e3c26e081fb538dfaa355dc30
+    sha256: sha256:e6ee418bd3f1f0555ad321c7bbf97bda6eeb0c9e3c26e081fb538dfaa355dc30
+    signature: "EdgeConflictCorrectionShould.stopsStage1AtTheRemainingVerificationAllowance(): void; EdgeConflictCorrectionShould.publishesNeitherPartialRebuildRecordWhenTheTerminalScanStops(): void; stage-1 allowance, complete-state publication and no-partial-rebuild acceptance gate."
+  - task: T-007
+    id: acceptance.frozen-performance
+    name: acceptance.frozen-performance
+    interface: acceptance.frozen-performance
+    digest: sha256:f90af14301edb660758bd375cb0916d05d43572dbb5c953d403b1deba455b31b
+    sha256: sha256:f90af14301edb660758bd375cb0916d05d43572dbb5c953d403b1deba455b31b
+    signature: "PerformanceTripwiresShould.preservesSettledAndRawPerformanceModesSeparately(): void; freeplane_plugin_graph/doc/edge-node-crossing-residual/frozen-acceptance.md records frozen route, settled and raw performance evidence without changing settled-reference.csv."
+  - task: T-008
+    id: acceptance.workspace-replay
+    name: acceptance.workspace-replay
+    interface: acceptance.workspace-replay
+    digest: sha256:19e7a0e0628aea49be7d5ab190149c1e1248580ebebbdf5bd0649aa83ccbbf58
+    sha256: sha256:19e7a0e0628aea49be7d5ab190149c1e1248580ebebbdf5bd0649aa83ccbbf58
+    signature: "RealWorkspaceCrossingProbe.replay(java.nio.file.Path): ReplayEvidence; RealWorkspaceCrossingShould.replaysTheReportedWorkspaceWithoutClearanceViolations(): void; freeplane_plugin_graph/doc/edge-node-crossing-residual/workspace-acceptance.md records full-precision replay and independent path clearance evidence."
+consumes:
+  - task: T-002
+    producer_task: T-001
+    from: T-001
+    id: routing.control-position
+    name: routing.control-position
+    interface: routing.control-position
+    digest: sha256:9a1cbcd49565afff9d4f51332655d5e02571bb10e4bcc2c184be895131511534
+    sha256: sha256:9a1cbcd49565afff9d4f51332655d5e02571bb10e4bcc2c184be895131511534
+    signature: "EdgeRouter.controlPositionRatio(double controlFraction,double offsetFraction): double; EdgeRouter.controlRatioPrimitive(double t,double a,double b,double c): double; Java 8 private static helpers; ratio table is evaluated without changing existing analyticRatio."
+  - task: T-003
+    producer_task: T-001
+    from: T-001
+    id: routing.legacy-route-pins
+    name: routing.legacy-route-pins
+    interface: routing.legacy-route-pins
+    digest: sha256:f4f92f0de722e912f3d22d96d21e265b0a4842a6257bf122b233eaaa4dddbea0
+    sha256: sha256:f4f92f0de722e912f3d22d96d21e265b0a4842a6257bf122b233eaaa4dddbea0
+    signature: "EdgeRouterShould.residualRoutePins(): String; EdgeRouterShould.appendPathPins(StringBuilder output,String name,EdgePaths paths): void; UTF-8 LF resource freeplane_plugin_graph/src/test/resources/geometry/edge-node-crossing-residual-legacy-paths.txt contains canonical seven-workload defining/sample hexadecimal path pins and classifications."
+  - task: T-003
+    producer_task: T-002
+    from: T-002
+    id: routing.control-position-group
+    name: routing.control-position-group
+    interface: routing.control-position-group
+    digest: sha256:0fd27f920e2ebbf88164d3d05f5c54af6b6611a700eec051f6685f290444a799
+    sha256: sha256:0fd27f920e2ebbf88164d3d05f5c54af6b6611a700eec051f6685f290444a799
+    signature: "EdgeRouter.bestControlPositionRung(Resolved,QueryGrid,GraphGeometry,RouterBudget): EdgePath; EdgeRouter.controlPositionPath(Resolved,LayoutPoint,double,double,GraphGeometry): EdgePath; EdgeRouterFixture.offMidpointObstacle(),midpointOrdering(),maxBendObstacle(),controlPositionBarrier(); EdgeRouterShould.minimumCentreDistance(EdgePath,LayoutPoint): double."
+  - task: T-004
+    producer_task: T-003
+    from: T-003
+    id: routing.preservation-gate
+    name: routing.preservation-gate
+    interface: routing.preservation-gate
+    digest: sha256:4d9a6a08dc9f55c642c29b9d02e3bbc011f00e578462ed075f22da114a346d9d
+    sha256: sha256:4d9a6a08dc9f55c642c29b9d02e3bbc011f00e578462ed075f22da114a346d9d
+    signature: "EdgeRouterShould.preservesTheSettledReferenceAndNamedLadderFixtures(): void; routing preservation gate covers the immutable legacy path resource, named ladder fixtures, settled-reference.csv and route totals 21/1/0/0 before relocation."
+  - task: T-005
+    producer_task: T-004
+    from: T-004
+    id: relocation.ring-expansion
+    name: relocation.ring-expansion
+    interface: relocation.ring-expansion
+    digest: sha256:c0015bcbaabdd499cf4d72afc13b993d3361e3d52d1248268b4b4e4a71d7e828
+    sha256: sha256:c0015bcbaabdd499cf4d72afc13b993d3361e3d52d1248268b4b4e4a71d7e828
+    signature: "EdgeConflictCorrection.PoolGeneration.generateCandidates(Detection,LayoutPositions,Set<ProjectedNodeKey>,Map<ProjectedNodeKey,List<EnclosureHullKey>>): PoolGeneration; EdgeConflictCorrection.SelectedFamily(Conflict,List<Candidate>); EdgeConflictCorrection.expandSelectedFamiliesByRing(List<SelectedFamily>,LayoutPositions,Set<ProjectedNodeKey>): List<Candidate>; EdgeConflictCorrection.addEdgeOverNodeCandidatesAtRing(List<Candidate>,Conflict,LayoutPositions,Set<ProjectedNodeKey>,int): void."
+  - task: T-006
+    producer_task: T-004
+    from: T-004
+    id: relocation.ring-expansion
+    name: relocation.ring-expansion
+    interface: relocation.ring-expansion
+    digest: sha256:c0015bcbaabdd499cf4d72afc13b993d3361e3d52d1248268b4b4e4a71d7e828
+    sha256: sha256:c0015bcbaabdd499cf4d72afc13b993d3361e3d52d1248268b4b4e4a71d7e828
+    signature: "EdgeConflictCorrection.PoolGeneration.generateCandidates(Detection,LayoutPositions,Set<ProjectedNodeKey>,Map<ProjectedNodeKey,List<EnclosureHullKey>>): PoolGeneration; EdgeConflictCorrection.SelectedFamily(Conflict,List<Candidate>); EdgeConflictCorrection.expandSelectedFamiliesByRing(List<SelectedFamily>,LayoutPositions,Set<ProjectedNodeKey>): List<Candidate>; EdgeConflictCorrection.addEdgeOverNodeCandidatesAtRing(List<Candidate>,Conflict,LayoutPositions,Set<ProjectedNodeKey>,int): void."
+  - task: T-007
+    producer_task: T-003
+    from: T-003
+    id: routing.preservation-gate
+    name: routing.preservation-gate
+    interface: routing.preservation-gate
+    digest: sha256:4d9a6a08dc9f55c642c29b9d02e3bbc011f00e578462ed075f22da114a346d9d
+    sha256: sha256:4d9a6a08dc9f55c642c29b9d02e3bbc011f00e578462ed075f22da114a346d9d
+    signature: "EdgeRouterShould.preservesTheSettledReferenceAndNamedLadderFixtures(): void; routing preservation gate covers the immutable legacy path resource, named ladder fixtures, settled-reference.csv and route totals 21/1/0/0 before relocation."
+  - task: T-007
+    producer_task: T-004
+    from: T-004
+    id: relocation.ring-expansion
+    name: relocation.ring-expansion
+    interface: relocation.ring-expansion
+    digest: sha256:c0015bcbaabdd499cf4d72afc13b993d3361e3d52d1248268b4b4e4a71d7e828
+    sha256: sha256:c0015bcbaabdd499cf4d72afc13b993d3361e3d52d1248268b4b4e4a71d7e828
+    signature: "EdgeConflictCorrection.PoolGeneration.generateCandidates(Detection,LayoutPositions,Set<ProjectedNodeKey>,Map<ProjectedNodeKey,List<EnclosureHullKey>>): PoolGeneration; EdgeConflictCorrection.SelectedFamily(Conflict,List<Candidate>); EdgeConflictCorrection.expandSelectedFamiliesByRing(List<SelectedFamily>,LayoutPositions,Set<ProjectedNodeKey>): List<Candidate>; EdgeConflictCorrection.addEdgeOverNodeCandidatesAtRing(List<Candidate>,Conflict,LayoutPositions,Set<ProjectedNodeKey>,int): void."
+  - task: T-007
+    producer_task: T-005
+    from: T-005
+    id: relocation.a2-a3-evidence
+    name: relocation.a2-a3-evidence
+    interface: relocation.a2-a3-evidence
+    digest: sha256:6057b9520e6c2e1bd899c5ef590b002c8903d537a500a5f8d71066b069eddd05
+    sha256: sha256:6057b9520e6c2e1bd899c5ef590b002c8903d537a500a5f8d71066b069eddd05
+    signature: "EdgeConflictCorrectionShould.expandsTheA2RejectedFamilyWithoutReselectingIt(): void; EdgeConflictCorrectionShould.vetoesTheUnsafeSiblingTargetWithA3Subset(): void; resource freeplane_plugin_graph/src/test/resources/geometry/edge-node-crossing-residual-a2-a3-search.txt records the deterministic 59-case and 1770-target construct-or-declare result."
+  - task: T-007
+    producer_task: T-006
+    from: T-006
+    id: relocation.stage1-publication-gate
+    name: relocation.stage1-publication-gate
+    interface: relocation.stage1-publication-gate
+    digest: sha256:e6ee418bd3f1f0555ad321c7bbf97bda6eeb0c9e3c26e081fb538dfaa355dc30
+    sha256: sha256:e6ee418bd3f1f0555ad321c7bbf97bda6eeb0c9e3c26e081fb538dfaa355dc30
+    signature: "EdgeConflictCorrectionShould.stopsStage1AtTheRemainingVerificationAllowance(): void; EdgeConflictCorrectionShould.publishesNeitherPartialRebuildRecordWhenTheTerminalScanStops(): void; stage-1 allowance, complete-state publication and no-partial-rebuild acceptance gate."
+  - task: T-008
+    producer_task: T-007
+    from: T-007
+    id: acceptance.frozen-performance
+    name: acceptance.frozen-performance
+    interface: acceptance.frozen-performance
+    digest: sha256:f90af14301edb660758bd375cb0916d05d43572dbb5c953d403b1deba455b31b
+    sha256: sha256:f90af14301edb660758bd375cb0916d05d43572dbb5c953d403b1deba455b31b
+    signature: "PerformanceTripwiresShould.preservesSettledAndRawPerformanceModesSeparately(): void; freeplane_plugin_graph/doc/edge-node-crossing-residual/frozen-acceptance.md records frozen route, settled and raw performance evidence without changing settled-reference.csv."
+interfaces:
+  produces:
+    - id: routing.control-position
+      digest: sha256:9a1cbcd49565afff9d4f51332655d5e02571bb10e4bcc2c184be895131511534
+      signature: "EdgeRouter.controlPositionRatio(double controlFraction,double offsetFraction): double; EdgeRouter.controlRatioPrimitive(double t,double a,double b,double c): double; Java 8 private static helpers; ratio table is evaluated without changing existing analyticRatio."
+    - id: routing.legacy-route-pins
+      digest: sha256:f4f92f0de722e912f3d22d96d21e265b0a4842a6257bf122b233eaaa4dddbea0
+      signature: "EdgeRouterShould.residualRoutePins(): String; EdgeRouterShould.appendPathPins(StringBuilder output,String name,EdgePaths paths): void; UTF-8 LF resource freeplane_plugin_graph/src/test/resources/geometry/edge-node-crossing-residual-legacy-paths.txt contains canonical seven-workload defining/sample hexadecimal path pins and classifications."
+    - id: routing.control-position-group
+      digest: sha256:0fd27f920e2ebbf88164d3d05f5c54af6b6611a700eec051f6685f290444a799
+      signature: "EdgeRouter.bestControlPositionRung(Resolved,QueryGrid,GraphGeometry,RouterBudget): EdgePath; EdgeRouter.controlPositionPath(Resolved,LayoutPoint,double,double,GraphGeometry): EdgePath; EdgeRouterFixture.offMidpointObstacle(),midpointOrdering(),maxBendObstacle(),controlPositionBarrier(); EdgeRouterShould.minimumCentreDistance(EdgePath,LayoutPoint): double."
+    - id: routing.preservation-gate
+      digest: sha256:4d9a6a08dc9f55c642c29b9d02e3bbc011f00e578462ed075f22da114a346d9d
+      signature: "EdgeRouterShould.preservesTheSettledReferenceAndNamedLadderFixtures(): void; routing preservation gate covers the immutable legacy path resource, named ladder fixtures, settled-reference.csv and route totals 21/1/0/0 before relocation."
+    - id: relocation.ring-expansion
+      digest: sha256:c0015bcbaabdd499cf4d72afc13b993d3361e3d52d1248268b4b4e4a71d7e828
+      signature: "EdgeConflictCorrection.PoolGeneration.generateCandidates(Detection,LayoutPositions,Set<ProjectedNodeKey>,Map<ProjectedNodeKey,List<EnclosureHullKey>>): PoolGeneration; EdgeConflictCorrection.SelectedFamily(Conflict,List<Candidate>); EdgeConflictCorrection.expandSelectedFamiliesByRing(List<SelectedFamily>,LayoutPositions,Set<ProjectedNodeKey>): List<Candidate>; EdgeConflictCorrection.addEdgeOverNodeCandidatesAtRing(List<Candidate>,Conflict,LayoutPositions,Set<ProjectedNodeKey>,int): void."
+    - id: relocation.a2-a3-evidence
+      digest: sha256:6057b9520e6c2e1bd899c5ef590b002c8903d537a500a5f8d71066b069eddd05
+      signature: "EdgeConflictCorrectionShould.expandsTheA2RejectedFamilyWithoutReselectingIt(): void; EdgeConflictCorrectionShould.vetoesTheUnsafeSiblingTargetWithA3Subset(): void; resource freeplane_plugin_graph/src/test/resources/geometry/edge-node-crossing-residual-a2-a3-search.txt records the deterministic 59-case and 1770-target construct-or-declare result."
+    - id: relocation.stage1-publication-gate
+      digest: sha256:e6ee418bd3f1f0555ad321c7bbf97bda6eeb0c9e3c26e081fb538dfaa355dc30
+      signature: "EdgeConflictCorrectionShould.stopsStage1AtTheRemainingVerificationAllowance(): void; EdgeConflictCorrectionShould.publishesNeitherPartialRebuildRecordWhenTheTerminalScanStops(): void; stage-1 allowance, complete-state publication and no-partial-rebuild acceptance gate."
+    - id: acceptance.frozen-performance
+      digest: sha256:f90af14301edb660758bd375cb0916d05d43572dbb5c953d403b1deba455b31b
+      signature: "PerformanceTripwiresShould.preservesSettledAndRawPerformanceModesSeparately(): void; freeplane_plugin_graph/doc/edge-node-crossing-residual/frozen-acceptance.md records frozen route, settled and raw performance evidence without changing settled-reference.csv."
+    - id: acceptance.workspace-replay
+      digest: sha256:19e7a0e0628aea49be7d5ab190149c1e1248580ebebbdf5bd0649aa83ccbbf58
+      signature: "RealWorkspaceCrossingProbe.replay(java.nio.file.Path): ReplayEvidence; RealWorkspaceCrossingShould.replaysTheReportedWorkspaceWithoutClearanceViolations(): void; freeplane_plugin_graph/doc/edge-node-crossing-residual/workspace-acceptance.md records full-precision replay and independent path clearance evidence."
+  consumes:
+    - task: T-002
+      producer_task: T-001
+      interface: routing.control-position
+      digest: sha256:9a1cbcd49565afff9d4f51332655d5e02571bb10e4bcc2c184be895131511534
+      signature: "EdgeRouter.controlPositionRatio(double controlFraction,double offsetFraction): double; EdgeRouter.controlRatioPrimitive(double t,double a,double b,double c): double; Java 8 private static helpers; ratio table is evaluated without changing existing analyticRatio."
+    - task: T-003
+      producer_task: T-001
+      interface: routing.legacy-route-pins
+      digest: sha256:f4f92f0de722e912f3d22d96d21e265b0a4842a6257bf122b233eaaa4dddbea0
+      signature: "EdgeRouterShould.residualRoutePins(): String; EdgeRouterShould.appendPathPins(StringBuilder output,String name,EdgePaths paths): void; UTF-8 LF resource freeplane_plugin_graph/src/test/resources/geometry/edge-node-crossing-residual-legacy-paths.txt contains canonical seven-workload defining/sample hexadecimal path pins and classifications."
+    - task: T-003
+      producer_task: T-002
+      interface: routing.control-position-group
+      digest: sha256:0fd27f920e2ebbf88164d3d05f5c54af6b6611a700eec051f6685f290444a799
+      signature: "EdgeRouter.bestControlPositionRung(Resolved,QueryGrid,GraphGeometry,RouterBudget): EdgePath; EdgeRouter.controlPositionPath(Resolved,LayoutPoint,double,double,GraphGeometry): EdgePath; EdgeRouterFixture.offMidpointObstacle(),midpointOrdering(),maxBendObstacle(),controlPositionBarrier(); EdgeRouterShould.minimumCentreDistance(EdgePath,LayoutPoint): double."
+    - task: T-004
+      producer_task: T-003
+      interface: routing.preservation-gate
+      digest: sha256:4d9a6a08dc9f55c642c29b9d02e3bbc011f00e578462ed075f22da114a346d9d
+      signature: "EdgeRouterShould.preservesTheSettledReferenceAndNamedLadderFixtures(): void; routing preservation gate covers the immutable legacy path resource, named ladder fixtures, settled-reference.csv and route totals 21/1/0/0 before relocation."
+    - task: T-005
+      producer_task: T-004
+      interface: relocation.ring-expansion
+      digest: sha256:c0015bcbaabdd499cf4d72afc13b993d3361e3d52d1248268b4b4e4a71d7e828
+      signature: "EdgeConflictCorrection.PoolGeneration.generateCandidates(Detection,LayoutPositions,Set<ProjectedNodeKey>,Map<ProjectedNodeKey,List<EnclosureHullKey>>): PoolGeneration; EdgeConflictCorrection.SelectedFamily(Conflict,List<Candidate>); EdgeConflictCorrection.expandSelectedFamiliesByRing(List<SelectedFamily>,LayoutPositions,Set<ProjectedNodeKey>): List<Candidate>; EdgeConflictCorrection.addEdgeOverNodeCandidatesAtRing(List<Candidate>,Conflict,LayoutPositions,Set<ProjectedNodeKey>,int): void."
+    - task: T-006
+      producer_task: T-004
+      interface: relocation.ring-expansion
+      digest: sha256:c0015bcbaabdd499cf4d72afc13b993d3361e3d52d1248268b4b4e4a71d7e828
+      signature: "EdgeConflictCorrection.PoolGeneration.generateCandidates(Detection,LayoutPositions,Set<ProjectedNodeKey>,Map<ProjectedNodeKey,List<EnclosureHullKey>>): PoolGeneration; EdgeConflictCorrection.SelectedFamily(Conflict,List<Candidate>); EdgeConflictCorrection.expandSelectedFamiliesByRing(List<SelectedFamily>,LayoutPositions,Set<ProjectedNodeKey>): List<Candidate>; EdgeConflictCorrection.addEdgeOverNodeCandidatesAtRing(List<Candidate>,Conflict,LayoutPositions,Set<ProjectedNodeKey>,int): void."
+    - task: T-007
+      producer_task: T-003
+      interface: routing.preservation-gate
+      digest: sha256:4d9a6a08dc9f55c642c29b9d02e3bbc011f00e578462ed075f22da114a346d9d
+      signature: "EdgeRouterShould.preservesTheSettledReferenceAndNamedLadderFixtures(): void; routing preservation gate covers the immutable legacy path resource, named ladder fixtures, settled-reference.csv and route totals 21/1/0/0 before relocation."
+    - task: T-007
+      producer_task: T-004
+      interface: relocation.ring-expansion
+      digest: sha256:c0015bcbaabdd499cf4d72afc13b993d3361e3d52d1248268b4b4e4a71d7e828
+      signature: "EdgeConflictCorrection.PoolGeneration.generateCandidates(Detection,LayoutPositions,Set<ProjectedNodeKey>,Map<ProjectedNodeKey,List<EnclosureHullKey>>): PoolGeneration; EdgeConflictCorrection.SelectedFamily(Conflict,List<Candidate>); EdgeConflictCorrection.expandSelectedFamiliesByRing(List<SelectedFamily>,LayoutPositions,Set<ProjectedNodeKey>): List<Candidate>; EdgeConflictCorrection.addEdgeOverNodeCandidatesAtRing(List<Candidate>,Conflict,LayoutPositions,Set<ProjectedNodeKey>,int): void."
+    - task: T-007
+      producer_task: T-005
+      interface: relocation.a2-a3-evidence
+      digest: sha256:6057b9520e6c2e1bd899c5ef590b002c8903d537a500a5f8d71066b069eddd05
+      signature: "EdgeConflictCorrectionShould.expandsTheA2RejectedFamilyWithoutReselectingIt(): void; EdgeConflictCorrectionShould.vetoesTheUnsafeSiblingTargetWithA3Subset(): void; resource freeplane_plugin_graph/src/test/resources/geometry/edge-node-crossing-residual-a2-a3-search.txt records the deterministic 59-case and 1770-target construct-or-declare result."
+    - task: T-007
+      producer_task: T-006
+      interface: relocation.stage1-publication-gate
+      digest: sha256:e6ee418bd3f1f0555ad321c7bbf97bda6eeb0c9e3c26e081fb538dfaa355dc30
+      signature: "EdgeConflictCorrectionShould.stopsStage1AtTheRemainingVerificationAllowance(): void; EdgeConflictCorrectionShould.publishesNeitherPartialRebuildRecordWhenTheTerminalScanStops(): void; stage-1 allowance, complete-state publication and no-partial-rebuild acceptance gate."
+    - task: T-008
+      producer_task: T-007
+      interface: acceptance.frozen-performance
+      digest: sha256:f90af14301edb660758bd375cb0916d05d43572dbb5c953d403b1deba455b31b
+      signature: "PerformanceTripwiresShould.preservesSettledAndRawPerformanceModesSeparately(): void; freeplane_plugin_graph/doc/edge-node-crossing-residual/frozen-acceptance.md records frozen route, settled and raw performance evidence without changing settled-reference.csv."
+tasks:
+  - id: T-001
+    plan_task: 1
+    lane: routing
+    sequence: 1
+    title: "Pin the control-position ratios and capture pre-extension paths"
+    tier: "Standard"
+    implementer_tier: "Standard"
+    depends_on: []
+    owns:
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/EdgeRouter.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterShould.java"
+      - "freeplane_plugin_graph/src/test/resources/geometry/edge-node-crossing-residual-legacy-paths.txt"
+    ownership:
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/EdgeRouter.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterShould.java"
+      - "freeplane_plugin_graph/src/test/resources/geometry/edge-node-crossing-residual-legacy-paths.txt"
+    resources: []
+    exclusive_resources:
+      - "gradle-daemon"
+      - "freeplane_plugin_graph/build/"
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/EdgeRouter.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterShould.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterFixture.java"
+      - "freeplane_plugin_graph/src/test/resources/geometry/edge-node-crossing-residual-legacy-paths.txt"
+      - "freeplane_plugin_graph/src/test/resources/performance/settled-reference.csv"
+    produces:
+      - id: routing.control-position
+        name: routing.control-position
+        digest: sha256:9a1cbcd49565afff9d4f51332655d5e02571bb10e4bcc2c184be895131511534
+        signature: "EdgeRouter.controlPositionRatio(double controlFraction,double offsetFraction): double; EdgeRouter.controlRatioPrimitive(double t,double a,double b,double c): double; Java 8 private static helpers; ratio table is evaluated without changing existing analyticRatio."
+      - id: routing.legacy-route-pins
+        name: routing.legacy-route-pins
+        digest: sha256:f4f92f0de722e912f3d22d96d21e265b0a4842a6257bf122b233eaaa4dddbea0
+        signature: "EdgeRouterShould.residualRoutePins(): String; EdgeRouterShould.appendPathPins(StringBuilder output,String name,EdgePaths paths): void; UTF-8 LF resource freeplane_plugin_graph/src/test/resources/geometry/edge-node-crossing-residual-legacy-paths.txt contains canonical seven-workload defining/sample hexadecimal path pins and classifications."
+    consumes: []
+    interfaces:
+      produces:
+        - id: routing.control-position
+          digest: sha256:9a1cbcd49565afff9d4f51332655d5e02571bb10e4bcc2c184be895131511534
+          signature: "EdgeRouter.controlPositionRatio(double controlFraction,double offsetFraction): double; EdgeRouter.controlRatioPrimitive(double t,double a,double b,double c): double; Java 8 private static helpers; ratio table is evaluated without changing existing analyticRatio."
+        - id: routing.legacy-route-pins
+          digest: sha256:f4f92f0de722e912f3d22d96d21e265b0a4842a6257bf122b233eaaa4dddbea0
+          signature: "EdgeRouterShould.residualRoutePins(): String; EdgeRouterShould.appendPathPins(StringBuilder output,String name,EdgePaths paths): void; UTF-8 LF resource freeplane_plugin_graph/src/test/resources/geometry/edge-node-crossing-residual-legacy-paths.txt contains canonical seven-workload defining/sample hexadecimal path pins and classifications."
+      consumes: []
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.geometry.EdgeRouterShould"]
+        cwd: "."
+        timeout_seconds: 1800
+      - argv: ["sha256sum", "freeplane_plugin_graph/src/test/resources/geometry/edge-node-crossing-residual-legacy-paths.txt"]
+        cwd: "."
+        timeout_seconds: 60
+  - id: T-002
+    plan_task: 2
+    lane: routing
+    sequence: 2
+    title: "Append the control-position routing group and its geometry guards"
+    tier: "Frontier"
+    implementer_tier: "Frontier"
+    depends_on: ["T-001"]
+    owns:
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/EdgeRouter.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterFixture.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterShould.java"
+    ownership:
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/EdgeRouter.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterFixture.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterShould.java"
+    resources: []
+    exclusive_resources:
+      - "gradle-daemon"
+      - "freeplane_plugin_graph/build/"
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/geometry/EdgeRouter.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterShould.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterFixture.java"
+    produces:
+      - id: routing.control-position-group
+        name: routing.control-position-group
+        digest: sha256:0fd27f920e2ebbf88164d3d05f5c54af6b6611a700eec051f6685f290444a799
+        signature: "EdgeRouter.bestControlPositionRung(Resolved,QueryGrid,GraphGeometry,RouterBudget): EdgePath; EdgeRouter.controlPositionPath(Resolved,LayoutPoint,double,double,GraphGeometry): EdgePath; EdgeRouterFixture.offMidpointObstacle(),midpointOrdering(),maxBendObstacle(),controlPositionBarrier(); EdgeRouterShould.minimumCentreDistance(EdgePath,LayoutPoint): double."
+    consumes:
+      - producer_task: T-001
+        from: T-001
+        id: routing.control-position
+        name: routing.control-position
+        digest: sha256:9a1cbcd49565afff9d4f51332655d5e02571bb10e4bcc2c184be895131511534
+        signature: "EdgeRouter.controlPositionRatio(double controlFraction,double offsetFraction): double; EdgeRouter.controlRatioPrimitive(double t,double a,double b,double c): double; Java 8 private static helpers; ratio table is evaluated without changing existing analyticRatio."
+    interfaces:
+      produces:
+        - id: routing.control-position-group
+          digest: sha256:0fd27f920e2ebbf88164d3d05f5c54af6b6611a700eec051f6685f290444a799
+          signature: "EdgeRouter.bestControlPositionRung(Resolved,QueryGrid,GraphGeometry,RouterBudget): EdgePath; EdgeRouter.controlPositionPath(Resolved,LayoutPoint,double,double,GraphGeometry): EdgePath; EdgeRouterFixture.offMidpointObstacle(),midpointOrdering(),maxBendObstacle(),controlPositionBarrier(); EdgeRouterShould.minimumCentreDistance(EdgePath,LayoutPoint): double."
+      consumes:
+        - producer_task: T-001
+          from: T-001
+          id: routing.control-position
+          digest: sha256:9a1cbcd49565afff9d4f51332655d5e02571bb10e4bcc2c184be895131511534
+          signature: "EdgeRouter.controlPositionRatio(double controlFraction,double offsetFraction): double; EdgeRouter.controlRatioPrimitive(double t,double a,double b,double c): double; Java 8 private static helpers; ratio table is evaluated without changing existing analyticRatio."
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.geometry.EdgeRouterShould"]
+        cwd: "."
+        timeout_seconds: 1800
+      - argv: ["sha256sum", "freeplane_plugin_graph/src/test/resources/geometry/edge-node-crossing-residual-legacy-paths.txt"]
+        cwd: "."
+        timeout_seconds: 60
+  - id: T-003
+    plan_task: 3
+    lane: routing
+    sequence: 3
+    title: "Close the routing preservation gate before relocation"
+    tier: "Standard"
+    implementer_tier: "Standard"
+    depends_on: ["T-001", "T-002"]
+    owns:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterShould.java"
+    ownership:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterShould.java"
+    resources: []
+    exclusive_resources:
+      - "gradle-daemon"
+      - "freeplane_plugin_graph/build/"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/geometry/EdgeRouterShould.java"
+      - "freeplane_plugin_graph/src/test/resources/performance/settled-reference.csv"
+    produces:
+      - id: routing.preservation-gate
+        name: routing.preservation-gate
+        digest: sha256:4d9a6a08dc9f55c642c29b9d02e3bbc011f00e578462ed075f22da114a346d9d
+        signature: "EdgeRouterShould.preservesTheSettledReferenceAndNamedLadderFixtures(): void; routing preservation gate covers the immutable legacy path resource, named ladder fixtures, settled-reference.csv and route totals 21/1/0/0 before relocation."
+    consumes:
+      - producer_task: T-001
+        from: T-001
+        id: routing.legacy-route-pins
+        name: routing.legacy-route-pins
+        digest: sha256:f4f92f0de722e912f3d22d96d21e265b0a4842a6257bf122b233eaaa4dddbea0
+        signature: "EdgeRouterShould.residualRoutePins(): String; EdgeRouterShould.appendPathPins(StringBuilder output,String name,EdgePaths paths): void; UTF-8 LF resource freeplane_plugin_graph/src/test/resources/geometry/edge-node-crossing-residual-legacy-paths.txt contains canonical seven-workload defining/sample hexadecimal path pins and classifications."
+      - producer_task: T-002
+        from: T-002
+        id: routing.control-position-group
+        name: routing.control-position-group
+        digest: sha256:0fd27f920e2ebbf88164d3d05f5c54af6b6611a700eec051f6685f290444a799
+        signature: "EdgeRouter.bestControlPositionRung(Resolved,QueryGrid,GraphGeometry,RouterBudget): EdgePath; EdgeRouter.controlPositionPath(Resolved,LayoutPoint,double,double,GraphGeometry): EdgePath; EdgeRouterFixture.offMidpointObstacle(),midpointOrdering(),maxBendObstacle(),controlPositionBarrier(); EdgeRouterShould.minimumCentreDistance(EdgePath,LayoutPoint): double."
+    interfaces:
+      produces:
+        - id: routing.preservation-gate
+          digest: sha256:4d9a6a08dc9f55c642c29b9d02e3bbc011f00e578462ed075f22da114a346d9d
+          signature: "EdgeRouterShould.preservesTheSettledReferenceAndNamedLadderFixtures(): void; routing preservation gate covers the immutable legacy path resource, named ladder fixtures, settled-reference.csv and route totals 21/1/0/0 before relocation."
+      consumes:
+        - producer_task: T-001
+          from: T-001
+          id: routing.legacy-route-pins
+          digest: sha256:f4f92f0de722e912f3d22d96d21e265b0a4842a6257bf122b233eaaa4dddbea0
+          signature: "EdgeRouterShould.residualRoutePins(): String; EdgeRouterShould.appendPathPins(StringBuilder output,String name,EdgePaths paths): void; UTF-8 LF resource freeplane_plugin_graph/src/test/resources/geometry/edge-node-crossing-residual-legacy-paths.txt contains canonical seven-workload defining/sample hexadecimal path pins and classifications."
+        - producer_task: T-002
+          from: T-002
+          id: routing.control-position-group
+          digest: sha256:0fd27f920e2ebbf88164d3d05f5c54af6b6611a700eec051f6685f290444a799
+          signature: "EdgeRouter.bestControlPositionRung(Resolved,QueryGrid,GraphGeometry,RouterBudget): EdgePath; EdgeRouter.controlPositionPath(Resolved,LayoutPoint,double,double,GraphGeometry): EdgePath; EdgeRouterFixture.offMidpointObstacle(),midpointOrdering(),maxBendObstacle(),controlPositionBarrier(); EdgeRouterShould.minimumCentreDistance(EdgePath,LayoutPoint): double."
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.geometry.EdgeRouterShould"]
+        cwd: "."
+        timeout_seconds: 1800
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.performance.SettledReferenceFixtureShould"]
+        cwd: "."
+        timeout_seconds: 1800
+      - argv: ["gradle", ":freeplane_plugin_graph:test"]
+        cwd: "."
+        timeout_seconds: 3600
+  - id: T-004
+    plan_task: 4
+    lane: relocation
+    sequence: 1
+    title: "Expand selected relocation families after a failed round"
+    tier: "Frontier"
+    implementer_tier: "Frontier"
+    depends_on: ["T-003"]
+    owns:
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrection.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrectionShould.java"
+    ownership:
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrection.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrectionShould.java"
+    resources: []
+    exclusive_resources:
+      - "gradle-daemon"
+      - "freeplane_plugin_graph/build/"
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrection.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrectionShould.java"
+    produces:
+      - id: relocation.ring-expansion
+        name: relocation.ring-expansion
+        digest: sha256:c0015bcbaabdd499cf4d72afc13b993d3361e3d52d1248268b4b4e4a71d7e828
+        signature: "EdgeConflictCorrection.PoolGeneration.generateCandidates(Detection,LayoutPositions,Set<ProjectedNodeKey>,Map<ProjectedNodeKey,List<EnclosureHullKey>>): PoolGeneration; EdgeConflictCorrection.SelectedFamily(Conflict,List<Candidate>); EdgeConflictCorrection.expandSelectedFamiliesByRing(List<SelectedFamily>,LayoutPositions,Set<ProjectedNodeKey>): List<Candidate>; EdgeConflictCorrection.addEdgeOverNodeCandidatesAtRing(List<Candidate>,Conflict,LayoutPositions,Set<ProjectedNodeKey>,int): void."
+    consumes:
+      - producer_task: T-003
+        from: T-003
+        id: routing.preservation-gate
+        name: routing.preservation-gate
+        digest: sha256:4d9a6a08dc9f55c642c29b9d02e3bbc011f00e578462ed075f22da114a346d9d
+        signature: "EdgeRouterShould.preservesTheSettledReferenceAndNamedLadderFixtures(): void; routing preservation gate covers the immutable legacy path resource, named ladder fixtures, settled-reference.csv and route totals 21/1/0/0 before relocation."
+    interfaces:
+      produces:
+        - id: relocation.ring-expansion
+          digest: sha256:c0015bcbaabdd499cf4d72afc13b993d3361e3d52d1248268b4b4e4a71d7e828
+          signature: "EdgeConflictCorrection.PoolGeneration.generateCandidates(Detection,LayoutPositions,Set<ProjectedNodeKey>,Map<ProjectedNodeKey,List<EnclosureHullKey>>): PoolGeneration; EdgeConflictCorrection.SelectedFamily(Conflict,List<Candidate>); EdgeConflictCorrection.expandSelectedFamiliesByRing(List<SelectedFamily>,LayoutPositions,Set<ProjectedNodeKey>): List<Candidate>; EdgeConflictCorrection.addEdgeOverNodeCandidatesAtRing(List<Candidate>,Conflict,LayoutPositions,Set<ProjectedNodeKey>,int): void."
+      consumes:
+        - producer_task: T-003
+          from: T-003
+          id: routing.preservation-gate
+          digest: sha256:4d9a6a08dc9f55c642c29b9d02e3bbc011f00e578462ed075f22da114a346d9d
+          signature: "EdgeRouterShould.preservesTheSettledReferenceAndNamedLadderFixtures(): void; routing preservation gate covers the immutable legacy path resource, named ladder fixtures, settled-reference.csv and route totals 21/1/0/0 before relocation."
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould"]
+        cwd: "."
+        timeout_seconds: 1800
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.geometry.EdgeRouterShould"]
+        cwd: "."
+        timeout_seconds: 1800
+  - id: T-005
+    plan_task: 5
+    lane: relocation
+    sequence: 2
+    title: "Execute the A2/A3 construct-or-declare search"
+    tier: "Standard"
+    implementer_tier: "Standard"
+    depends_on: ["T-004"]
+    owns:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrectionShould.java"
+      - "freeplane_plugin_graph/src/test/resources/geometry/edge-node-crossing-residual-a2-a3-search.txt"
+    ownership:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrectionShould.java"
+      - "freeplane_plugin_graph/src/test/resources/geometry/edge-node-crossing-residual-a2-a3-search.txt"
+    resources: []
+    exclusive_resources:
+      - "gradle-daemon"
+      - "freeplane_plugin_graph/build/"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrectionShould.java"
+      - "freeplane_plugin_graph/src/test/resources/geometry/edge-node-crossing-residual-a2-a3-search.txt"
+    produces:
+      - id: relocation.a2-a3-evidence
+        name: relocation.a2-a3-evidence
+        digest: sha256:6057b9520e6c2e1bd899c5ef590b002c8903d537a500a5f8d71066b069eddd05
+        signature: "EdgeConflictCorrectionShould.expandsTheA2RejectedFamilyWithoutReselectingIt(): void; EdgeConflictCorrectionShould.vetoesTheUnsafeSiblingTargetWithA3Subset(): void; resource freeplane_plugin_graph/src/test/resources/geometry/edge-node-crossing-residual-a2-a3-search.txt records the deterministic 59-case and 1770-target construct-or-declare result."
+    consumes:
+      - producer_task: T-004
+        from: T-004
+        id: relocation.ring-expansion
+        name: relocation.ring-expansion
+        digest: sha256:c0015bcbaabdd499cf4d72afc13b993d3361e3d52d1248268b4b4e4a71d7e828
+        signature: "EdgeConflictCorrection.PoolGeneration.generateCandidates(Detection,LayoutPositions,Set<ProjectedNodeKey>,Map<ProjectedNodeKey,List<EnclosureHullKey>>): PoolGeneration; EdgeConflictCorrection.SelectedFamily(Conflict,List<Candidate>); EdgeConflictCorrection.expandSelectedFamiliesByRing(List<SelectedFamily>,LayoutPositions,Set<ProjectedNodeKey>): List<Candidate>; EdgeConflictCorrection.addEdgeOverNodeCandidatesAtRing(List<Candidate>,Conflict,LayoutPositions,Set<ProjectedNodeKey>,int): void."
+    interfaces:
+      produces:
+        - id: relocation.a2-a3-evidence
+          digest: sha256:6057b9520e6c2e1bd899c5ef590b002c8903d537a500a5f8d71066b069eddd05
+          signature: "EdgeConflictCorrectionShould.expandsTheA2RejectedFamilyWithoutReselectingIt(): void; EdgeConflictCorrectionShould.vetoesTheUnsafeSiblingTargetWithA3Subset(): void; resource freeplane_plugin_graph/src/test/resources/geometry/edge-node-crossing-residual-a2-a3-search.txt records the deterministic 59-case and 1770-target construct-or-declare result."
+      consumes:
+        - producer_task: T-004
+          from: T-004
+          id: relocation.ring-expansion
+          digest: sha256:c0015bcbaabdd499cf4d72afc13b993d3361e3d52d1248268b4b4e4a71d7e828
+          signature: "EdgeConflictCorrection.PoolGeneration.generateCandidates(Detection,LayoutPositions,Set<ProjectedNodeKey>,Map<ProjectedNodeKey,List<EnclosureHullKey>>): PoolGeneration; EdgeConflictCorrection.SelectedFamily(Conflict,List<Candidate>); EdgeConflictCorrection.expandSelectedFamiliesByRing(List<SelectedFamily>,LayoutPositions,Set<ProjectedNodeKey>): List<Candidate>; EdgeConflictCorrection.addEdgeOverNodeCandidatesAtRing(List<Candidate>,Conflict,LayoutPositions,Set<ProjectedNodeKey>,int): void."
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould"]
+        cwd: "."
+        timeout_seconds: 1800
+  - id: T-006
+    plan_task: 6
+    lane: relocation
+    sequence: 3
+    title: "Pin stage-1 allowance stops and complete-state publication"
+    tier: "Standard"
+    implementer_tier: "Standard"
+    depends_on: ["T-004", "T-005"]
+    owns:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrectionShould.java"
+    ownership:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrectionShould.java"
+    resources: []
+    exclusive_resources:
+      - "gradle-daemon"
+      - "freeplane_plugin_graph/build/"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/layout/EdgeConflictCorrectionShould.java"
+    produces:
+      - id: relocation.stage1-publication-gate
+        name: relocation.stage1-publication-gate
+        digest: sha256:e6ee418bd3f1f0555ad321c7bbf97bda6eeb0c9e3c26e081fb538dfaa355dc30
+        signature: "EdgeConflictCorrectionShould.stopsStage1AtTheRemainingVerificationAllowance(): void; EdgeConflictCorrectionShould.publishesNeitherPartialRebuildRecordWhenTheTerminalScanStops(): void; stage-1 allowance, complete-state publication and no-partial-rebuild acceptance gate."
+    consumes:
+      - producer_task: T-004
+        from: T-004
+        id: relocation.ring-expansion
+        name: relocation.ring-expansion
+        digest: sha256:c0015bcbaabdd499cf4d72afc13b993d3361e3d52d1248268b4b4e4a71d7e828
+        signature: "EdgeConflictCorrection.PoolGeneration.generateCandidates(Detection,LayoutPositions,Set<ProjectedNodeKey>,Map<ProjectedNodeKey,List<EnclosureHullKey>>): PoolGeneration; EdgeConflictCorrection.SelectedFamily(Conflict,List<Candidate>); EdgeConflictCorrection.expandSelectedFamiliesByRing(List<SelectedFamily>,LayoutPositions,Set<ProjectedNodeKey>): List<Candidate>; EdgeConflictCorrection.addEdgeOverNodeCandidatesAtRing(List<Candidate>,Conflict,LayoutPositions,Set<ProjectedNodeKey>,int): void."
+    interfaces:
+      produces:
+        - id: relocation.stage1-publication-gate
+          digest: sha256:e6ee418bd3f1f0555ad321c7bbf97bda6eeb0c9e3c26e081fb538dfaa355dc30
+          signature: "EdgeConflictCorrectionShould.stopsStage1AtTheRemainingVerificationAllowance(): void; EdgeConflictCorrectionShould.publishesNeitherPartialRebuildRecordWhenTheTerminalScanStops(): void; stage-1 allowance, complete-state publication and no-partial-rebuild acceptance gate."
+      consumes:
+        - producer_task: T-004
+          from: T-004
+          id: relocation.ring-expansion
+          digest: sha256:c0015bcbaabdd499cf4d72afc13b993d3361e3d52d1248268b4b4e4a71d7e828
+          signature: "EdgeConflictCorrection.PoolGeneration.generateCandidates(Detection,LayoutPositions,Set<ProjectedNodeKey>,Map<ProjectedNodeKey,List<EnclosureHullKey>>): PoolGeneration; EdgeConflictCorrection.SelectedFamily(Conflict,List<Candidate>); EdgeConflictCorrection.expandSelectedFamiliesByRing(List<SelectedFamily>,LayoutPositions,Set<ProjectedNodeKey>): List<Candidate>; EdgeConflictCorrection.addEdgeOverNodeCandidatesAtRing(List<Candidate>,Conflict,LayoutPositions,Set<ProjectedNodeKey>,int): void."
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould"]
+        cwd: "."
+        timeout_seconds: 1800
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.geometry.EdgeRouterShould"]
+        cwd: "."
+        timeout_seconds: 1800
+      - argv: ["gradle", ":freeplane_plugin_graph:test"]
+        cwd: "."
+        timeout_seconds: 3600
+  - id: T-007
+    plan_task: 7
+    lane: acceptance
+    sequence: 1
+    title: "Measure frozen-fixture preservation and the two performance modes"
+    tier: "Standard"
+    implementer_tier: "Standard"
+    depends_on: ["T-001", "T-002", "T-003", "T-004", "T-005", "T-006"]
+    owns:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/PerformanceTripwiresShould.java"
+      - "freeplane_plugin_graph/doc/edge-node-crossing-residual/frozen-acceptance.md"
+    ownership:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/PerformanceTripwiresShould.java"
+      - "freeplane_plugin_graph/doc/edge-node-crossing-residual/frozen-acceptance.md"
+    resources: []
+    exclusive_resources:
+      - "gradle-daemon"
+      - "freeplane_plugin_graph/build/"
+      - "freeplane_plugin_graph/src/test/resources/performance/settled-reference.csv"
+      - "freeplane_plugin_graph/doc/edge-node-crossing-residual/"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/performance/PerformanceTripwiresShould.java"
+    produces:
+      - id: acceptance.frozen-performance
+        name: acceptance.frozen-performance
+        digest: sha256:f90af14301edb660758bd375cb0916d05d43572dbb5c953d403b1deba455b31b
+        signature: "PerformanceTripwiresShould.preservesSettledAndRawPerformanceModesSeparately(): void; freeplane_plugin_graph/doc/edge-node-crossing-residual/frozen-acceptance.md records frozen route, settled and raw performance evidence without changing settled-reference.csv."
+    consumes:
+      - producer_task: T-003
+        from: T-003
+        id: routing.preservation-gate
+        name: routing.preservation-gate
+        digest: sha256:4d9a6a08dc9f55c642c29b9d02e3bbc011f00e578462ed075f22da114a346d9d
+        signature: "EdgeRouterShould.preservesTheSettledReferenceAndNamedLadderFixtures(): void; routing preservation gate covers the immutable legacy path resource, named ladder fixtures, settled-reference.csv and route totals 21/1/0/0 before relocation."
+      - producer_task: T-004
+        from: T-004
+        id: relocation.ring-expansion
+        name: relocation.ring-expansion
+        digest: sha256:c0015bcbaabdd499cf4d72afc13b993d3361e3d52d1248268b4b4e4a71d7e828
+        signature: "EdgeConflictCorrection.PoolGeneration.generateCandidates(Detection,LayoutPositions,Set<ProjectedNodeKey>,Map<ProjectedNodeKey,List<EnclosureHullKey>>): PoolGeneration; EdgeConflictCorrection.SelectedFamily(Conflict,List<Candidate>); EdgeConflictCorrection.expandSelectedFamiliesByRing(List<SelectedFamily>,LayoutPositions,Set<ProjectedNodeKey>): List<Candidate>; EdgeConflictCorrection.addEdgeOverNodeCandidatesAtRing(List<Candidate>,Conflict,LayoutPositions,Set<ProjectedNodeKey>,int): void."
+      - producer_task: T-005
+        from: T-005
+        id: relocation.a2-a3-evidence
+        name: relocation.a2-a3-evidence
+        digest: sha256:6057b9520e6c2e1bd899c5ef590b002c8903d537a500a5f8d71066b069eddd05
+        signature: "EdgeConflictCorrectionShould.expandsTheA2RejectedFamilyWithoutReselectingIt(): void; EdgeConflictCorrectionShould.vetoesTheUnsafeSiblingTargetWithA3Subset(): void; resource freeplane_plugin_graph/src/test/resources/geometry/edge-node-crossing-residual-a2-a3-search.txt records the deterministic 59-case and 1770-target construct-or-declare result."
+      - producer_task: T-006
+        from: T-006
+        id: relocation.stage1-publication-gate
+        name: relocation.stage1-publication-gate
+        digest: sha256:e6ee418bd3f1f0555ad321c7bbf97bda6eeb0c9e3c26e081fb538dfaa355dc30
+        signature: "EdgeConflictCorrectionShould.stopsStage1AtTheRemainingVerificationAllowance(): void; EdgeConflictCorrectionShould.publishesNeitherPartialRebuildRecordWhenTheTerminalScanStops(): void; stage-1 allowance, complete-state publication and no-partial-rebuild acceptance gate."
+    interfaces:
+      produces:
+        - id: acceptance.frozen-performance
+          digest: sha256:f90af14301edb660758bd375cb0916d05d43572dbb5c953d403b1deba455b31b
+          signature: "PerformanceTripwiresShould.preservesSettledAndRawPerformanceModesSeparately(): void; freeplane_plugin_graph/doc/edge-node-crossing-residual/frozen-acceptance.md records frozen route, settled and raw performance evidence without changing settled-reference.csv."
+      consumes:
+        - producer_task: T-003
+          from: T-003
+          id: routing.preservation-gate
+          digest: sha256:4d9a6a08dc9f55c642c29b9d02e3bbc011f00e578462ed075f22da114a346d9d
+          signature: "EdgeRouterShould.preservesTheSettledReferenceAndNamedLadderFixtures(): void; routing preservation gate covers the immutable legacy path resource, named ladder fixtures, settled-reference.csv and route totals 21/1/0/0 before relocation."
+        - producer_task: T-004
+          from: T-004
+          id: relocation.ring-expansion
+          digest: sha256:c0015bcbaabdd499cf4d72afc13b993d3361e3d52d1248268b4b4e4a71d7e828
+          signature: "EdgeConflictCorrection.PoolGeneration.generateCandidates(Detection,LayoutPositions,Set<ProjectedNodeKey>,Map<ProjectedNodeKey,List<EnclosureHullKey>>): PoolGeneration; EdgeConflictCorrection.SelectedFamily(Conflict,List<Candidate>); EdgeConflictCorrection.expandSelectedFamiliesByRing(List<SelectedFamily>,LayoutPositions,Set<ProjectedNodeKey>): List<Candidate>; EdgeConflictCorrection.addEdgeOverNodeCandidatesAtRing(List<Candidate>,Conflict,LayoutPositions,Set<ProjectedNodeKey>,int): void."
+        - producer_task: T-005
+          from: T-005
+          id: relocation.a2-a3-evidence
+          digest: sha256:6057b9520e6c2e1bd899c5ef590b002c8903d537a500a5f8d71066b069eddd05
+          signature: "EdgeConflictCorrectionShould.expandsTheA2RejectedFamilyWithoutReselectingIt(): void; EdgeConflictCorrectionShould.vetoesTheUnsafeSiblingTargetWithA3Subset(): void; resource freeplane_plugin_graph/src/test/resources/geometry/edge-node-crossing-residual-a2-a3-search.txt records the deterministic 59-case and 1770-target construct-or-declare result."
+        - producer_task: T-006
+          from: T-006
+          id: relocation.stage1-publication-gate
+          digest: sha256:e6ee418bd3f1f0555ad321c7bbf97bda6eeb0c9e3c26e081fb538dfaa355dc30
+          signature: "EdgeConflictCorrectionShould.stopsStage1AtTheRemainingVerificationAllowance(): void; EdgeConflictCorrectionShould.publishesNeitherPartialRebuildRecordWhenTheTerminalScanStops(): void; stage-1 allowance, complete-state publication and no-partial-rebuild acceptance gate."
+    validation:
+      - argv: ["sha256sum", "freeplane_plugin_graph/src/test/resources/performance/settled-reference.csv"]
+        cwd: "."
+        timeout_seconds: 60
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.geometry.EdgeRouterShould"]
+        cwd: "."
+        timeout_seconds: 1800
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.layout.EdgeConflictCorrectionShould"]
+        cwd: "."
+        timeout_seconds: 1800
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.performance.SettledReferenceFixtureShould"]
+        cwd: "."
+        timeout_seconds: 1800
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.layout.TypedForcesShould"]
+        cwd: "."
+        timeout_seconds: 1800
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.performance.PerformanceTripwiresShould"]
+        cwd: "."
+        timeout_seconds: 3600
+      - argv: ["gradle", ":freeplane_plugin_graph:verifyGraphBundle"]
+        cwd: "."
+        timeout_seconds: 1800
+  - id: T-008
+    plan_task: 8
+    lane: acceptance
+    sequence: 2
+    title: "Replay the reported workspace and audit every published path"
+    tier: "Standard"
+    implementer_tier: "Standard"
+    depends_on: ["T-007"]
+    owns:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/probe/RealWorkspaceCrossingProbe.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/probe/RealWorkspaceCrossingShould.java"
+      - "freeplane_plugin_graph/doc/edge-node-crossing-residual/workspace-acceptance.md"
+    ownership:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/probe/RealWorkspaceCrossingProbe.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/probe/RealWorkspaceCrossingShould.java"
+      - "freeplane_plugin_graph/doc/edge-node-crossing-residual/workspace-acceptance.md"
+    resources: []
+    exclusive_resources:
+      - "gradle-daemon"
+      - "freeplane_plugin_graph/build/"
+      - "freeplane_plugin_graph/doc/edge-node-crossing-residual/"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/probe/RealWorkspaceCrossingProbe.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/probe/RealWorkspaceCrossingShould.java"
+    produces:
+      - id: acceptance.workspace-replay
+        name: acceptance.workspace-replay
+        digest: sha256:19e7a0e0628aea49be7d5ab190149c1e1248580ebebbdf5bd0649aa83ccbbf58
+        signature: "RealWorkspaceCrossingProbe.replay(java.nio.file.Path): ReplayEvidence; RealWorkspaceCrossingShould.replaysTheReportedWorkspaceWithoutClearanceViolations(): void; freeplane_plugin_graph/doc/edge-node-crossing-residual/workspace-acceptance.md records full-precision replay and independent path clearance evidence."
+    consumes:
+      - producer_task: T-007
+        from: T-007
+        id: acceptance.frozen-performance
+        name: acceptance.frozen-performance
+        digest: sha256:f90af14301edb660758bd375cb0916d05d43572dbb5c953d403b1deba455b31b
+        signature: "PerformanceTripwiresShould.preservesSettledAndRawPerformanceModesSeparately(): void; freeplane_plugin_graph/doc/edge-node-crossing-residual/frozen-acceptance.md records frozen route, settled and raw performance evidence without changing settled-reference.csv."
+    interfaces:
+      produces:
+        - id: acceptance.workspace-replay
+          digest: sha256:19e7a0e0628aea49be7d5ab190149c1e1248580ebebbdf5bd0649aa83ccbbf58
+          signature: "RealWorkspaceCrossingProbe.replay(java.nio.file.Path): ReplayEvidence; RealWorkspaceCrossingShould.replaysTheReportedWorkspaceWithoutClearanceViolations(): void; freeplane_plugin_graph/doc/edge-node-crossing-residual/workspace-acceptance.md records full-precision replay and independent path clearance evidence."
+      consumes:
+        - producer_task: T-007
+          from: T-007
+          id: acceptance.frozen-performance
+          digest: sha256:f90af14301edb660758bd375cb0916d05d43572dbb5c953d403b1deba455b31b
+          signature: "PerformanceTripwiresShould.preservesSettledAndRawPerformanceModesSeparately(): void; freeplane_plugin_graph/doc/edge-node-crossing-residual/frozen-acceptance.md records frozen route, settled and raw performance evidence without changing settled-reference.csv."
+    validation:
+      - argv: ["env", "GRAPH_REPORTED_MAP_ROOT=/home/henry/Documents/999.notebooks/01.math", "gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.probe.RealWorkspaceCrossingShould"]
+        cwd: "."
+        timeout_seconds: 3600
+      - argv: ["gradle", ":freeplane_plugin_graph:test"]
+        cwd: "."
+        timeout_seconds: 3600
+      - argv: ["gradle", ":freeplane_plugin_graph:verifyGraphBundle"]
+        cwd: "."
+        timeout_seconds: 1800
+      - argv: ["sha256sum", "freeplane_plugin_graph/src/test/resources/performance/settled-reference.csv"]
+        cwd: "."
+        timeout_seconds: 60
+      - argv: ["git", "diff", "--check"]
+        cwd: "."
+        timeout_seconds: 60
