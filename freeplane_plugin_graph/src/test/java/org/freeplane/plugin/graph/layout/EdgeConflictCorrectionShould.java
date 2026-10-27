@@ -3,6 +3,10 @@ package org.freeplane.plugin.graph.layout;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -361,6 +365,42 @@ public class EdgeConflictCorrectionShould {
         assertThat(result.positions().nodes().get(fixture.key(26)))
             .isEqualTo(LayoutPoint.of(0.0, 1211.0));
     }
+    @Test
+    public void expandsTheA2RejectedFamilyWithoutReselectingIt() throws Exception {
+        final A2A3Search search = runA2A3Search();
+        final String pinnedEvidence = readResource(A2A3_SEARCH_RESOURCE);
+        assertThat(pinnedEvidence).isEqualTo(a2A3SearchEvidence(search));
+        assertThat(search.sampleCount).isEqualTo(59);
+        assertThat(search.targetObservations).isEqualTo(59 * 5 * 6);
+        assertThat(search.stopObservations).isZero();
+        if (search.witnessCount > 0) {
+            assertThat(search.witnessBlockerY).isBetween(22.0, 51.0);
+            assertThat(search.allSixRingZeroTargetsRejectedByA2OrA3).isTrue();
+            assertThat(search.firstAcceptedRing).isBetween(1, 4);
+            assertThat(search.fullVerificationAcceptedWitness).isTrue();
+            final A2A3Outcome expected = parseA2A3Outcome(pinnedEvidence);
+            assertThat(expected.witness).isTrue();
+            assertThat(search.witnessBlockerY).isEqualTo(expected.blockerY);
+            assertThat(search.firstAcceptedRing).isEqualTo(expected.firstAcceptedRing);
+            assertThat(search.witnessAcceptedPosition)
+                .isEqualTo(expected.acceptedPosition);
+            final EdgeConflictResult actualRun = apply(search.witnessFixture);
+            assertThat(actualRun.positions().nodes().get(search.witnessFixture.key(2)))
+                .isEqualTo(expected.acceptedPosition);
+            assertThat(actualRun.diagnostics().verifications())
+                .isEqualTo(expected.verifications);
+            assertThat(actualRun.diagnostics().verificationWork())
+                .isEqualTo(expected.verificationWork);
+        }
+        else {
+            assertThat(search.valuesAdmittingFullVerificationAcceptanceAtRingZero)
+                .isEqualTo(59);
+            assertThat(search.searchOutcome).isEqualTo(
+                "A2/A3 ring-0-only veto is a search limit, not a defect. "
+                    + "Test 7 (A1) carries Goal 4 on its own.");
+        }
+    }
+
     @Test
     public void keepsAResidualWhenEveryLocalAlternativeBreaksTheGap() {
         final Fixture fixture = fullyBlockedFixture();
@@ -908,6 +948,318 @@ public class EdgeConflictCorrectionShould {
         }
         catch (final ReflectiveOperationException exception) {
             throw new AssertionError(exception);
+        }
+    }
+
+    private static final String A2A3_SEARCH_RESOURCE =
+        "/geometry/edge-node-crossing-residual-a2-a3-search.txt";
+
+    private static String readResource(final String path) throws IOException {
+        try (InputStream input = EdgeConflictCorrectionShould.class.getResourceAsStream(path)) {
+            assertThat(input).as("resource %s", path).isNotNull();
+            final ByteArrayOutputStream output = new ByteArrayOutputStream();
+            final byte[] buffer = new byte[4096];
+            int count;
+            while ((count = input.read(buffer)) != -1) {
+                output.write(buffer, 0, count);
+            }
+            return new String(output.toByteArray(), StandardCharsets.UTF_8);
+        }
+    }
+
+    private static A2A3Search runA2A3Search() throws Exception {
+        final StringBuilder evidence = new StringBuilder();
+        evidence.append("# y_b | ring | slot | target x,y | A1/A2/A3 rejecting keys | full outcome\n");
+        int targetObservations = 0;
+        int stopObservations = 0;
+        int witnessCount = 0;
+        int valuesAdmittingFullVerificationAcceptanceAtRingZero = 0;
+        double witnessBlockerY = Double.NaN;
+        int firstAcceptedRing = Integer.MAX_VALUE;
+        LayoutPoint witnessAcceptedPosition = null;
+        Fixture witnessFixture = null;
+
+        for (int sample = 0; sample < 59; sample++) {
+            final double blockerY = 22.0 + sample * 0.5;
+            final Fixture fixture = clearanceFixture(new String[] {"A", "B", "n", "b", "h2"},
+                new double[] {-100.0, 0.0, 100.0, 0.0, 0.0, 0.0, 0.0, blockerY,
+                    0.0, blockerY + 6.0}, new int[][] {{0, 1}});
+            final EdgeConflictCorrection.Detection initial = EdgeConflictCorrection.detectConflicts(
+                fixture.projection, fixture.boundary.positions(), fixture.boundary.geometry(),
+                fixture.visible);
+            assertThat(initial.conflicts()).hasSize(1);
+            assertThat(fixture.projection.generation()).isEqualTo(1L);
+            assertThat(fixture.projection.edges()).hasSize(1);
+            assertThat(fixture.projection.pins()).isEmpty();
+            assertThat(fixture.projection.enclosures()).isEmpty();
+            for (final ProjectedNode node : fixture.projection.nodes()) {
+                assertThat(fixture.boundary.geometry().nodes().get(node.key()).radius())
+                    .as("radius for %s", node.key()).isEqualTo(8.0);
+            }
+            final Object generation = generateCandidates(fixture, initial);
+            final List<?> selected = selectedFamilies(generation);
+            assertThat(selected).hasSize(1);
+            assertThat(selectedFamilyConflict(selected.get(0)))
+                .isSameAs(initial.conflicts().get(0));
+            final List<Object> stageZero = familyCandidates(selected.get(0));
+            assertThat(stageZero).hasSize(6);
+
+            final Set<String> originalA2 = new java.util.TreeSet<String>(
+                NodeSeparationProjection.violatingPairs(fixture.projection,
+                    fixture.boundary.positions()));
+            final Set<String> originalA3 = new java.util.TreeSet<String>(
+                new BoundaryInvariants().detectPairKeys(fixture.projection,
+                    fixture.boundary.geometry()));
+            assertThat(originalA3).as("A3 is empty for y_b=%s", blockerY).isEmpty();
+
+            boolean allRingZeroTargetsRejectedByA2OrA3 = true;
+            boolean sampleRingZeroAccepted = false;
+            int sampleFirstAcceptedRing = Integer.MAX_VALUE;
+            LayoutPoint sampleFirstAcceptedPosition = null;
+            for (int ring = 0; ring < 5; ring++) {
+                final List<Object> candidates = ring == 0 ? stageZero
+                    : ringCandidates(fixture, selectedFamilyConflict(selected.get(0)), ring);
+                assertThat(candidates).as("ring %s at y_b=%s", ring, blockerY).hasSize(6);
+                for (int slot = 0; slot < candidates.size(); slot++) {
+                    final Object candidate = candidates.get(slot);
+                    final LayoutPositions targetPositions = candidatePositions(fixture, candidate);
+                    final GraphGeometry targetGeometry = new GraphGeometryEngine().computeHulls(
+                        fixture.projection, targetPositions, METRICS);
+                    final EdgeConflictCorrection.Detection targetDetection =
+                        EdgeConflictCorrection.detectConflicts(fixture.projection, targetPositions,
+                            targetGeometry, fixture.visible);
+                    final boolean a1Accepted = isStrictSubset(initial.keys(), targetDetection.keys());
+                    final Set<String> a1 = a1Accepted ? Collections.<String>emptySet()
+                        : new java.util.TreeSet<String>(targetDetection.keys());
+                    final Set<String> targetA2 = new java.util.TreeSet<String>(
+                        NodeSeparationProjection.violatingPairs(fixture.projection, targetPositions));
+                    final Set<String> a2 = newlyIntroduced(originalA2, targetA2);
+                    final Set<String> targetA3 = new java.util.TreeSet<String>(
+                        new BoundaryInvariants().detectPairKeys(fixture.projection, targetGeometry));
+                    final Set<String> a3 = newlyIntroduced(originalA3, targetA3);
+                    final String outcome = verifyCandidateOutcome(fixture, initial, candidate);
+                    targetObservations++;
+                    if ("DETECTION_STOP".equals(outcome)) {
+                        stopObservations++;
+                    }
+                    assertThat(outcome).as("y_b=%s ring=%s slot=%s", blockerY, ring, slot)
+                        .isNotEqualTo("DETECTION_STOP");
+                    if (ring == 0 && a2.isEmpty() && a3.isEmpty()) {
+                        allRingZeroTargetsRejectedByA2OrA3 = false;
+                    }
+                    if (ring == 0 && "ACCEPT".equals(outcome)) {
+                        sampleRingZeroAccepted = true;
+                    }
+                    if (ring >= 1 && "ACCEPT".equals(outcome)
+                            && sampleFirstAcceptedRing == Integer.MAX_VALUE) {
+                        sampleFirstAcceptedRing = ring;
+                        sampleFirstAcceptedPosition = targetPositions.nodes().get(fixture.key(2));
+                    }
+                    evidence.append(Double.toHexString(blockerY)).append(" | ")
+                        .append(ring).append(" | ").append(slot).append(" | ")
+                        .append(Double.toHexString(targetPositions.nodes().get(fixture.key(2)).x()))
+                        .append(",")
+                        .append(Double.toHexString(targetPositions.nodes().get(fixture.key(2)).y()))
+                        .append(" | A1=").append(formatKeys(a1))
+                        .append(" | A2=").append(formatKeys(a2))
+                        .append(" | A3=").append(formatKeys(a3))
+                        .append(" | full=").append(outcome).append("\n");
+                }
+            }
+            if (sampleRingZeroAccepted) {
+                valuesAdmittingFullVerificationAcceptanceAtRingZero++;
+            }
+            if (allRingZeroTargetsRejectedByA2OrA3
+                    && sampleFirstAcceptedRing != Integer.MAX_VALUE) {
+                witnessCount++;
+                if (witnessFixture == null) {
+                    witnessBlockerY = blockerY;
+                    firstAcceptedRing = sampleFirstAcceptedRing;
+                    witnessAcceptedPosition = sampleFirstAcceptedPosition;
+                    witnessFixture = fixture;
+                }
+            }
+        }
+
+        final String searchOutcome;
+        if (witnessCount > 0) {
+            final EdgeConflictResult witnessRun = apply(witnessFixture);
+            final LayoutPoint accepted = witnessRun.positions().nodes().get(witnessFixture.key(2));
+            searchOutcome = "witness-found | y_b=" + Double.toHexString(witnessBlockerY)
+                + " | firstAcceptedRing=" + firstAcceptedRing
+                + " | accepted=" + Double.toHexString(accepted.x()) + ","
+                + Double.toHexString(accepted.y())
+                + " | verifications=" + witnessRun.diagnostics().verifications()
+                + " | verificationWork=" + witnessRun.diagnostics().verificationWork();
+            evidence.append("conditional-outcome | ").append(searchOutcome).append("\n");
+        }
+        else {
+            searchOutcome = "A2/A3 ring-0-only veto is a search limit, not a defect. "
+                + "Test 7 (A1) carries Goal 4 on its own.";
+            evidence.append("conditional-outcome | search-limit | ").append(searchOutcome).append("\n");
+        }
+        return new A2A3Search(59, targetObservations, stopObservations, witnessCount,
+            valuesAdmittingFullVerificationAcceptanceAtRingZero, witnessBlockerY, firstAcceptedRing,
+            witnessAcceptedPosition, witnessFixture, witnessCount > 0, searchOutcome,
+            evidence.toString());
+    }
+
+    private static String a2A3SearchEvidence() throws Exception {
+        return runA2A3Search().evidence;
+    }
+
+    private static String a2A3SearchEvidence(final A2A3Search search) {
+        return search.evidence;
+    }
+
+    private static boolean isStrictSubset(final List<String> current, final List<String> candidate) {
+        return candidate.size() < current.size()
+            && new LinkedHashSet<String>(current).containsAll(candidate);
+    }
+
+    private static Set<String> newlyIntroduced(final Set<String> original, final Set<String> target) {
+        final Set<String> introduced = new java.util.TreeSet<String>(target);
+        introduced.removeAll(original);
+        return introduced;
+    }
+
+    private static String formatKeys(final Set<String> keys) {
+        if (keys.isEmpty()) {
+            return "-";
+        }
+        final StringBuilder result = new StringBuilder();
+        for (final String key : new java.util.TreeSet<String>(keys)) {
+            if (result.length() > 0) {
+                result.append(",");
+            }
+            result.append(key);
+        }
+        return result.toString();
+    }
+
+    private static String verifyCandidateOutcome(final Fixture fixture,
+            final EdgeConflictCorrection.Detection initial, final Object candidate) throws Exception {
+        final java.lang.reflect.Method method = EdgeConflictCorrection.class.getDeclaredMethod(
+            "verify", List.class, GraphProjection.class, LayoutPositions.class, GraphGeometry.class,
+            GeometryTextMetrics.class, Set.class, EdgeConflictCorrection.Detection.class,
+            BoundaryInvariants.class, Map.class, Map.class);
+        method.setAccessible(true);
+        final Object evaluation = method.invoke(new EdgeConflictCorrection(),
+            Collections.singletonList(candidate), fixture.projection, fixture.boundary.positions(),
+            fixture.boundary.geometry(), METRICS, fixture.visible, initial, new BoundaryInvariants(),
+            BoundaryInvariants.nodeHullsByKey(fixture.projection), emptyEnclosurePaths(fixture.projection));
+        final java.lang.reflect.Field outcomeField = evaluation.getClass()
+            .getDeclaredField("outcome");
+        outcomeField.setAccessible(true);
+        return ((Enum<?>) outcomeField.get(evaluation)).name();
+    }
+
+    private static Map<ProjectedNodeKey, List<EnclosureHullKey>> emptyEnclosurePaths(
+            final GraphProjection projection) {
+        final Map<ProjectedNodeKey, List<EnclosureHullKey>> paths =
+            new LinkedHashMap<ProjectedNodeKey, List<EnclosureHullKey>>();
+        for (final ProjectedNode node : projection.nodes()) {
+            paths.put(node.key(), Collections.<EnclosureHullKey>emptyList());
+        }
+        return paths;
+    }
+
+    private static A2A3Outcome parseA2A3Outcome(final String evidence) {
+        final String[] lines = evidence.trim().split("\\n");
+        final String last = lines[lines.length - 1];
+        if (last.contains("| search-limit |")) {
+            return A2A3Outcome.searchLimit();
+        }
+        final String[] fields = last.split("\\|");
+        double blockerY = Double.NaN;
+        int acceptedRing = 0;
+        LayoutPoint acceptedPosition = null;
+        int verifications = 0;
+        long verificationWork = 0L;
+        for (final String field : fields) {
+            final String value = field.trim();
+            if (value.startsWith("y_b=")) {
+                blockerY = Double.valueOf(value.substring("y_b=".length()));
+            }
+            else if (value.startsWith("firstAcceptedRing=")) {
+                acceptedRing = Integer.parseInt(value.substring("firstAcceptedRing=".length()));
+            }
+            else if (value.startsWith("accepted=")) {
+                final String[] coordinates = value.substring("accepted=".length()).split(",");
+                acceptedPosition = LayoutPoint.of(Double.valueOf(coordinates[0]),
+                    Double.valueOf(coordinates[1]));
+            }
+            else if (value.startsWith("verifications=")) {
+                verifications = Integer.parseInt(value.substring("verifications=".length()));
+            }
+            else if (value.startsWith("verificationWork=")) {
+                verificationWork = Long.parseLong(value.substring("verificationWork=".length()));
+            }
+        }
+        return new A2A3Outcome(true, blockerY, acceptedRing, acceptedPosition, verifications,
+            verificationWork);
+    }
+
+    private static final class A2A3Search {
+        private final int sampleCount;
+        private final int targetObservations;
+        private final int stopObservations;
+        private final int witnessCount;
+        private final int valuesAdmittingFullVerificationAcceptanceAtRingZero;
+        private final double witnessBlockerY;
+        private final int firstAcceptedRing;
+        private final LayoutPoint witnessAcceptedPosition;
+        private final Fixture witnessFixture;
+        private final boolean allSixRingZeroTargetsRejectedByA2OrA3;
+        private final boolean fullVerificationAcceptedWitness;
+        private final String searchOutcome;
+        private final String evidence;
+
+        private A2A3Search(final int sampleCount, final int targetObservations,
+                final int stopObservations, final int witnessCount,
+                final int valuesAdmittingFullVerificationAcceptanceAtRingZero,
+                final double witnessBlockerY, final int firstAcceptedRing,
+                final LayoutPoint witnessAcceptedPosition, final Fixture witnessFixture,
+                final boolean allSixRingZeroTargetsRejectedByA2OrA3, final String searchOutcome,
+                final String evidence) {
+            this.sampleCount = sampleCount;
+            this.targetObservations = targetObservations;
+            this.stopObservations = stopObservations;
+            this.witnessCount = witnessCount;
+            this.valuesAdmittingFullVerificationAcceptanceAtRingZero =
+                valuesAdmittingFullVerificationAcceptanceAtRingZero;
+            this.witnessBlockerY = witnessBlockerY;
+            this.firstAcceptedRing = firstAcceptedRing;
+            this.witnessAcceptedPosition = witnessAcceptedPosition;
+            this.witnessFixture = witnessFixture;
+            this.allSixRingZeroTargetsRejectedByA2OrA3 = allSixRingZeroTargetsRejectedByA2OrA3;
+            this.fullVerificationAcceptedWitness = witnessCount > 0;
+            this.searchOutcome = searchOutcome;
+            this.evidence = evidence;
+        }
+    }
+
+    private static final class A2A3Outcome {
+        private final boolean witness;
+        private final double blockerY;
+        private final int firstAcceptedRing;
+        private final LayoutPoint acceptedPosition;
+        private final int verifications;
+        private final long verificationWork;
+
+        private A2A3Outcome(final boolean witness, final double blockerY,
+                final int firstAcceptedRing, final LayoutPoint acceptedPosition,
+                final int verifications, final long verificationWork) {
+            this.witness = witness;
+            this.blockerY = blockerY;
+            this.firstAcceptedRing = firstAcceptedRing;
+            this.acceptedPosition = acceptedPosition;
+            this.verifications = verifications;
+            this.verificationWork = verificationWork;
+        }
+
+        private static A2A3Outcome searchLimit() {
+            return new A2A3Outcome(false, Double.NaN, 0, null, 0, 0L);
         }
     }
 
@@ -1641,6 +1993,37 @@ public class EdgeConflictCorrectionShould {
         assertThat(invariants.detect(fixture.projection, published)).isEmpty();
         assertThat(BoundarySeparationCorrection.ancestorEscapePairKeys(fixture.projection,
             published.hulls())).isEmpty();
+    }
+
+    @Test
+    public void vetoesTheUnsafeSiblingTargetWithA3Subset() {
+        final SiblingFixture fixture = siblingOverlapFixture();
+        final BoundaryInvariants invariants = new BoundaryInvariants();
+        final Map<ProjectedNodeKey, LayoutPoint> unsafeNodes =
+            new LinkedHashMap<ProjectedNodeKey, LayoutPoint>(fixture.boundary.positions().nodes());
+        unsafeNodes.put(fixture.passedOverNode, fixture.preferredPassedOverTarget);
+        final LayoutPositions unsafePositions = LayoutPositions.of(unsafeNodes,
+            fixture.boundary.positions().anchors());
+        final Set<EnclosureHullKey> changed = BoundaryInvariants.changedHulls(
+            BoundaryInvariants.nodeHullsByKey(fixture.projection), fixture.boundary.positions(),
+            unsafePositions);
+        final GraphGeometry incremental = new GraphGeometryEngine().recomputeHulls(
+            fixture.projection, unsafePositions, METRICS, fixture.boundary.geometry(), changed);
+        final GraphGeometry complete = new GraphGeometryEngine().computeHulls(
+            fixture.projection, unsafePositions, METRICS);
+        assertThat(incremental).isEqualTo(complete);
+        assertThat(invariants.detectPairKeys(fixture.projection, incremental))
+            .containsExactly(CanonicalKeys.hullPair(fixture.siblingFirst, fixture.siblingSecond));
+
+        final EdgeConflictResult result = new EdgeConflictCorrection().apply(fixture.projection,
+            fixture.boundary.positions(), METRICS, Collections.<PinProjection>emptyList(),
+            fixture.visible, fixture.boundary);
+        assertThat(result.diagnostics().rounds()).isEqualTo(1);
+        assertThat(result.diagnostics().verifications()).isEqualTo(2);
+        assertThat(result.diagnostics().verificationWork()).isEqualTo(53L);
+        assertThat(result.positions().nodes().get(fixture.passedOverNode))
+            .isEqualTo(fixture.safePassedOverTarget);
+        assertThat(result.diagnostics().conflictsResidual()).isEmpty();
     }
 
     @Test
