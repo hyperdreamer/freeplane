@@ -225,6 +225,91 @@ public class LayoutWorkerShould {
     }
 
     @Test
+    public void pinTheEscalationBudget() {
+        assertThat(LayoutWorker.SEED_ESCALATION_FRAMES).isEqualTo(6000L);
+    }
+
+    @Test
+    public void withholdSeedingWhileTheLayoutCanStillConverge() throws Exception {
+        LayoutWorker worker = new LayoutWorker(fixedEngine(), PerceptualIdlePolicy.spikeDefaults());
+        LayoutRequest request = request();
+        try {
+            await(worker.submit(request));
+            for (int frame = 0; frame < 200; frame++) {
+                await(worker.step());
+            }
+
+            assertThat(seededCount(worker)).isZero();
+        }
+        finally {
+            worker.close();
+        }
+    }
+
+    @Test
+    public void escalateToSeedingOnlyWhenTheLayoutExceedsTheFrameBudget() throws Exception {
+        LayoutWorker worker = new LayoutWorker(fixedEngine(), PerceptualIdlePolicy.spikeDefaults());
+        LayoutRequest request = request();
+        // Pinned here deliberately, not read from production: a test that takes its expectation from
+        // the constant under test cannot fail when that constant changes.
+        final int budget = 6000;
+        try {
+            // The submit frame is itself a published frame, so the budget is reached after
+            // budget - 1 further steps.
+            await(worker.submit(request));
+            for (int frame = 0; frame < budget - 1; frame++) {
+                await(worker.step());
+            }
+
+            assertThat(seededCount(worker))
+                .as("the last frame inside the budget must not seed")
+                .isZero();
+
+            await(worker.step());
+
+            assertThat(seededCount(worker))
+                .as("the first frame past the budget must seed")
+                .isEqualTo(1);
+        }
+        finally {
+            worker.close();
+        }
+    }
+
+    @Test
+    public void restartTheEscalationCountForANewRequest() throws Exception {
+        LayoutWorker worker = new LayoutWorker(fixedEngine(), PerceptualIdlePolicy.spikeDefaults());
+        try {
+            await(worker.submit(request()));
+            for (int frame = 0; frame < 6001; frame++) {
+                await(worker.step());
+            }
+            final int afterEscalation = seededCount(worker);
+            assertThat(afterEscalation).isPositive();
+
+            await(worker.submit(request()));
+            for (int frame = 0; frame < 200; frame++) {
+                await(worker.step());
+            }
+
+            assertThat(seededCount(worker))
+                .as("a fresh request must start a fresh escalation count")
+                .isEqualTo(afterEscalation);
+        }
+        finally {
+            worker.close();
+        }
+    }
+
+    private static int seededCount(final LayoutWorker worker) throws Exception {
+        final java.lang.reflect.Field engineField = LayoutWorker.class.getDeclaredField("engine");
+        engineField.setAccessible(true);
+        final Object engine = engineField.get(worker);
+        return engine instanceof SeedingCountingEngine
+            ? ((SeedingCountingEngine) engine).seeded : 0;
+    }
+
+    @Test
     public void rejectWorkAfterClose() {
         LayoutWorker worker = new LayoutWorker(new FixedEngineSupplier(new CountingEngine(new AtomicInteger(),
             new AtomicInteger())), PerceptualIdlePolicy.spikeDefaults());
@@ -544,7 +629,23 @@ public class LayoutWorkerShould {
     }
 
     private static Supplier<LayoutEngine> fixedEngine() {
-        return new FixedEngineSupplier(new CountingEngine(new AtomicInteger(), new AtomicInteger()));
+        return new FixedEngineSupplier(new SeedingCountingEngine());
+    }
+
+    static final class SeedingCountingEngine extends CountingEngine {
+        int seeded;
+
+        SeedingCountingEngine() {
+            super(new AtomicInteger(), new AtomicInteger());
+        }
+
+        @Override
+        public void seedPositions(
+                final java.util.Map<org.freeplane.plugin.graph.projection.ProjectedNodeKey,
+                    org.freeplane.plugin.graph.geometry.LayoutPoint> accepted) {
+            seeded++;
+            super.seedPositions(accepted);
+        }
     }
 
     /** Two nodes and no enclosures, so the scaffold boundary stage reports zero rounds. */

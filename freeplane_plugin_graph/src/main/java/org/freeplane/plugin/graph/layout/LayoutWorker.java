@@ -94,6 +94,8 @@ public final class LayoutWorker implements AutoCloseable {
         return enqueue(new Work() {
             @Override
             public LayoutFrame run() {
+                framesSinceRequest = 0L;
+                seedEscalated = false;
                 return runSubmit(value);
             }
         }, true);
@@ -123,6 +125,8 @@ public final class LayoutWorker implements AutoCloseable {
     }
 
     public void restart() {
+        framesSinceRequest = 0L;
+        seedEscalated = false;
         if (closed) {
             return;
         }
@@ -319,10 +323,6 @@ public final class LayoutWorker implements AutoCloseable {
             edge.nodeResidualViolations(),
             edge.boundaryDiagnostics().withDeltas(deltas[0], deltas[1]), edge.diagnostics(), idle);
         previousAppliedDisplacements = merged;
-        if (!hasRequest) {
-            framesSinceRequest = 0L;
-            seedEscalated = false;
-        }
         currentRequest = request;
         hasRequest = true;
         previousCorrectedPositions = corrected;
