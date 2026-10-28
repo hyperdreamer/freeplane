@@ -1,0 +1,18 @@
+# A-naive vs control on the two-map fixture (per-frame edge-conflict diagnostics)
+
+## With seeding (repaired nodes teleported into the engine) — 88 frames, FAILS
+frame=83 idle=false rounds=4 verif=13 work=2563 idxItems=1592 pairChecks=697 detected=7 resid=3 flags=falsefalsefalse
+frame=84 idle=false rounds=4 verif=13 work=2563 idxItems=1592 pairChecks=697 detected=7 resid=3 flags=falsefalsefalse
+frame=85 idle=false rounds=4 verif=14 work=2563 idxItems=1679 pairChecks=735 detected=6 resid=2 flags=falsefalsefalse
+frame=86 idle=false rounds=3 verif=64 work=2616 idxItems=6004 pairChecks=2609 detected=5 resid=2 flags=falsetruefalse
+
+## Control, no seeding — 3204 frames, PASSES
+frame=3199 idle=false rounds=4 verif=28 work=4786 idxItems=2940 pairChecks=1136 detected=12 resid=8 flags=falsefalsefalse
+frame=3200 idle=false rounds=4 verif=28 work=4786 idxItems=2940 pairChecks=1136 detected=12 resid=8 flags=falsefalsefalse
+frame=3201 idle=false rounds=4 verif=28 work=4786 idxItems=2940 pairChecks=1136 detected=12 resid=8 flags=falsefalsefalse
+frame=3202 idle=false rounds=4 verif=28 work=4786 idxItems=2940 pairChecks=1136 detected=12 resid=8 flags=falsefalsefalse
+
+## Reading
+- Control steady state: rounds=4 verif=28 detected=12 resid=8 — the fixture tolerates residuals and idles at frame 3203.
+- Seeded: dies at frame 86 with verif=64 == MAX_VERIFICATIONS_PER_FRAME, so verificationBudgetExhausted=true.
+- Restricting the seed to only the repaired nodes did not change the outcome: the identical trace (diff clean) shows the teleport itself is the perturbing act, not the breadth of the seed.
