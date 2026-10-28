@@ -183,6 +183,36 @@ tasks.register('graphUiEvidence', JavaExec) {
         rootProject.file('docs/superpowers/specs/images/2026-08-10-graph-group-marker-implemented.png'))
 }
 
+// The two acceptance drivers spawn python3 subprocesses that run for 8 to 14 hours. They are not
+// unit tests: they are excluded from the ordinary suite so an ordinary run can never start them,
+// including when the suite itself is launched headless (which satisfies their interlock).
+// Run them deliberately with: gradle :freeplane_plugin_graph:graphAcceptanceDrivers
+tasks.named('test') {
+    filter {
+        excludeTestsMatching 'org.freeplane.plugin.graph.layout.graphstream.GraphEdgeLengthSettleShould'
+        excludeTestsMatching 'org.freeplane.plugin.graph.layout.graphstream.InitialSpacingAcceptanceShould'
+    }
+    // Wall-clock frame bounds are dominated by first-frame JVM warm-up; they are opt-in.
+    systemProperty 'graphWallClockPerformance', project.hasProperty('graphWallClockPerformance')
+    // Display-driven window assertions need a predictable window manager, not a live desktop.
+    systemProperty 'graphDisplayAcceptance', project.hasProperty('graphDisplayAcceptance')
+}
+
+tasks.register('graphAcceptanceDrivers', Test) {
+    outputs.upToDateWhen { false }
+    dependsOn tasks.named('testClasses')
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    include '**/GraphEdgeLengthSettleShould.class'
+    include '**/InitialSpacingAcceptanceShould.class'
+    // The drivers assert this precondition and refuse to run without it.
+    systemProperty 'java.awt.headless', 'true'
+    maxParallelForks = 1
+    testLogging {
+        events "started", "failed"
+    }
+}
+
 tasks.register('freeplaneLaunchSmoke', JavaExec) {
     outputs.upToDateWhen { false }
     dependsOn tasks.named('graphSmokeInstallation')

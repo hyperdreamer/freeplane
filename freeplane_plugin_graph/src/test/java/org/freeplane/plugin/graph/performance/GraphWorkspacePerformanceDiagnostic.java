@@ -86,7 +86,15 @@ import org.freeplane.plugin.graph.workspace.model.DisplaySettings;
 import org.freeplane.plugin.graph.workspace.model.WorkspaceId;
 
 public final class GraphWorkspacePerformanceDiagnostic {
-    public static final long OPERATION_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(5L);
+    /**
+     * Liveness budget for one worker operation, not a performance gate. It is deliberately
+     * generous: it only has to turn a hang into a diagnostic failure. The performance gate is
+     * {@link #RAW_REFERENCE_MAX_FRAME_NANOS}, asserted separately and gated on
+     * {@code -PgraphWallClockPerformance}. When this was 5 s it also aborted the whole fixture on
+     * a loaded machine (observed as a {@code @BeforeClass} "Five-second timeout during raw
+     * reference worker submit" failure), which reported a slow machine as a broken engine.
+     */
+    public static final long OPERATION_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(120L);
     public static final long PROCESS_DEADLINE_NANOS = TimeUnit.MINUTES.toNanos(40L);
     public static final int CANVAS_WIDTH = 1024;
     public static final int CANVAS_HEIGHT = 768;
