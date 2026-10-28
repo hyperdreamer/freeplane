@@ -102,6 +102,27 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
     }
 
     @Override
+    public void seedPositions(final Map<ProjectedNodeKey, LayoutPoint> accepted) {
+        checkOpen();
+        checkOwnerThread();
+        if (accepted == null || accepted.isEmpty() || springBox == null) {
+            return;
+        }
+        for (final ParticleState state : particles.values()) {
+            if (state.pinned || state.nodeKey == null) {
+                continue;
+            }
+            final LayoutPoint point = accepted.get(state.nodeKey);
+            if (point == null) {
+                continue;
+            }
+            state.x = point.x();
+            state.y = point.y();
+            springBox.setParticlePosition(state.id, state.x, state.y);
+        }
+    }
+
+    @Override
     public void reset() {
         checkOpen();
         checkOwnerThread();

@@ -61,6 +61,14 @@ public final class LayoutWorker implements AutoCloseable {
     private LayoutEngine engine;
     private LayoutRequest currentRequest;
     private LayoutPositions previousCorrectedPositions;
+    /**
+     * Frames this request has run without reaching idle. A layout that is merely slow still converges inside the
+     * budget; one that does not converge at all keeps producing corrections that the relaxation undoes. Seeding is
+     * therefore withheld until the budget is spent, so no layout that settles on its own is ever perturbed.
+     */
+    static final long SEED_ESCALATION_FRAMES = 6000L;
+    private long framesSinceRequest;
+    private boolean seedEscalated;
     private Map<String, LayoutPoint> previousAppliedDisplacements = Collections.emptyMap();
 
     public LayoutWorker(final LayoutCalibration calibration) {
@@ -299,6 +307,9 @@ public final class LayoutWorker implements AutoCloseable {
         final LayoutPositions corrected = edge.positions();
         final Map<String, LayoutPoint> merged = mergeDisplacements(boundary.appliedDisplacements(),
             edge.appliedDisplacements());
+        if (engine != null) {
+            seedIfNotConverging(corrected);
+        }
         final LayoutPositions before = previousCorrectedPositions == null ? corrected
             : previousCorrectedPositions;
         final PerceptualIdlePolicy.IdleMeasurement idle = idlePolicy.observe(before, corrected);
@@ -308,11 +319,25 @@ public final class LayoutWorker implements AutoCloseable {
             edge.nodeResidualViolations(),
             edge.boundaryDiagnostics().withDeltas(deltas[0], deltas[1]), edge.diagnostics(), idle);
         previousAppliedDisplacements = merged;
+        if (!hasRequest) {
+            framesSinceRequest = 0L;
+            seedEscalated = false;
+        }
         currentRequest = request;
         hasRequest = true;
         previousCorrectedPositions = corrected;
         lastValidFrame = decorated;
         return decorated;
+    }
+
+    private void seedIfNotConverging(final LayoutPositions corrected) {
+        framesSinceRequest++;
+        if (!seedEscalated && framesSinceRequest > SEED_ESCALATION_FRAMES) {
+            seedEscalated = true;
+        }
+        if (seedEscalated) {
+            engine.seedPositions(corrected.nodes());
+        }
     }
 
     private static Map<String, LayoutPoint> mergeDisplacements(final Map<String, LayoutPoint> boundary,
