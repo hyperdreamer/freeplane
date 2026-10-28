@@ -222,3 +222,18 @@ production change outside this task.
 `sdd-state` and `plan-policy.mjs` are not installed on this machine, so
 `sdd-state validate-plan` cannot be executed. Plan structure was validated in-session instead
 (unique task ids, capitalised tier values, every specification clause mapped to a task).
+
+## 9. Delivery
+
+Delivered commit: `bed4b364d2` — `test(graph): make the default module suite green and trustworthy`.
+
+Delivery decision (option 2): fast-forward local `plugin/graph-workspace` from `cfa9b7f9fb` to the delivered
+commit, then publish to the **new** ref `origin/candidate/test-hygiene`.
+
+Rationale: the lane branch is a clean fast-forward of the delivery branch, so the integration rewrites no
+published history. `origin/plugin/graph-workspace` is deliberately not written: local and remote have
+diverged by 232 remote-only commits, and updating it would require a force that discards them.
+
+Open item carried forward, not fixed here because it is a production behaviour change: the presentation
+viewport is never disarmed after a panned F11 exit, leaving `suppressViewportEvents` set
+(`GraphWorkspaceWindow.java:1645`). Pre-existing on `bfaed5611d`. Recorded in section 5.
