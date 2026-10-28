@@ -1,0 +1,64 @@
+diff --git a/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutWorker.java b/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutWorker.java
+index 85a5da15ed..02e1f28173 100644
+--- a/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutWorker.java
++++ b/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutWorker.java
+@@ -61,6 +61,8 @@ public final class LayoutWorker implements AutoCloseable {
+     private LayoutEngine engine;
+     private LayoutRequest currentRequest;
+     private LayoutPositions previousCorrectedPositions;
++    private final java.util.Set<String> previousRepairSignatures =
++        new java.util.LinkedHashSet<String>();
+     private Map<String, LayoutPoint> previousAppliedDisplacements = Collections.emptyMap();
+ 
+     public LayoutWorker(final LayoutCalibration calibration) {
+@@ -299,6 +301,12 @@ public final class LayoutWorker implements AutoCloseable {
+         final LayoutPositions corrected = edge.positions();
+         final Map<String, LayoutPoint> merged = mergeDisplacements(boundary.appliedDisplacements(),
+             edge.appliedDisplacements());
++        if (engine != null) {
++            final Map<ProjectedNodeKey, LayoutPoint> oscillating = oscillatingRepairs(edge);
++            if (!oscillating.isEmpty()) {
++                engine.seedPositions(oscillating);
++            }
++        }
+         final LayoutPositions before = previousCorrectedPositions == null ? corrected
+             : previousCorrectedPositions;
+         final PerceptualIdlePolicy.IdleMeasurement idle = idlePolicy.observe(before, corrected);
+@@ -315,6 +323,37 @@ public final class LayoutWorker implements AutoCloseable {
+         return decorated;
+     }
+ 
++    /**
++     * Detects repairs that repeat on consecutive frames and returns the repaired centres of only those nodes.
++     * A repeat means the correction is undoing work the relaxation undoes in turn, which is the measured limit
++     * cycle; seeding those nodes lets the relaxation continue from the repaired arrangement. Nodes repaired once
++     * are never seeded, so ordinary layouts keep their exact trajectory.
++     */
++    private Map<ProjectedNodeKey, LayoutPoint> oscillatingRepairs(final EdgeConflictResult edge) {
++        final Map<ProjectedNodeKey, LayoutPoint> seeded =
++            new java.util.LinkedHashMap<ProjectedNodeKey, LayoutPoint>();
++        final java.util.Set<String> seenThisFrame = new java.util.LinkedHashSet<String>();
++        for (final EdgeConflictDiagnostics.Repair repair : edge.diagnostics().repairsApplied()) {
++            final String signature = repairSignature(repair);
++            seenThisFrame.add(signature);
++            if (previousRepairSignatures.contains(signature)) {
++                seeded.putAll(repair.toCentres());
++            }
++        }
++        previousRepairSignatures.clear();
++        previousRepairSignatures.addAll(seenThisFrame);
++        return seeded;
++    }
++
++    private static String repairSignature(final EdgeConflictDiagnostics.Repair repair) {
++        final StringBuilder signature = new StringBuilder(repair.kind().name());
++        for (final ProjectedNodeKey key : repair.nodeKeys()) {
++            signature.append('|').append(key.source().persistent()
++                ? key.source().persistedReference().get().nodeId().toString() : "?");
++        }
++        return signature.toString();
++    }
++
+     private static Map<String, LayoutPoint> mergeDisplacements(final Map<String, LayoutPoint> boundary,
+             final Map<String, LayoutPoint> edge) {
+         final Map<String, LayoutPoint> result = new java.util.TreeMap<String, LayoutPoint>();
