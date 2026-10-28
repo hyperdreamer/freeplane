@@ -1,0 +1,76 @@
+diff --git a/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutEngine.java b/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutEngine.java
+index 9c87e44f36..cdf251100a 100644
+--- a/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutEngine.java
++++ b/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutEngine.java
+@@ -1,5 +1,10 @@
+ package org.freeplane.plugin.graph.layout;
+ 
++import java.util.Map;
++
++import org.freeplane.plugin.graph.geometry.LayoutPoint;
++import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
++
+ public interface LayoutEngine extends AutoCloseable {
+     LayoutFrame apply(LayoutRequest request);
+ 
+@@ -7,6 +12,14 @@ public interface LayoutEngine extends AutoCloseable {
+ 
+     void reset();
+ 
++    /**
++     * Reports the accepted, post-correction node centres for the frame just published, so the
++     * relaxation can continue from the repaired arrangement instead of from an arrangement the
++     * correction has already rejected. Implementations that hold no such state may ignore it.
++     */
++    default void seedPositions(final Map<ProjectedNodeKey, LayoutPoint> accepted) {
++    }
++
+     @Override
+     void close();
+ }
+diff --git a/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutWorker.java b/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutWorker.java
+index 85a5da15ed..08927220c1 100644
+--- a/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutWorker.java
++++ b/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/LayoutWorker.java
+@@ -299,6 +299,9 @@ public final class LayoutWorker implements AutoCloseable {
+         final LayoutPositions corrected = edge.positions();
+         final Map<String, LayoutPoint> merged = mergeDisplacements(boundary.appliedDisplacements(),
+             edge.appliedDisplacements());
++        if (engine != null) {
++            engine.seedPositions(corrected.nodes());
++        }
+         final LayoutPositions before = previousCorrectedPositions == null ? corrected
+             : previousCorrectedPositions;
+         final PerceptualIdlePolicy.IdleMeasurement idle = idlePolicy.observe(before, corrected);
+diff --git a/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java b/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java
+index 6a75bc98dc..03539b8c19 100644
+--- a/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java
++++ b/freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/layout/graphstream/GraphStreamLayoutEngine.java
+@@ -101,6 +101,27 @@ final class GraphStreamLayoutEngine implements LayoutEngine {
+         }
+     }
+ 
++    @Override
++    public void seedPositions(final Map<ProjectedNodeKey, LayoutPoint> accepted) {
++        checkOpen();
++        checkOwnerThread();
++        if (accepted == null || accepted.isEmpty() || springBox == null) {
++            return;
++        }
++        for (final ParticleState state : particles.values()) {
++            if (state.pinned || state.nodeKey == null) {
++                continue;
++            }
++            final LayoutPoint point = accepted.get(state.nodeKey);
++            if (point == null) {
++                continue;
++            }
++            state.x = point.x();
++            state.y = point.y();
++            springBox.setParticlePosition(state.id, state.x, state.y);
++        }
++    }
++
+     @Override
+     public void reset() {
+         checkOpen();
