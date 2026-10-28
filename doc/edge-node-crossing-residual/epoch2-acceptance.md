@@ -77,3 +77,35 @@ layout instability.
 
 This record does not authorise that work. It records that delivery of the current changes cannot be justified by
 the evidence available.
+
+## Addendum — minimal experiment result
+
+Control and experiment differ by exactly one token: the `<graph_group version="1"/>` marker on
+`ID_1271861869`.
+
+| Condition | map 1 groups | discs | settle |
+| --- | ---: | ---: | --- |
+| your maps as they are | 11 | 29 | never idle; residual oscillates 0..4 over 30 000 frames |
+| same maps, marker removed | 10 | 28 | **`steps=178 idle=true residualViolations=1`** |
+
+`doc/edge-node-crossing/epoch2/minimal-experiment.txt` records both runs and the conflict dump.
+
+### Which subsystem oscillates
+
+The boundary-conflict list is empty on every sampled frame (`CONFLICTS step=N n=0`). The non-zero quantity is
+the edge-conflict residual, so the oscillation lives in `EdgeConflictCorrection`, not in
+`BoundarySeparationCorrection`. The correction finds an edge-over-node conflict, resolves it, the relaxation
+moves the pair back, and the conflict returns: the count cycles 0 -> 1 -> 3 -> 0.
+
+### Pre-existing, not introduced by this run
+
+The delivery base `bfaed5611d` also fails to reach idle on the same input (the acceptance lane recorded 31 680
+steps without idle against the candidate's 32 388). The non-convergence therefore predates both changes in this
+run. Neither the routing control-position group nor the relocation ring expansion is its cause, and the
+relocation change may widen the repaired set inside an oscillating frame without being able to stabilise it.
+
+### Consequence for delivery
+
+The delivered changes remain individually correct and audited. They do not fix the reported screenshot, because
+the canvas that produced it never settles. Delivery should be decided on that basis, not on the clear paths
+measured at step 24 000.

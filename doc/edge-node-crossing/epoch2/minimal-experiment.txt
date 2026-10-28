@@ -1,0 +1,24 @@
+# Minimal experiment: the single added graph group causes the non-convergence
+
+## Control — your maps as they are
+map[1] Axiomatic_Set_Theory.mm      sourceNodes=  7455 projectedNodes= 204 connectors=1445 graphGroups=11
+map[2] Point-set_Topology.mm        sourceNodes=  9025 projectedNodes= 247 connectors=1229 graphGroups=11
+map[3] Real_Anaylsis.mm             sourceNodes=  9834 projectedNodes= 150 connectors=1474 graphGroups=7
+projection: nodes=29 edges=12 enclosures=7 pins=0
+
+## Experiment — identical maps, only the graph_group marker removed from ID_1271861869
+map[1] Axiomatic_Set_Theory.mm      sourceNodes=  7455 projectedNodes= 204 connectors=1445 graphGroups=10
+map[2] Point-set_Topology.mm        sourceNodes=  9025 projectedNodes= 247 connectors=1229 graphGroups=11
+map[3] Real_Anaylsis.mm             sourceNodes=  9834 projectedNodes= 150 connectors=1474 graphGroups=7
+projection: nodes=28 edges=12 enclosures=7 pins=0
+settle: steps=178 idle=true residualViolations=1
+
+## Boundary conflicts during the non-convergent control run
+  CONFLICTS step=1 n=0 
+  CONFLICTS step=2 n=0 
+  CONFLICTS step=3 n=0 
+  CONFLICTS step=4 n=0 
+  CONFLICTS step=5 n=0 
+  CONFLICTS step=500 n=0 
+  CONFLICTS step=1000 n=0 
+  CONFLICTS step=1500 n=0 
