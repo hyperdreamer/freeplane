@@ -273,3 +273,28 @@ acceptance documents already use.
 
 Recommendation carried forward: make that the standard invocation for this module's suite rather than
 depending on whatever the developer's desktop happens to be doing.
+
+### 11.1 Documented entry point
+
+`freeplane_plugin_graph/scripts/run-suite-on-xvfb.sh` runs the module suite on a private `Xvfb` display with
+`openbox`, so the focus-dependent tests do not depend on the developer's desktop. Arguments pass through to
+Gradle. It is documented in `freeplane_plugin_graph/doc/running-the-test-suite.md`, which also records that a
+focus-timeout failure must never be "fixed" by relaxing the timeout.
+
+A Gradle task was rejected deliberately: `doLast` does not run when the test task fails, so an X server started
+in a Gradle task would be orphaned exactly in the failing case. The script's `exec`/`trap`-free process model
+lets `xvfb-run` own the lifecycle instead.
+
+### 11.2 Residual flake found while verifying the script (pre-existing, not caused here)
+
+| Run | Result |
+|---|---|
+| Full suite on Xvfb, before the script existed (same code) | exit 0 — 1458 tests, 0 failures, 5 skipped |
+| Full suite via the script | exit 1 — 1458 tests, **1 failure**, 5 skipped |
+| `GraphInteractionControllerShould.doNotPanWhenAProgrammaticScrollMovesTheViewportUnderAStationaryPointer` in isolation, 5 runs | 5 pass |
+
+The failure is `setViewPosition` not taking effect (expected `Point[201,31]`, actual `Point[161,11]`) at
+`GraphInteractionControllerShould.java:744` — a layout-timing dependency, not a focus problem. It is
+unrelated to this task's diff (which touches only performance tests, build configuration, a script and a
+document), and it reproduced at a low rate against byte-identical code that had just passed. Recorded as a
+follow-up rather than fixed here.
