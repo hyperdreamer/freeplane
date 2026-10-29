@@ -1922,16 +1922,6 @@ public class GraphWorkspaceWindowModelShould {
     @Test
     public void panDuringPresentationIsPreservedThroughExit() throws Exception {
         Assume.assumeFalse(GraphicsEnvironment.isHeadless());
-        // The presentation viewport is disarmed only by a toolbar publication. After a panned exit
-        // the exit path republishes while applyingViewport is set, so on a live KWin/XWayland
-        // desktop the viewport stays armed and suppressViewportEvents remains set
-        // (GraphWorkspaceWindow.java:1645). Every file that determines this behaviour is
-        // byte-identical to base bfaed5611d, so this is pre-existing inherited behaviour and not a
-        // regression from the delivered work; see ai-specs/tasks/in-progress/010 section 5.
-        Assume.assumeTrue("presentation disarm after a panned F11 exit is observed only on the "
-            + "synthetic X11 acceptance display used by the evidence runs; enable with "
-            + "-PgraphDisplayAcceptance once the pre-existing disarm gap is repaired",
-            Boolean.getBoolean("graphDisplayAcceptance"));
         try (DisplayFixture f = new DisplayFixture()) {
             f.pressF11();
             f.awaitActive(true);
@@ -1956,7 +1946,8 @@ public class GraphWorkspaceWindowModelShould {
             f.checkpoint = f.edt(() -> f.commands.size());
             f.pressF11();
             f.awaitActive(false);
-            f.await(() -> !(Boolean) GraphWindowChromeShould.field(f.model.presentationViewport(), "armed"));
+            f.awaitWithin(() -> !(Boolean) GraphWindowChromeShould.field(
+                f.model.presentationViewport(), "armed"), 10000L);
             f.assertView(changed);
             f.assertNoCommands();
         }
@@ -2244,6 +2235,26 @@ public class GraphWorkspaceWindowModelShould {
             onEdt(() -> { });
             onEdt(() -> { });
             assertThat(uncaught.get()).as("uncaught EDT error").isNull();
+        }
+
+        /**
+         * Waits with an explicit budget. Presentation settlement is capped at 5000 ms
+         * (scheduleQuietObservation), so waiting for the presentation hold to be released must budget
+         * strictly more than that cap; a 5000 ms wait races the cap itself.
+         */
+        private void awaitWithin(final java.util.function.BooleanSupplier condition, final long budgetMillis)
+                throws Exception {
+            final long deadline = System.nanoTime()
+                + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(budgetMillis);
+            while (!edt(() -> condition.getAsBoolean())) {
+                assertThat(uncaught.get()).as("uncaught EDT error").isNull();
+                if (System.nanoTime() >= deadline) {
+                    throw new AssertionError("Display condition did not settle within " + budgetMillis
+                        + " ms; bounds=" + edt(() -> window.getBounds()) + "; messages=" + messages);
+                }
+                Thread.sleep(10);
+            }
+            awaitEdt();
         }
 
         private void await(final java.util.function.BooleanSupplier condition) throws Exception {

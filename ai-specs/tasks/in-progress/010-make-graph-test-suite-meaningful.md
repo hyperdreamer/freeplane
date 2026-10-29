@@ -373,5 +373,39 @@ effects (settle-correction scheduling, baseline suppression) misbehave after exi
 - **C — rewrite the assertion** to the observable contract (viewport preserved, no commands on exit) and drop
   the internal-flag wait. Restores coverage without touching production, but leaves the stale flag in place.
 
-Recommendation: **B** if a product change is acceptable, otherwise **C**. A is only right if the latent state
-is genuinely not worth clearing.
+### 12.1 The premise was wrong: the hold is released by design
+
+Reading `scheduleQuietObservation` shows the flag is **not** stuck. Settlement calls `disarm()` after
+`lastTransitionGeometryAt + 2500` ms once the frame and viewport events have been quiet for 200 ms, with a
+hard `+ 5000` ms cap (`GraphWorkspaceWindow.java:857` and `:863`). The hold is kept armed on purpose across
+the restore so it can still correct post-restore geometry drift.
+
+Measured on the real fixture: `armedClearedAfterMillis=2288`.
+
+So the defect is **in the test, not the product**: `panDuringPresentationIsPreservedThroughExit` waited exactly
+`5000 ms` for the hold to be released, which is exactly the settlement cap. The wait raced the cap it was
+waiting on. Option B (disarm immediately on exit) would have cancelled the drift-correction window that
+preserves the user's pan — the opposite of a fix. It was **not** implemented.
+
+### 12.2 Change made instead
+
+- `DisplayFixture.awaitWithin(condition, budgetMillis)` added, so a wait can state a budget explicitly.
+- The pan test now waits `10000 ms` for the hold release, strictly above the 5000 ms cap.
+- The `-PgraphDisplayAcceptance` gate added earlier is removed: the test now runs in the default suite.
+
+Verified: the test passes 3/3 under `Xvfb` and reports 0 skipped, i.e. it genuinely executes.
+Suite skips drop from 5 to 4.
+
+### 12.3 New pre-existing flake surfaced during verification (not caused here)
+
+`GraphCanvasPaintShould.keepBothWorldExtremaReachableAfterOffCenterUserPan` failed once in a full suite at
+`GraphCanvasPaintShould.java:2337` (`assertHorizontallyReachable`): `visibleX = -1278.0` not between
+`[0.0, 302.0]`. It also fails **in isolation**, 1 of 3 runs, so it is independent of this change and
+pre-existing. Its `assertHorizontallyReachable` computes its bound from `viewport.getView().getWidth()`, the
+same quantity-mismatch family as 11.3, but the reported negative value does not follow from that alone, so the
+root cause is not established and it was left alone rather than guessed at.
+
+### 12.4 Follow-up
+
+`GraphCanvasPaintShould.keepBothWorldExtremaReachableAfterOffCenterUserPan` deserves its own diagnosis. The
+suite is green only when it happens to pass.
