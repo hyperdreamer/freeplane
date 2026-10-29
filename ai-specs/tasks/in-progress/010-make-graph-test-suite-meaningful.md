@@ -409,3 +409,33 @@ root cause is not established and it was left alone rather than guessed at.
 
 `GraphCanvasPaintShould.keepBothWorldExtremaReachableAfterOffCenterUserPan` deserves its own diagnosis. The
 suite is green only when it happens to pass.
+
+### 12.5 The canvas reachability flake, diagnosed and fixed
+
+**Instrumented values** (probe since removed) on passing runs:
+
+```
+extentW=302 compW=2580 viewSizeW=2580 maximumX=2278 surfaceX=80   requestedX=0   actualX=0   visibleX=80.0   edt=false
+extentW=302 compW=2580 viewSizeW=2580 maximumX=2278 surfaceX=1100 requestedX=949 actualX=949 visibleX=151.0  edt=false
+```
+
+**Mechanism.** The observed failure was `visibleX = -1278.0` against `[0, 302]`. With `surfaceX = 80` that
+requires `actualX = 1358` — but the requested value for that call is `0`. So `setViewPosition` was not
+honoured and the viewport was found at a position nobody asked for. The probe shows `edt=false`: this
+assertion mutates and reads `JViewport` from the test thread while the event dispatch thread is live. A queued
+layout pass (invalidated by the preceding `panByPixels`) can therefore reposition the viewport between the set
+and the read. That is an AWT threading violation, not an arithmetic error.
+
+**Fix.** Perform the set and the read in a single EDT task via `SwingUtilities.invokeAndWait`, so no queued
+layout can interleave. `maximumX` is now also taken from `getViewSize()`, the size `JViewport` itself clamps
+with, instead of the laid-out component width.
+
+**Evidence.**
+
+| Check | Result |
+|---|---|
+| Falsifiability: force `maximumX = 0` | 3 failures at the assertion, so the check is live |
+| `GraphCanvasPaintShould` in isolation, 8 runs | **8 pass, 0 fail** (before: 1 of 3 failed) |
+
+**Honest limit.** 8 clean runs against a ~1/3 baseline is strong but not proof; the mechanism and the
+mutation result are the stronger evidence.
