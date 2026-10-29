@@ -33,7 +33,6 @@ import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.NodeReference;
 import org.freeplane.plugin.graph.workspace.model.PersistedNodeId;
-import org.junit.Assume;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Rule;
@@ -214,21 +213,6 @@ public class PerformanceTripwiresShould {
         referenceFixtureStaysBoundedAndFlagVisible();
     }
 
-    /**
-     * The wall-clock frame bound is measured on a real clock, and its maximum is always the first
-     * frame, so it reports JVM warm-up and machine load rather than layout cost. Measured on both
-     * {@code cfa9b7f9fb} and its base {@code bfaed5611d}, all six interleaved runs exceeded the
-     * 5 s bound (5.056 s to 6.043 s). It is therefore opt-in, and the deterministic negative test
-     * {@link #rejectsAFrameWhoseRoutingExceedsTheCompleteFrameBound()} keeps the bound covered.
-     */
-    @Test
-    public void rawReferenceFrameStaysInsideTheWallClockBound() {
-        Assume.assumeTrue("wall-clock frame bound is dominated by first-frame JVM warm-up and "
-            + "machine load; enable with -PgraphWallClockPerformance",
-            Boolean.getBoolean("graphWallClockPerformance"));
-        assertRawReferenceFrameBound(referenceDiagnostic);
-    }
-
     @Test
     public void rejectsAFrameWhoseRoutingExceedsTheCompleteFrameBound() throws Exception {
         final RoutingDelayClock clock = new RoutingDelayClock();
@@ -247,6 +231,10 @@ public class PerformanceTripwiresShould {
 
         assertThatThrownBy(() -> assertRawReferenceFrameBound(diagnostic))
             .isInstanceOf(AssertionError.class);
+        // The dedicated diagnostic task owns the bound; keep that path deterministic too.
+        assertThatThrownBy(diagnostic::verifyRawReferenceFrameBound)
+            .hasMessageContaining("exceeds the")
+            .hasMessageContaining("complete-frame bound");
     }
 
     private static void assertRawReferenceFrameBound(final GraphWorkspacePerformanceDiagnostic diagnostic) {

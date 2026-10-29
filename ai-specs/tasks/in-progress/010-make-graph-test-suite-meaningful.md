@@ -237,3 +237,39 @@ diverged by 232 remote-only commits, and updating it would require a force that 
 Open item carried forward, not fixed here because it is a production behaviour change: the presentation
 viewport is never disarmed after a panned F11 exit, leaving `suppressViewportEvents` set
 (`GraphWorkspaceWindow.java:1645`). Pre-existing on `bfaed5611d`. Recorded in section 5.
+
+## 10. Follow-up: the wall-clock bound got a single owner (supersedes section 4/7 wording)
+
+The `-PgraphWallClockPerformance` opt-in described in section 4 has been **removed**. A switch that nobody
+flips is not coverage; it just hides the decision.
+
+- `GraphWorkspacePerformanceDiagnostic.verifyRawReferenceFrameBound()` now owns
+  `RAW_REFERENCE_MAX_FRAME_NANOS`. It runs the raw reference fixture and raises a `DiagnosticFailure` whose
+  message lists every frame duration, so a failure names the frames instead of only a number.
+- It is called from the diagnostic's `run()`, i.e. by the already-existing dedicated
+  `graphPerformanceDiagnostic` task. That task is the only place a wall-clock performance gate belongs.
+- The unit suite keeps the deterministic assertions: the Revision-7 structural caps and budget flags in
+  `referenceFixtureStaysBoundedAndFlagVisible`, and the synthetic-clock negative test, which now also asserts
+  that the dedicated-task owner raises `complete-frame bound`.
+- `build.gradle` no longer defines or forwards the property.
+
+Residual: `graphPerformanceDiagnostic` runs longer than 15 minutes on this machine, so the new call site was
+not exercised end-to-end here. Its mechanism is covered deterministically by the extended negative test, and
+the call is a single statement after `runLifecycleProbes`.
+
+## 11. Follow-up: the suite needs a controlled display (found while verifying section 10)
+
+A full-suite run on the live KWin desktop failed 13-15 tests, all of them **focus-acquisition timeouts**
+(`Graph canvas did not receive focus`, `Canvas did not regain focus within 5000 ms`) across
+`AccessibleGraphCanvasShould` and `GraphWorkspaceWindowModelShould`. A control run of the same single test,
+with these changes stashed, failed identically — so it is the desktop state, not this change.
+
+Cause: the active desktop had other focus-holding applications (a Freeplane window and GoldenDict) and no
+window held input focus, so the test frames could not be activated.
+
+Verified fix: the identical suite on a dedicated `Xvfb` + `openbox` display passes —
+**exit 0, 1458 tests, 0 failures, 5 skipped, 11m05s**. This matches the environment the repository's own
+acceptance documents already use.
+
+Recommendation carried forward: make that the standard invocation for this module's suite rather than
+depending on whatever the developer's desktop happens to be doing.
