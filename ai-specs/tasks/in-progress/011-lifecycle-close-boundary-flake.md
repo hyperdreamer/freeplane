@@ -145,7 +145,31 @@ because nothing blocks the EDT, and is still test-only. It does drop the deliber
 scenario; if that scenario must be retained, it needs a production-level observability seam, which is a
 behaviour change and out of scope here.
 
-**State:** the attempted fix was reverted. `git status` is clean on `pm/lifecycle-flake-diagnosis`; no source
+### 6.3 The revised design was implemented and found VACUOUS (mutation evidence)
+
+The non-blocking design in 6.2 was implemented and ran green 3/3 with no hang. It was then
+mutation-probed. **Both production guards survived:**
+
+| Mutation to `GraphUpdateCoordinator.publishProjection` | Expected | Actual |
+|---|---|---|
+| remove the per-listener `closed` guard | test fails | **test PASSES** |
+| remove the pre-loop snapshot `closed` guard | test fails | **test PASSES** |
+
+Reason: `close()` calls `projectionListeners.clear()` (`GraphUpdateCoordinator.java:339`) while holding the
+monitor. Any dispatch that starts *after* close therefore snapshots an **empty** list and never reaches a
+listener at all — neither guard is reachable. Both guards only matter for a dispatch that snapshotted the
+list of listeners *before* close and is still iterating when close lands, i.e. a genuinely in-flight
+dispatch.
+
+So the non-blocking rewrite asserts something real (no callbacks after close; registration rejected after
+close) but it does **not** test the guard this test is named for. It was reverted rather than shipped,
+because a green test that survives both guard mutations would give false confidence.
+
+**Consequence:** the in-flight per-listener guard is not testable without either (a) a timing race — which is
+the current flake — or (b) calling close reentrantly from inside the dispatch on the EDT, which is exotic and
+depends on close being EDT-safe, or (c) a production observability seam.
+
+**State:** both the blocking fix and the non-blocking rewrite were reverted. `git status` is clean on `pm/lifecycle-flake-diagnosis`; no source
 file is modified in the committed state, and no synthetic load is running.
 
 ## 6b. Superseded first draft of the repair (kept for the record)
