@@ -9,8 +9,10 @@ import java.util.Collections;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
+
+import javax.swing.SwingUtilities;
 
 import org.freeplane.core.undo.IActor;
 import org.freeplane.features.map.MapController;
@@ -265,66 +267,38 @@ public class GraphWorkspaceLifecycleShould {
             final AtomicInteger secondProjectionCallbacks = new AtomicInteger();
             final AtomicInteger canvasCallbacks = new AtomicInteger();
             final AtomicInteger statusCallbacks = new AtomicInteger();
-            final CountDownLatch firstProjectionEntered = new CountDownLatch(1);
-            final CountDownLatch releaseFirstProjection = new CountDownLatch(1);
+            final CountDownLatch firstProjectionDelivered = new CountDownLatch(1);
+            final AtomicBoolean closeReturned = new AtomicBoolean(false);
             final GraphWorkspaceHandle callbackHandle = handle;
             projectionRegistration = callbackHandle.addProjectionListener(projection -> {
                 projectionCallbacks.incrementAndGet();
-                firstProjectionEntered.countDown();
-                try {
-                    releaseFirstProjection.await(5, TimeUnit.SECONDS);
-                }
-                catch (InterruptedException interrupted) {
-                    Thread.currentThread().interrupt();
+                firstProjectionDelivered.countDown();
+            });
+            // Only a delivery observed once close has returned is stale. Deliveries while the workspace
+            // is still open are legitimate, so counting those would make this test depend on how fast
+            // close wins a race. The in-flight per-listener closed guard is covered deterministically by
+            // GraphUpdateCoordinatorShould.stopsRemainingProjectionObserversWhenCloseHappensDuringDelivery.
+            secondProjectionRegistration = callbackHandle.addProjectionListener(projection -> {
+                if (closeReturned.get()) {
+                    secondProjectionCallbacks.incrementAndGet();
                 }
             });
-            secondProjectionRegistration = callbackHandle.addProjectionListener(
-                projection -> secondProjectionCallbacks.incrementAndGet());
             canvasRegistration = binding.addCanvasStateListener(state -> canvasCallbacks.incrementAndGet());
             statusRegistration = binding.addSessionStatusListener(status -> statusCallbacks.incrementAndGet());
 
             assertThat(callbackHandle.execute(GraphCommands.viewport(Viewport.of(13, 14, 1.6,
                 Collections.emptyList()))).status()).isEqualTo(GraphCommandResult.Status.APPLIED);
-            assertThat(firstProjectionEntered.await(5, TimeUnit.SECONDS)).isTrue();
-            final AtomicReference<Throwable> closeFailure = new AtomicReference<Throwable>();
-            final Thread closing = new Thread(() -> {
-                try {
-                    callbackHandle.close();
-                }
-                catch (Throwable failure) {
-                    closeFailure.set(failure);
-                }
-            }, "graph-workspace-stale-callback-close-probe");
-            closing.start();
-            try {
-                GraphWorkspaceIntegrationSupport.awaitCondition(() -> {
-                    try {
-                        callbackHandle.execute(GraphCommands.viewport(Viewport.of(15, 16, 1.7,
-                            Collections.emptyList())));
-                        return false;
-                    }
-                    catch (IllegalStateException expected) {
-                        return true;
-                    }
-                }, 5000L, "close did not cross the handle closing boundary");
-                GraphWorkspaceIntegrationSupport.awaitCondition(() -> {
-                    try {
-                        binding.addCanvasStateListener(state -> {
-                        }).close();
-                        return false;
-                    }
-                    catch (IllegalStateException expected) {
-                        return true;
-                    }
-                }, 5000L, "close did not reach the graph update coordinator callback boundary");
-            }
-            finally {
-                releaseFirstProjection.countDown();
-                closing.join(10000L);
-            }
-            assertThat(closing.isAlive()).as("close thread completed").isFalse();
-            assertThat(closeFailure.get()).isNull();
+            assertThat(firstProjectionDelivered.await(5, TimeUnit.SECONDS)).isTrue();
+            callbackHandle.close();
             handle = null;
+            closeReturned.set(true);
+            // Drain the event queue so any projection still queued for the EDT runs now, after close
+            // has returned. No sleeps and no polling: nothing blocks the EDT, so this cannot deadlock.
+            SwingUtilities.invokeAndWait(() -> { });
+            assertThatThrownBy(() -> binding.addCanvasStateListener(state -> {
+            }).close())
+                .as("listener registration after close")
+                .isInstanceOf(IllegalStateException.class);
             final int projectionAfterClose = projectionCallbacks.get();
             final int canvasAfterClose = canvasCallbacks.get();
             final int statusAfterClose = statusCallbacks.get();

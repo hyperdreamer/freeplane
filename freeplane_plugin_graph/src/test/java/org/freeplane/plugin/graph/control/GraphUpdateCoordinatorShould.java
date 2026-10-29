@@ -613,6 +613,31 @@ public class GraphUpdateCoordinatorShould {
     }
 
     @Test
+    public void stopsRemainingProjectionObserversWhenCloseHappensDuringDelivery() {
+        ImmediateEdt edt = new ImmediateEdt();
+        HeldStepper stepper = new HeldStepper();
+        List<String> callbacks = new ArrayList<String>();
+        final GraphUpdateCoordinator[] holder = new GraphUpdateCoordinator[1];
+        GraphUpdateCoordinator coordinator = coordinator(new TestPipeline(), unusedBatcher(edt),
+            new LayoutSettleLoop(WORKSPACE, stepper, new GraphGeometryEngine(), edt), edt);
+        holder[0] = coordinator;
+        try {
+            coordinator.addProjectionListener(projection -> {
+                callbacks.add("first-" + projection.generation());
+                holder[0].close();
+            });
+            coordinator.addProjectionListener(projection -> callbacks.add("second-" + projection.generation()));
+
+            coordinator.acceptBatch(batch(1L));
+
+            assertThat(callbacks).containsExactly("first-1");
+        }
+        finally {
+            coordinator.close();
+        }
+    }
+
+    @Test
     public void stopsRemainingCanvasObserversWhenANewerGenerationIsAcceptedDuringDelivery() throws Exception {
         AtomicBoolean firstCanvasListenerStarted = new AtomicBoolean();
         CountDownLatch firstCanvasPublicationFinished = new CountDownLatch(1);

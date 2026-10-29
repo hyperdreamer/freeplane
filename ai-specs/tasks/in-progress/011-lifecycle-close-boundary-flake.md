@@ -199,3 +199,30 @@ what widens the race window.
 - Probe edits reverted; `git status` clean on `pm/lifecycle-flake-diagnosis`.
 - All 18 synthetic load processes terminated (verified zero remaining).
 - No production file modified; no test file modified in the committed state.
+
+## 9. Resolution (delivered on `pm/lifecycle-flake-diagnosis`)
+
+The gap in 6.3 is closed by covering the in-flight guard where it *can* be covered deterministically, then
+converting the flaky integration test to a deterministic contract test.
+
+**9.1 New unit test.** `GraphUpdateCoordinatorShould.stopsRemainingProjectionObserversWhenCloseHappensDuringDelivery`
+uses the existing single-threaded `ImmediateEdt` double: the first projection listener calls
+`coordinator.close()` reentrantly during delivery, so the listener list has already been snapshotted and only
+the per-listener closed guard can stop the second observer. No threads, no latches, no timing.
+
+**Mutation evidence.** Removing only the per-listener `closed` guard from
+`GraphUpdateCoordinator.publishProjection` makes the new test fail (`ComparisonFailure` at
+`GraphUpdateCoordinatorShould.java:633`). Production restored, re-run green. The guard is therefore covered
+non-vacuously and deterministically.
+
+**9.2 Integration test rewritten.** `GraphWorkspaceLifecycleShould.doesNotDeliverCallbacksAfterClose` no
+longer blocks the EDT. It counts second-listener deliveries only when `closeReturned` is already true, closes
+the handle to completion, sets the flag, drains the event queue with `SwingUtilities.invokeAndWait(() -> { })`,
+and asserts zero. The post-close registration rejection assertion is retained. No sleeps, no polling, no
+possible deadlock. A comment records that the in-flight guard is covered by 9.1.
+
+**9.3 Result.** Full module suite exit 0, 1459 tests, 0 failures, 6 skipped, 12m41s. Focused lifecycle class
+passed 3/3 with no hang. Production source unchanged.
+
+**Residual:** the rewrite asserts the observable post-close contract rather than the in-flight guard; that
+guard's coverage now lives at coordinator level. This is stated here rather than left implicit.
