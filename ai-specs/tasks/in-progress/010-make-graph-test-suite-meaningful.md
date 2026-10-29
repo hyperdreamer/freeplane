@@ -331,3 +331,47 @@ longer depends on the two sizes agreeing.
 reproducer resynced `getViewSize()` to the component size, so old-code-fails/new-code-passes was not
 demonstrated as a mutation pair. The mechanism is pinned by the arithmetic above and the fix is justified by
 construction rather than by a reproduced failure.
+
+## 12. Verification of the presentation-disarm gap (supersedes the "deserves its own task" note in section 5)
+
+**Question:** does `armed` staying true after a panned F11 exit have a user-visible consequence, or is the
+skipped assertion observing harmless internal state?
+
+**Method.** A temporary diagnostic test in `GraphWorkspaceWindowModelShould` (since reverted) drove the real
+window fixture on `Xvfb` + `openbox`: enter presentation, pan, exit, read `armed`, then pan again and record
+whether the viewport moved and whether a `GraphCommand` was issued.
+
+**Result.**
+
+| Measurement | Value |
+|---|---|
+| `armed` after a panned exit | **true** — the gap is real |
+| post-exit pan moved the viewport | **true** — `centerX -151.95 → -199.95` |
+| commands issued after exit | **1** |
+
+A first probe reported `viewportChanged=false` with zero commands, but that was the probe's fault: the window
+moves when presentation exits, so the original screen coordinates no longer landed on the canvas. Recomputing
+the pointer after exit produced the table above. The broken first attempt is noted because it would otherwise
+have "proved" a defect that does not exist.
+
+**What the stale flag actually does.** `GraphWorkspaceWindowModel.classify(ChangeEvent)` calls
+`publishExternalViewport()` only when `!armed`; while armed it takes the presentation branch (baseline-anchor
+comparison, `publishUserView`, settle-correction registration). So after a panned exit, ordinary viewport
+events are processed by presentation logic rather than normal logic.
+
+**Assessment.** No user-visible defect demonstrated for the path that matters most: the viewport tracks the
+pointer and changes are still reported. What remains unverified is whether the presentation branch's side
+effects (settle-correction scheduling, baseline suppression) misbehave after exit.
+
+**Options.**
+
+- **A — no change.** Keep the test skipped behind `-PgraphDisplayAcceptance`, document the flag as latent
+  state with no demonstrated user impact. Cheapest; leaves a permanently skipped assertion.
+- **B — clear the flag on presentation exit** (`viewportHold.disarm()` on the exit path). Small, targeted, and
+  it makes the currently skipped assertion valid so the test can run by default. This is a **production
+  behaviour change** and needs explicit approval; the window suite would validate it.
+- **C — rewrite the assertion** to the observable contract (viewport preserved, no commands on exit) and drop
+  the internal-flag wait. Restores coverage without touching production, but leaves the stale flag in place.
+
+Recommendation: **B** if a product change is acceptable, otherwise **C**. A is only right if the latent state
+is genuinely not worth clearing.
