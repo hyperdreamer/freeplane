@@ -96,7 +96,59 @@ projection, so there is a steady supply of these legitimate deliveries.
 Secondary defect: the two `awaitCondition(..., 5000L, ...)` budgets are themselves load-sensitive, which is
 why four runs aborted at line 309 before reaching the assertion at all.
 
-## 6. Recommended repair (test-only — not implemented, needs approval)
+## 6. Repair attempt and why the obvious fix is wrong
+
+**Attempted:** remove the bound from the probe listener's wait (hold until the `finally` release) and raise the
+two `awaitCondition` budgets to 30 s. Verified not with machine load but with a deterministic in-test slowdown
+— the close thread sleeps 8 s before calling `close()`.
+
+**Result: deadlock.** The focused test hung past 600 s. `jstack` of the Gradle test worker showed a clean
+lock cycle:
+
+| Thread | State |
+|---|---|
+| `AWT-EventQueue-0` | blocked in `CountDownLatch.await` (the probe listener), dispatched from `GraphUpdateCoordinator$7.run:501` |
+| JUnit test thread | inside `DefaultGraphWorkspaceHandle.execute:77`, **holding** monitor `<0x…e32f0a48>`, waiting for the EDT |
+| close thread | `DefaultGraphWorkspaceHandle.close:95`, **waiting** for monitor `<0x…e32f0a48>` held by the test thread |
+
+The test thread can never reach its `finally` release, because it is blocked waiting on an EDT that only that
+release could unblock.
+
+### 6.1 The real design flaw
+
+The test's **barrier** and its **liveness poll** are mutually exclusive:
+
+- The poll proves closure by calling `callbackHandle.execute(...)` until it throws `IllegalStateException`.
+- `execute` takes the handle monitor and, while the handle is still open, needs the EDT to publish.
+- Blocking the EDT inside a projection listener therefore stalls the poll *while the poll holds the handle
+  monitor*, which in turn stalls `close()`.
+
+The original 5 s bound on the listener wait was not arbitrary sloppiness — it was what let the EDT drain so the
+poll could advance. That is also exactly why the test flakes once close takes longer than 5 s. Any repair that
+merely lengthens or removes that bound converts a flake into a hang. **This is a design defect, not a tuning
+defect.**
+
+### 6.2 Revised design (proposed, needs approval)
+
+Stop blocking the EDT entirely and assert the property directly rather than manufacturing an in-flight
+dispatch:
+
+1. Register a second listener that increments a counter only when `closeReturned` is already `true`.
+2. Trigger the projection.
+3. `handle.close()` to completion.
+4. Set `closeReturned = true`.
+5. Drain the EDT deterministically with `SwingUtilities.invokeAndWait(() -> {})` — no sleeps, no polling.
+6. Assert the after-close counter is `0`.
+
+This keeps the property under test (no delivery after close), removes every timing assumption, cannot deadlock
+because nothing blocks the EDT, and is still test-only. It does drop the deliberately in-flight dispatch
+scenario; if that scenario must be retained, it needs a production-level observability seam, which is a
+behaviour change and out of scope here.
+
+**State:** the attempted fix was reverted. `git status` is clean on `pm/lifecycle-flake-diagnosis`; no source
+file is modified in the committed state, and no synthetic load is running.
+
+## 6b. Superseded first draft of the repair (kept for the record)
 
 1. Remove the bound from the probe listener's wait so it holds until the `finally` release, making the
    barrier actually load-bearing. This is safe against deadlock: in passing runs the coordinator boundary
