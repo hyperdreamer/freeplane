@@ -730,18 +730,24 @@ public class GraphInteractionControllerShould {
             final double centerY = canvas.viewport().centerY();
             assertThat(centerX).isNotEqualTo(beforeDragCenterX);
 
-            final Point viewPosition = scrollPane.getViewport().getViewPosition();
-            final Dimension extent = scrollPane.getViewport().getExtentSize();
-            final int maxX = Math.max(0, canvas.getWidth() - extent.width);
-            final int maxY = Math.max(0, canvas.getHeight() - extent.height);
-            final int deltaX = Math.min(40, maxX - viewPosition.x);
-            final int deltaY = Math.min(20, maxY - viewPosition.y);
-            assertThat(deltaX).isGreaterThan(0);
-            assertThat(deltaY).isGreaterThan(0);
-            scrollPane.getViewport().setViewPosition(
-                new Point(viewPosition.x + deltaX, viewPosition.y + deltaY));
-            assertThat(scrollPane.getViewport().getViewPosition())
-                .isEqualTo(new Point(viewPosition.x + deltaX, viewPosition.y + deltaY));
+            final JViewport viewport = scrollPane.getViewport();
+            final Point viewPosition = viewport.getViewPosition();
+            final Dimension extent = viewport.getExtentSize();
+            // Derive the scroll range from the size the viewport clamps against. JViewport lays the
+            // view out at max(extent, viewSize) and clamps setViewPosition against getViewSize(), so
+            // when the component is wider than its preferred size, canvas.getWidth() overstates the
+            // range and the requested position silently snaps back to the old one.
+            final Dimension viewSize = viewport.getViewSize();
+            final int maxX = Math.max(0, viewSize.width - extent.width);
+            final int maxY = Math.max(0, viewSize.height - extent.height);
+            // Move a small amount in whichever direction still has room, so the target is always
+            // inside [0, maxX] x [0, maxY] and cannot be clamped away.
+            final Point target = new Point(
+                viewPosition.x == 0 ? Math.min(40, maxX) : Math.max(0, viewPosition.x - 40),
+                viewPosition.y == 0 ? Math.min(20, maxY) : Math.max(0, viewPosition.y - 20));
+            assertThat(target).as("programmatic scroll target").isNotEqualTo(viewPosition);
+            viewport.setViewPosition(target);
+            assertThat(viewport.getViewPosition()).isEqualTo(target);
 
             dispatch(canvas, gestureEvent(canvas, scrollPane, MouseEvent.MOUSE_DRAGGED, 610.0, 650.0));
 

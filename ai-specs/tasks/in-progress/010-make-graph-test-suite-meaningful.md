@@ -298,3 +298,36 @@ The failure is `setViewPosition` not taking effect (expected `Point[201,31]`, ac
 unrelated to this task's diff (which touches only performance tests, build configuration, a script and a
 document), and it reproduced at a low rate against byte-identical code that had just passed. Recorded as a
 follow-up rather than fixed here.
+
+### 11.3 The pan-geometry flake, diagnosed and fixed
+
+**Mechanism.** `JViewport` clamps `setViewPosition` against `getViewSize()` — the view's *preferred* size,
+since `GraphCanvas` is not `Scrollable` — but the test computed its scroll range from `canvas.getWidth()`.
+`JViewport` lays the view out at `max(extent, viewSize)`, so when the component is wider than its preferred
+size the two disagree and the test can request a position beyond the real maximum, which then silently snaps
+back to the old one.
+
+Confirmed by instrumenting the test and reading the real values: a passing run had
+`canvasW=1220 viewSizeW=1220 extentW=882 viewPos=(161,11)`. The failing run's actual value was `(161,11)`
+against a requested `(201,31)`, i.e. it clamped at `161`, which requires `viewSize.width = 1043`
+(`1043 - 882 = 161`). So the stale state is a canvas laid out at 1220 whose preferred size is 1043.
+
+**Fix.** Derive the range from `viewport.getViewSize()` — the quantity the viewport itself clamps with — and
+move toward a position already known to be valid:
+
+```java
+final int maxX = Math.max(0, viewSize.width - extent.width);
+final int targetX = viewPosition.x == 0
+    ? Math.min(40, maxX) : Math.max(0, viewPosition.x - 40);
+```
+
+A position between zero and the current, already-honoured position cannot be rejected, so the assertion no
+longer depends on the two sizes agreeing.
+
+**Evidence.** Two consecutive full suites on `Xvfb` + `openbox`: exit 0 both times — 1458 tests, 0 failures,
+5 skipped (12m53s and 12m45s). Previously one of two full-suite runs failed on this test.
+
+**Honest limit.** The exact stale state was not reproduced outside the suite: a synthetic `JScrollPane`
+reproducer resynced `getViewSize()` to the component size, so old-code-fails/new-code-passes was not
+demonstrated as a mutation pair. The mechanism is pinned by the arithmetic above and the fix is justified by
+construction rather than by a reproduced failure.
