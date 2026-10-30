@@ -96,7 +96,15 @@ public final class GraphWorkspacePerformanceDiagnostic {
      * reference worker submit" failure), which reported a slow machine as a broken engine.
      */
     public static final long OPERATION_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(120L);
-    public static final long PROCESS_DEADLINE_NANOS = TimeUnit.MINUTES.toNanos(40L);
+    /**
+     * Liveness guard for the whole measurement campaign, not an assertion about its duration. A wedged
+     * run never completes, so any finite bound catches it; the bound only has to be larger than plausible
+     * slowness, and at 40 minutes it was not. Measured on this host: 950 samples in about 49 minutes,
+     * with the reference scenario alone at 3.92 s per sample for 700 samples and the other five
+     * scenarios between 0.51 and 0.76 s per sample. Two hours leaves a 2.4x margin for a loaded host
+     * while still failing a run that genuinely hung.
+     */
+    public static final long PROCESS_DEADLINE_NANOS = TimeUnit.MINUTES.toNanos(120L);
     public static final int CANVAS_WIDTH = 1024;
     public static final int CANVAS_HEIGHT = 768;
     public static final String OUTPUT_DIRECTORY_NAME = "graph-performance";
@@ -212,7 +220,14 @@ public final class GraphWorkspacePerformanceDiagnostic {
             for (final GeneratedWorkspace workspace : workspaces) {
                 checkDeadline();
                 configureScenarioCanvas(workspace);
+                final long scenarioStart = clock.nanoTime();
                 runScenario(workspace);
+                // A silent run of an hour is indistinguishable from a hang, which is exactly what the
+                // deadline above exists to catch, so report where the budget went.
+                System.out.println("Scenario " + workspace.scenario().wireName() + " took "
+                    + (clock.nanoTime() - scenarioStart) / 1_000_000_000L + "s; "
+                    + (clock.nanoTime() - processStart) / 1_000_000_000L + "s of "
+                    + PROCESS_DEADLINE_NANOS / 1_000_000_000L + "s used");
             }
             runLifecycleProbes(workspaces.get(0));
             writeLedger();
