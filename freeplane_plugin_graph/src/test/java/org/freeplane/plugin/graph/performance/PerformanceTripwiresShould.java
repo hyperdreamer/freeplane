@@ -20,16 +20,24 @@ import org.freeplane.plugin.graph.geometry.EdgeRouteDiagnostics;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
 import org.freeplane.plugin.graph.geometry.LayoutPositions;
+import org.freeplane.plugin.graph.layout.BoundaryConflict;
 import org.freeplane.plugin.graph.layout.EdgeConflictDiagnostics;
+import org.freeplane.plugin.graph.layout.LayoutCalibration;
+import org.freeplane.plugin.graph.layout.LayoutRequest;
+import org.freeplane.plugin.graph.layout.LayoutWorker;
 import org.freeplane.plugin.graph.layout.LayoutFrame;
 import org.freeplane.plugin.graph.projection.BoundaryTier;
 import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.EnclosureKey;
+import org.freeplane.plugin.graph.projection.CanonicalKeys;
 import org.freeplane.plugin.graph.projection.GraphProjection;
+import org.freeplane.plugin.graph.projection.ProjectionDiff;
+import org.freeplane.plugin.graph.projection.ProjectionEngine;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.projection.input.NodeSnapshot;
+import org.freeplane.plugin.graph.projection.input.ProjectionInput;
 import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
@@ -266,6 +274,58 @@ public class PerformanceTripwiresShould {
             .as("the measured window excludes it")
             .isLessThanOrEqualTo(GraphWorkspacePerformanceDiagnostic.RAW_REFERENCE_MAX_FRAME_NANOS);
         assertThatCode(diagnostic::verifyRawReferenceFrameBound).doesNotThrowAnyException();
+    }
+
+    @Test
+    public void validatesTwoPinnedMapConflictShapeRatherThanAnExactCount() throws Exception {
+        // The campaign's only check of this scenario used to be an exact count that followed layout
+        // tuning, and it was unreachable because the diagnostic never completed a run. Pin the shape
+        // checks that replaced it, in both directions.
+        final java.util.List<BoundaryConflict> conflicts = twoPinnedMapFrame().conflicts();
+        assertThat(conflicts).as("the fixture must produce conflicts to check").isNotEmpty();
+        assertThatCode(() -> GraphWorkspacePerformanceDiagnostic.validateTwoPinnedMapConflicts(conflicts))
+            .as("the measured scenario satisfies every shape check")
+            .doesNotThrowAnyException();
+
+        final java.util.List<BoundaryConflict> duplicated =
+            new ArrayList<BoundaryConflict>(conflicts);
+        duplicated.add(conflicts.get(0));
+        assertThatThrownBy(() -> GraphWorkspacePerformanceDiagnostic.validateTwoPinnedMapConflicts(duplicated))
+            .hasMessageContaining("same enclosure-pair conflict twice");
+
+        // Pinned here deliberately, not read from production: a test that takes its expectation from
+        // the constant under test cannot fail when that constant changes.
+        final java.util.List<BoundaryConflict> explosion = new ArrayList<BoundaryConflict>();
+        while (explosion.size() <= 64) {
+            explosion.add(conflicts.get(0));
+        }
+        assertThatThrownBy(() -> GraphWorkspacePerformanceDiagnostic.validateTwoPinnedMapConflicts(explosion))
+            .hasMessageContaining("above the 64 tripwire");
+
+        final BoundaryConflict first = conflicts.get(0);
+        final BoundaryConflict wrongReason = new BoundaryConflict(first.firstHull(), first.secondHull(),
+            first.kind(), BoundaryConflict.Reason.STRUCTURAL_ESCAPE, first.blockingPins());
+        assertThatThrownBy(() -> GraphWorkspacePerformanceDiagnostic.validateTwoPinnedMapConflicts(
+            Collections.singletonList(wrongReason)))
+            .hasMessageContaining("expected IMMOVABLE_SIDES but measured STRUCTURAL_ESCAPE");
+    }
+
+    private static LayoutFrame twoPinnedMapFrame() throws Exception {
+        final GeneratedWorkspace generated = GeneratedWorkspace.forScenario("two-pinned-maps");
+        final ProjectionEngine engine = new ProjectionEngine();
+        final GraphProjection base = engine.project(ProjectionInput.of(0L, generated.document(),
+            generated.snapshots(), generated.availability()));
+        final GraphProjection current = engine.project(ProjectionInput.of(1L, generated.document(),
+            generated.snapshots(), generated.availability()));
+        final LayoutRequest request = LayoutRequest.of(generated.document().id(), current,
+            ProjectionDiff.between(base, current), current.pins());
+        final LayoutWorker worker = new LayoutWorker(LayoutCalibration.spikeDefaults());
+        try {
+            return worker.submit(request).toCompletableFuture().get();
+        }
+        finally {
+            worker.close();
+        }
     }
 
     private static void assertRawReferenceFrameBound(final GraphWorkspacePerformanceDiagnostic diagnostic) {
