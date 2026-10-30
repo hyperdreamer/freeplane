@@ -102,3 +102,75 @@ tractable where a 232-commit merge is not.
 **Which lineage is canonical remains an open decision for the repository owner.** It requires comparing feature
 sets (for example whether the remote's arrowhead, drag-pan and live-refresh work should supersede local
 equivalents), which is a product question, not a test one.
+
+## 7. Semantic comparison: the local lineage is canonical
+
+Follow-up analysis of section 5, which only compared structure. Compared the two tips content-wise:
+local `plugin/graph-workspace` `d22d208309` against `origin/plugin/graph-workspace` `2b78cde01c`.
+
+### 7.1 The remote is the same lineage, one lane behind — not a competing implementation
+
+The commit subjects on either side are **the same lanes with different SHAs**:
+
+```
+LOCAL only      Expand selected relocation families by clearance ring   (residual)
+LOCAL only      Defend per-ring deduplication and fix audit whitespace   (residual)
+both            Bound clearance family selection and retries
+both            Fix finite C2 clearance alternatives
+both            Suppress crowded edge-conflict repair and recalibrate A7a
+both            rebuild the boundary record for the published frame
+...
+```
+
+That is a replayed (rebased) history. The `293 vs 232` counts are inflated by SHA divergence between
+identical work, not by 293 commits of unique content.
+
+### 7.2 The local line is a strict content superset
+
+| Check (repo-wide, `remote → local`) | Result |
+|---|---|
+| Files the remote has and the local line lacks | **0** |
+| Files the local line adds | 43 |
+| Total differing files | 72 |
+
+And the relationship is exact in the subsystem that matters: **`origin/plugin/graph-workspace` is
+content-identical to the local line just before the residual lane**, except for `EdgeRouter.java`, where the
+local side adds 77 lines — `bestControlPositionRung` with `CONTROL_FRACTIONS`/`OFFSET_FRACTIONS`, i.e. the
+residual lane's control-position routing bows.
+
+Only five production files differ at all:
+
+| File | local-only commits | remote-only commits | churn |
+|---|---|---|---|
+| `layout/EdgeConflictCorrection.java` | 15 | 13 | 158 |
+| `geometry/EdgeRouter.java` | 7 | 5 | 77 |
+| `layout/LayoutWorker.java` | 4 | 3 | 25 |
+| `layout/graphstream/GraphStreamLayoutEngine.java` | 5 | 5 | 21 |
+| `layout/LayoutEngine.java` | 1 | 1 | 13 |
+
+In every case the extra local commits are the residual lane; the rest are SHA-only duplicates. The remaining
+differences are additive: residual-lane tests (`EdgeConflictCorrectionShould` +723, `EdgeRouterShould` +222,
+`LayoutWorkerShould` +102, `RealWorkspaceCrossingShould` +179, `EdgeRouterFixture` +59), residual fixtures,
+residual acceptance docs, the `Xvfb` script and doc from task 010, and local-only core work the remote never
+had (`FrameResynchronizer` +369/−83 with its tests, `MFileManager` autosave +559 test lines, `EditNodeTextField`).
+
+The only genuine removals are cosmetic: one line of `AGENTS.md`, one line of `ExportPdf.java`, and an
+equal-size rewrite of `Resources_fr.properties`.
+
+### 7.3 Recommendation
+
+**Treat the local lineage as canonical.** It is justified empirically: nothing the remote has is missing
+locally, and everything the local line adds is explainable by its own later lanes.
+
+To repair the ref without losing anything:
+
+1. **Back up the remote tip on a named ref first** —
+   `git push origin 2b78cde01c:refs/heads/backup/graph-workspace-pre-sync-2b78cde0`.
+   The 232 SHA-distinct commits then stay reachable on a named branch.
+2. **Then force-push the local line** with `--force-with-lease`. Content-safe by 7.2, but it **rewrites a
+   published branch**, so it needs explicit owner approval and should not be done as a side effect.
+3. **Alternative, zero-risk:** leave `origin/plugin/graph-workspace` frozen, record it as superseded, and keep
+   delivering through `candidate/*`. Nothing breaks; the stale ref stays misleading.
+
+**Do not merge the two lineages.** A merge would conflict in 16 files over content the local line already
+contains — busywork with no content gain, and a real chance of losing the residual lane in reconciliation.
