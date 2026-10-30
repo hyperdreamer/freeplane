@@ -192,8 +192,6 @@ tasks.named('test') {
         excludeTestsMatching 'org.freeplane.plugin.graph.layout.graphstream.GraphEdgeLengthSettleShould'
         excludeTestsMatching 'org.freeplane.plugin.graph.layout.graphstream.InitialSpacingAcceptanceShould'
     }
-    // Display-driven window assertions need a predictable window manager, not a live desktop.
-    systemProperty 'graphDisplayAcceptance', project.hasProperty('graphDisplayAcceptance')
 }
 
 tasks.register('graphAcceptanceDrivers', Test) {

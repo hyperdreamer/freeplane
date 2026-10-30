@@ -44,9 +44,26 @@ focus regression visible. Change the display, not the assertion.
 | Test(s) | Needs | Gated by |
 |---|---|---|
 | Focus and window tests | a display that can be activated | skipped when `java.awt.headless=true`; use Xvfb when the desktop is busy |
-| `panDuringPresentationIsPreservedThroughExit` | a repaired presentation-disarm path | `-PgraphDisplayAcceptance`; see `ai-specs/tasks/in-progress/010-…` §5 |
 | `GraphEdgeLengthSettleShould`, `InitialSpacingAcceptanceShould` | hours of subprocess work | excluded from `test`; run via `gradle :freeplane_plugin_graph:graphAcceptanceDrivers` |
 | Raw-reference wall-clock bound | a dedicated performance run | enforced by `gradle :freeplane_plugin_graph:graphPerformanceDiagnostic` |
 
 The unit suite itself asserts only deterministic properties: structural caps, budget flags, and the
-synthetic-clock negative test for the frame bound.
+synthetic-clock negative test for the frame bound. No test is skipped behind a property switch: a
+switch nobody flips is not coverage.
+
+## Two rules this suite has already broken once
+
+**A liveness budget is not a latency assertion.** A wait that only exists to let a thread, the window
+manager or the event dispatch thread run must be sized so that a loaded host is never reported as a
+defect, and its error message must say what actually failed. `DISPLAY_SETTLE_BUDGET_MILLIS`,
+`OPERATION_TIMEOUT_NANOS` and `EDT_LIVENESS_BUDGET_MILLIS` exist for this. Do not "fix" a slow-host
+failure by deleting the wait's condition, and do not tighten one of these to catch a regression.
+
+**A concurrency probe must assert ordering or a measured fact, never a sampled thread state.**
+`Thread.getState()` cannot distinguish "blocked because it is waiting for X" from "idle because it
+already finished X". `MapLeaseManagerShould`'s callback-close probes once read an active flag and a
+thread state non-atomically, so a load-induced preemption between the two reads reported
+`EDT invalidation waited for lease settlement` for an invalidation that had already completed. They
+now assert that the event dispatch task finished while the settlement lock was held, that it took the
+non-blocking try-lock path, and that it never parked while doing so. See
+`ai-specs/tasks/in-progress/013-graph-test-hygiene-open-items.md` §3.
