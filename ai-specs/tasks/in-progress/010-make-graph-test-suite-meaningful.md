@@ -486,3 +486,38 @@ load as a code defect.
 
 **Verified under the failing condition, not an idle one:** the whole class was run at load average 22–33 —
 **118 tests, 0 failures, 0 skipped**, in 1m06s. No synthetic load was added; this is the machine's own load.
+
+### 12.8 `MapLeaseManagerShould`: load-sensitive, and deliberately not loosened
+
+Further investigation of the class left open in 12.6.
+
+**Load correlation (observational, not proven).** Two batches only:
+
+| Ambient load | Command | Result |
+|---|---|---|
+| ~20-25 | class, 5 runs | **4 failed** |
+| ~7-13 | class, 5 runs, later | **5 passed** |
+
+**Why it is not a timing tweak.** The reported failure is raised here:
+
+```java
+waitingAtBoundary.set(observationToUse.awaitWaitingOrFinished());
+if (waitingAtBoundary.get()) {
+    callbackFailure.compareAndSet(null,
+        new AssertionError("EDT invalidation waited for lease settlement"));
+```
+
+That is a **product guarantee**: closing must not block the event dispatch thread. Its sibling windows
+(`operationStarted.await(1, TimeUnit.SECONDS)`, `observationToUse.awaitStarted()`) are also one-second
+liveness windows around the same non-blocking contract. Raising them would make a real regression
+indistinguishable from a slow host, which is exactly the failure mode this task exists to remove. They were
+therefore **left unchanged**.
+
+**The correct repair, if this is taken further,** is to observe the ordering rather than the wait: have the EDT
+invalidation task record its completion and compare that ordering against lease settlement, so the assertion
+becomes "the EDT task completed before settlement finished" instead of "the EDT task was not still waiting when
+we sampled". That is a redesign of the probe, not a budget change, and it is not something to attempt
+speculatively at the end of this task.
+
+The intermittent `java.awt.AWTError` at `starter.createFrame()` (12.6) is a separate, environment-side symptom
+of the same heavyweight test booting a real Freeplane controller under load.
