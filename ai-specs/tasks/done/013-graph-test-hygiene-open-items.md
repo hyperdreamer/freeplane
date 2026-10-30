@@ -144,12 +144,22 @@ budget.
 start and reports the delta. `expectNextTask()` attaches the observation to whichever runnable is
 dequeued next, which is not by itself proof that it is the invalidation; `deferrals() == 1` proves
 the observed task is the one that took the defer path, so the ordering fact is about the right task.
-4. **No park at all** — `TaskObservation` also snapshots the JVM's own per-thread contention
-accounting (`ThreadMXBean.getThreadInfo(...).getWaitedTime()`) at task start and task end. Park time
-delta over the task body is exactly "did this thread wait while executing the invalidation", and it
-catches the bounded counterexample above. Measured on this JVM: untimed failing `tryLock()` → 0 ms,
-`tryLock(100 ms)` that times out → 100 ms, plain work → 0 ms. Contention accounting is enabled for the
-fixture's lifetime and its absence is reported as a probe failure, never as a pass.
+4. **No contention at all** — `TaskObservation` snapshots the JVM's own per-thread contention
+accounting at task start and task end, **both** halves of it: the park counters (`getWaitedCount`,
+`getWaitedTime`) and the intrinsic-monitor counters (`getBlockedCount`, `getBlockedTime`). The deltas
+over the task body are exactly "did this thread wait while executing the invalidation", and they catch
+the bounded counterexample above. Counts are differenced as well as durations because counts are exact
+events while the millisecond durations round a sub-millisecond contention to zero. Contention accounting
+is enabled for the fixture's lifetime and its absence is reported as a probe failure, never as a pass.
+
+   The second half is not optional. A first delivery of this design differenced only park time, and the
+   frontier audit falsified it: a production mutant that makes the event dispatch thread **block** on
+   intrinsic-monitor entry — `close()` blocking the EDT, in the terms of the guarantee — was accepted by
+   both probes, because `getBlockedTime()` is recorded separately from `getWaitedTime()`. Reproduced
+   here with a 300 ms holder: both probes passed the first delivery, and the observed task's accounting
+   read `blockedCount=1 blockedMillis=300 waitedCount=0 waitedMillis=0`. Measured on this JVM: untimed
+   failing `tryLock()` → no event of either kind, `tryLock(100 ms)` that times out → 1 park event of
+   100 ms, contended monitor → 1 block event of 300 ms, plain work → none.
 
 The waited-time witness is not load-sensitive: it is a cumulative JVM counter over the task's
 execution, so a descheduled thread accrues scheduling delay but no park time, and a thread that
@@ -336,7 +346,7 @@ critical section:
 | settlement lock held by this thread | the premise of every ordering claim below |
 | observed task finished within the liveness budget | it did not wait for settlement release |
 | observed task performed exactly one failed settlement try-lock | it is the invalidation task |
-| observed task's park time is zero | it did not stall, even with a bounded timed try-lock |
+| observed task recorded no contention event of either kind | it did not stall: no park (a bounded timed try-lock) and no intrinsic-monitor block (`close()` blocking the EDT) |
 
 Every thread-scheduling wait in the fixture now shares `EDT_LIVENESS_BUDGET_MILLIS = 20_000` and is
 documented as a scheduling bound: `DetectingEdt` readiness, `DetectingEdt.call`, `DetectingEdt.close`,
@@ -368,7 +378,9 @@ classes on the classpath:
 |---|---|---|
 | pristine `tryLock()` | **pass** | **pass** |
 | `lock()` — unbounded block | **fail**: `EDT invalidation did not complete while the settlement lock was held (started=true)` after the 20 s budget, 22.8 s | **fail**, same message, 23.3 s |
-| `tryLock(100, MILLISECONDS)` — bounded stall | **fail**: `EDT invalidation parked for 100 ms inside its own task while the settlement lock was held; a settlement attempt that does not block cannot park`, 2.9 s | **fail**, same message, 3.0 s |
+| `tryLock(100, MILLISECONDS)` — bounded park | **fail**: `… parked 1 time(s) for 100 ms, blocked on a monitor 0 time(s) …`, 3.1 s | **fail**, `… parked 1 time(s) for 101 ms …`, 3.0 s |
+| bounded intrinsic-monitor block on the EDT (300 ms holder) | **fail**: `… parked 0 time(s) …, blocked on a monitor 1 time(s) for 300 ms …`, 3.3 s | **fail**, same message, 2.8 s |
+| **first delivery** (park time only) against the same monitor block | **pass** — the audit's finding, reproduced here | **pass** |
 
 Observation identity (S3 of §3.3) is pinned by a separate check: a test-only copy with
 `deferrals() != 1` relaxed to `!= 0` fails with
@@ -385,9 +397,10 @@ old sampler's `active` read and its `getState()` read reported
 | Run | Command | Result |
 |---|---|---|
 | class, 3× unconstrained | `SingleMethodRunner MapLeaseManagerShould` | 49/49 each |
-| class, 25× pinned to CPUs 0-1 | `taskset -c 0,1 …` | **4 failures / 25**, all `retriesDeferredLifecycleRemovalWhenRetrySchedulerRejects` |
+| class, 25× pinned to CPUs 0-1 | `taskset -c 0,1 …` | **3 failures / 25**, all `retriesDeferredLifecycleRemovalWhenRetrySchedulerRejects` |
 | same, **unmodified** code, 25× pinned | control | **3 failures / 25**, same test |
 | both callback-close probes, 5× pinned each | `taskset -c 0,1 …` | **5/5 pass each** |
+| both probes, 30 runs on pristine production | accounting probe | not one contention event of either kind was recorded, which is why exact counts are safe to assert |
 
 The residual count is the pre-existing `DeliveryRaceProbe` flake of §3.6, at the same rate with and
 without this change. It is not hidden: it is attributed, and left for its own task.
@@ -400,6 +413,7 @@ Both runs via `freeplane_plugin_graph/scripts/run-suite-on-xvfb.sh` (Xvfb + open
 |---|---|
 | 1 | **exit 1** — 1458 tests, **1 failed**, 4 skipped, 13m25s. `GraphWorkspaceWindowModelShould.f11RestoresBoundsAndExtendedStateFromNormalWindow`: `Display condition did not settle within 20000 ms; bounds=Rectangle[0,0,1000,700]` |
 | 2 | **exit 0** — 1458 tests, **0 failed**, 4 skipped, 13m33s |
+| 3 — final delivered tree, after the contention-count change | **exit 0** — 1458 tests, **0 failed**, 4 skipped, 13m30s |
 
 Run 1's failure is a window-manager placement race, not a settle-budget problem, and not reachable
 from this diff: the fixture recorded `DISPLAY before bounds=(120,100,1000,700) … restored
@@ -442,8 +456,10 @@ GraphWorkspacePerformanceDiagnostic$DiagnosticFailure: Forty-minute diagnostic p
 ```
 
 This is the fourth row of §4's outcome table: the process deadline expired **inside the scenario
-sweep**, before `run() :195` is reached, and no ledger was written
-(`build/graph-performance/` was not created). So the answer to item 2 is *no*: the
+sweep**, before `run() :195` is reached. `run()` creates its output directory and writes the generated
+fixtures before the sweep, so `freeplane_plugin_graph/build/graph-performance/` does exist and holds
+`two-map.fpg`, `three-map.fpg` and `reference-2000-5000.fpg` — but no ledger and no measurement
+output, because `writeLedger()` is only reached after the sweep. So the answer to item 2 is *no*: the
 `verifyRawReferenceFrameBound()` call site was **not** exercised.
 
 What the run does establish, and it is worth more than the original "needs an idle machine" note:
@@ -468,3 +484,41 @@ Each would turn a known-red gate into a passing one without verifying anything. 
    3/3 passing in isolation.
 4. **`LayoutWorkerShould`** (§3.7). Still unreproduced; 28/28 unconstrained and 3× 28/28 pinned to two
    CPUs. No change was made, because guessing at a budget is the mistake task 010 already paid for.
+
+## 11. Frontier audit (independent subsession) and its disposition
+
+A fresh frontier subsession audited the three delivered commits read-only, with its own mutation
+battery, and returned **FAIL** with two findings. Both were reproduced here before being acted on.
+
+### 11.1 MAJOR — the probe measured park time only, so an intrinsic-monitor block escaped it
+
+The audit's mutant put bounded contention on a monitor that the event dispatch thread must enter, and
+both delivered probes **passed** it. Reproduced here with a 300 ms holder: both probes passed, while the
+observed task's accounting read `blockedCount=1 blockedMillis=300 waitedCount=0 waitedMillis=0`.
+`ThreadInfo.getBlockedTime()` is recorded separately from `getWaitedTime()`, so
+
+```text
+closing must not block the event dispatch thread
+```
+
+was only half covered: a bounded `tryLock` was caught, a `synchronized` entry was not.
+
+**Fixed.** `TaskObservation` now differences both halves of the JVM's contention accounting, counts as
+well as durations. Verified: the monitor mutant fails both probes
+(`… blocked on a monitor 1 time(s) for 300 ms …`), and 30 pristine runs recorded no contention event of
+either kind, so asserting exact counts does not reintroduce load sensitivity.
+
+### 11.2 MINOR — §9 named the wrong output directory
+
+The record said `build/graph-performance/` was not created. It is
+`freeplane_plugin_graph/build/graph-performance/`, it exists, and it holds the three generated fixtures;
+what is missing is the ledger, which `writeLedger()` only writes after the sweep. Corrected in §9.
+
+### 11.3 What the audit confirmed independently
+
+Root-cause mechanism (§3.2) — including the `LinkedBlockingQueue.take()` stack; the four assertions and
+the fact that the handler really runs under `settlementLock`; the mutation battery outcomes for
+`lock()`, `tryLock(100 ms)`, the identity relaxation and a completion-outside-the-lock variant; the
+production byte-identity; that no named budget or tolerance was weakened; and that the plan gate exits 0
+with five tasks. It judged §9's non-reachability claim supported by the recorded log but the *general*
+claim unverified, which §9 already limits to "on this host in this run".

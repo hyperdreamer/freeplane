@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadInfo;
 import java.lang.management.ThreadMXBean;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
@@ -2264,17 +2265,20 @@ public class MapLeaseManagerShould {
                                 + " (deferrals=" + observationToUse.deferrals() + ")"));
                         return;
                     }
-                    if (observationToUse.waitedMillis() < 0L) {
+                    if (observationToUse.contentionUnavailable()) {
                         callbackFailure.compareAndSet(null, new AssertionError(
                             "Thread contention accounting was unavailable, so the probe cannot show"
-                                + " that the EDT invalidation did not park on the settlement lock"));
+                                + " that the EDT invalidation neither parked nor blocked"));
                         return;
                     }
-                    if (observationToUse.waitedMillis() != 0L) {
+                    if (observationToUse.contended()) {
                         callbackFailure.compareAndSet(null, new AssertionError(
-                            "EDT invalidation parked for " + observationToUse.waitedMillis()
-                                + " ms inside its own task while the settlement lock was held;"
-                                + " a settlement attempt that does not block cannot park"));
+                            "EDT invalidation contended inside its own task while the settlement lock"
+                                + " was held: parked " + observationToUse.waitedCount()
+                                + " time(s) for " + observationToUse.waitedMillis()
+                                + " ms, blocked on a monitor " + observationToUse.blockedCount()
+                                + " time(s) for " + observationToUse.blockedMillis()
+                                + " ms; a settlement attempt that does not block cannot contend"));
                         return;
                     }
                     try {
@@ -2483,8 +2487,14 @@ public class MapLeaseManagerShould {
             private final AtomicInteger deferrals;
             private int deferralsAtStart;
             private long waitedMillisAtStart;
+            private long waitedCountAtStart;
+            private long blockedMillisAtStart;
+            private long blockedCountAtStart;
             private int deferralsDuringTask;
             private long waitedMillisDuringTask = -1L;
+            private long waitedCountDuringTask = -1L;
+            private long blockedMillisDuringTask = -1L;
+            private long blockedCountDuringTask = -1L;
 
             private TaskObservation(final AtomicInteger deferrals) {
                 this.deferrals = deferrals;
@@ -2492,16 +2502,34 @@ public class MapLeaseManagerShould {
 
             private void activate() {
                 deferralsAtStart = deferrals.get();
-                waitedMillisAtStart = threadContentionWaitedMillis(Thread.currentThread());
+                final ThreadInfo account = threadContention(Thread.currentThread());
+                waitedMillisAtStart = account == null ? -1L : account.getWaitedTime();
+                waitedCountAtStart = account == null ? -1L : account.getWaitedCount();
+                blockedMillisAtStart = account == null ? -1L : account.getBlockedTime();
+                blockedCountAtStart = account == null ? -1L : account.getBlockedCount();
                 started.countDown();
             }
 
             private void finish() {
                 deferralsDuringTask = deferrals.get() - deferralsAtStart;
-                final long waitedAtFinish = threadContentionWaitedMillis(Thread.currentThread());
-                waitedMillisDuringTask = waitedAtFinish < 0L || waitedMillisAtStart < 0L
-                    ? -1L : waitedAtFinish - waitedMillisAtStart;
+                final ThreadInfo account = threadContention(Thread.currentThread());
+                waitedMillisDuringTask = delta(account, waitedMillisAtStart,
+                    info -> info.getWaitedTime());
+                waitedCountDuringTask = delta(account, waitedCountAtStart,
+                    info -> info.getWaitedCount());
+                blockedMillisDuringTask = delta(account, blockedMillisAtStart,
+                    info -> info.getBlockedTime());
+                blockedCountDuringTask = delta(account, blockedCountAtStart,
+                    info -> info.getBlockedCount());
                 finished.countDown();
+            }
+
+            private static long delta(final ThreadInfo account, final long atStart,
+                    final java.util.function.ToLongFunction<ThreadInfo> property) {
+                if (account == null || atStart < 0L) {
+                    return -1L;
+                }
+                return property.applyAsLong(account) - atStart;
             }
 
             private boolean awaitFinished(final long budgetMillis) throws Exception {
@@ -2518,6 +2546,27 @@ public class MapLeaseManagerShould {
 
             private long waitedMillis() {
                 return waitedMillisDuringTask;
+            }
+
+            private long waitedCount() {
+                return waitedCountDuringTask;
+            }
+
+            private long blockedMillis() {
+                return blockedMillisDuringTask;
+            }
+
+            private long blockedCount() {
+                return blockedCountDuringTask;
+            }
+
+            private boolean contentionUnavailable() {
+                return waitedMillisDuringTask < 0L || waitedCountDuringTask < 0L
+                    || blockedMillisDuringTask < 0L || blockedCountDuringTask < 0L;
+            }
+
+            private boolean contended() {
+                return waitedCountDuringTask > 0L || blockedCountDuringTask > 0L;
             }
         }
     }
@@ -2621,20 +2670,21 @@ public class MapLeaseManagerShould {
     }
 
     /**
-     * Milliseconds the given thread has spent parked, from the JVM's own contention accounting. The
-     * difference between two samples taken at the start and the end of an event-dispatch task is the
-     * park time of that task alone, which is the fact the guarantee is about: a settlement attempt
-     * that does not block cannot add to it, and one that blocks - including a timed {@code tryLock}
-     * that gives up - adds exactly its wait.
+     * The JVM's own contention accounting for the given thread, or {@code null} when it is disabled.
+     * Differencing the counts and durations for a thread across an event-dispatch task yields what
+     * that task alone waited for, which is the fact the guarantee is about. Both halves are needed:
+     * a timed {@code tryLock} that gives up parks the thread, while a contended intrinsic monitor
+     * blocks it, and neither is visible in the other's counter. Counts are differenced as well as
+     * durations because they are exact - the millisecond durations round a sub-millisecond
+     * contention event to zero.
      */
     @SuppressWarnings("deprecation")
-    private static long threadContentionWaitedMillis(final Thread thread) {
+    private static ThreadInfo threadContention(final Thread thread) {
         final ThreadMXBean bean = ManagementFactory.getThreadMXBean();
         if (!bean.isThreadContentionMonitoringEnabled()) {
-            return -1L;
+            return null;
         }
-        final java.lang.management.ThreadInfo info = bean.getThreadInfo(thread.getId(), 0);
-        return info == null ? -1L : info.getWaitedTime();
+        return bean.getThreadInfo(thread.getId(), 0);
     }
 
     private static Object privateField(final MapLeaseManager manager, final String name) throws Exception {

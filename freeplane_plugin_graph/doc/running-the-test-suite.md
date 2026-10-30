@@ -65,5 +65,5 @@ already finished X". `MapLeaseManagerShould`'s callback-close probes once read a
 thread state non-atomically, so a load-induced preemption between the two reads reported
 `EDT invalidation waited for lease settlement` for an invalidation that had already completed. They
 now assert that the event dispatch task finished while the settlement lock was held, that it took the
-non-blocking try-lock path, and that it never parked while doing so. See
+non-blocking try-lock path, and that it recorded no park and no intrinsic-monitor block while doing so. See
 `ai-specs/tasks/in-progress/013-graph-test-hygiene-open-items.md` §3.

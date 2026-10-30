@@ -98,8 +98,11 @@ Files: none in the worktree; disposable copies only.
   of the built classes on the classpath, and confirm **both** callback-close probes fail on the
   ordering message.
 - Sensitivity to a bounded stall: repeat with `settlementLock.tryLock(100, MILLISECONDS)` and confirm
-  **both** fail on the parked-milliseconds message. This is the case the ordering witness alone cannot
-  catch, and the reason the park-time assertion exists.
+  **both** fail on the contention message reporting a park event. This is the case the ordering witness
+  alone cannot catch, and the reason the contention assertion exists.
+- Sensitivity to a bounded block: repeat with a mutant that makes the event dispatch thread block on
+  intrinsic-monitor entry for a bounded time, and confirm **both** fail reporting a block event. Park
+  time alone misses this, because the JVM accounts for it separately.
 - Non-vacuity of observation identity: build a test-only copy with `deferrals() != 1` relaxed to
   `!= 0` and confirm the probe fails while reporting `deferrals=1`, proving the observed task is the
   invalidation and not a neighbour.
