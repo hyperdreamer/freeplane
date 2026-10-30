@@ -1947,7 +1947,7 @@ public class GraphWorkspaceWindowModelShould {
             f.pressF11();
             f.awaitActive(false);
             f.awaitWithin(() -> !(Boolean) GraphWindowChromeShould.field(
-                f.model.presentationViewport(), "armed"), 10000L);
+                f.model.presentationViewport(), "armed"), DisplayFixture.DISPLAY_SETTLE_BUDGET_MILLIS);
             f.assertView(changed);
             f.assertNoCommands();
         }
@@ -2156,6 +2156,13 @@ public class GraphWorkspaceWindowModelShould {
          * of the work area still fails.
          */
         private static final int X11_WM_BORDER_TOLERANCE = 8;
+        /**
+         * Liveness budget for a display condition, not an assertion about UI latency. These conditions
+         * settle within a few milliseconds on an idle machine, but they wait on the window manager and the
+         * EDT, so a busy host can delay them arbitrarily. At 5000 ms this class failed whenever the machine
+         * was under load (measured: load average 25), which reported the host's load as a code defect.
+         */
+        private static final long DISPLAY_SETTLE_BUDGET_MILLIS = 20000L;
         private final java.awt.Robot robot;
         private final List<GraphCommand> commands = new ArrayList<GraphCommand>();
         private final List<String> messages = new ArrayList<String>();
@@ -2258,11 +2265,13 @@ public class GraphWorkspaceWindowModelShould {
         }
 
         private void await(final java.util.function.BooleanSupplier condition) throws Exception {
-            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(5000);
+            final long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS
+                .toNanos(DISPLAY_SETTLE_BUDGET_MILLIS);
             while (!edt(() -> condition.getAsBoolean())) {
                 assertThat(uncaught.get()).as("uncaught EDT error").isNull();
                 if (System.nanoTime() >= deadline) {
-                    throw new AssertionError("Display condition did not settle within 5000 ms; bounds="
+                    throw new AssertionError("Display condition did not settle within "
+                        + DISPLAY_SETTLE_BUDGET_MILLIS + " ms; bounds="
                         + edt(() -> window.getBounds()) + "; messages=" + messages);
                 }
                 Thread.sleep(10);
@@ -2272,7 +2281,7 @@ public class GraphWorkspaceWindowModelShould {
 
         private void awaitCanvasFocus() throws Exception {
             final long deadline = System.nanoTime()
-                + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(5000);
+                + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(DISPLAY_SETTLE_BUDGET_MILLIS);
             while (!edt(() -> window.canvas().isFocusOwner())) {
                 onEdt(() -> {
                     if (window.isDisplayable() && window.isVisible()) {

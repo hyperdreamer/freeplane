@@ -468,3 +468,21 @@ flake happened not to fire.
 This is the honest end state of the "make the suite meaningful" goal: the deterministic failures are gone, the
 skips are justified, and the remaining risk is a tail of independent low-to-medium-rate flakes rather than a
 broken suite.
+
+### 12.7 The dominant remaining flake class: 5 s settle budgets under host load
+
+A full suite during a busy period failed `f11RestoresBoundsAndExtendedStateFromNormalWindow` with
+`Display condition did not settle within 5000 ms`, in a run that took 19 minutes instead of the usual 13, at
+load average 25. Two other low-rate failures earlier in this task were also 5 s settle timeouts.
+
+`GraphWorkspaceWindowModelShould.DisplayFixture` used a hard-coded 5000 ms budget for every display condition
+and for canvas focus. Those conditions wait on the window manager and the EDT, so the budget is a **liveness
+bound**, not an assertion about UI latency — the same distinction already applied to
+`GraphWorkspacePerformanceDiagnostic.OPERATION_TIMEOUT_NANOS` in section 6a. At 5000 ms it reported the host's
+load as a code defect.
+
+`DISPLAY_SETTLE_BUDGET_MILLIS = 20000` now backs `await`, `awaitCanvasFocus` and the presentation-hold wait
+(which must in any case exceed the 5000 ms settlement cap).
+
+**Verified under the failing condition, not an idle one:** the whole class was run at load average 22–33 —
+**118 tests, 0 failures, 0 skipped**, in 1m06s. No synthetic load was added; this is the machine's own load.
