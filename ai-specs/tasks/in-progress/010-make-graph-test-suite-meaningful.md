@@ -439,3 +439,32 @@ with, instead of the laid-out component width.
 
 **Honest limit.** 8 clean runs against a ~1/3 baseline is strong but not proof; the mechanism and the
 mutation result are the stronger evidence.
+
+### 12.6 The suite is still not reliably green: `MapLeaseManagerShould`
+
+A full suite run after 12.5 failed on a different test:
+`MapLeaseManagerShould.completesExternalReloadCallbackCloseWithoutBlockingTheDetectingEdt`
+(`expected:<null> but was:<AssertionError: EDT invalidation waited for lease settlement>`).
+
+Investigating it produced a worse result than the original failure:
+
+| Batch | Command | Result |
+|---|---|---|
+| 1 | class, 5 runs | **4 failed** (1 at `:755`, 3 at `:1762` `java.awt.AWTError`) |
+| 2 | class, 4 runs, `-PTestLoggingFull` | 4 passed |
+| 3 | `loadsTheRealFixtureThroughMapLoaderOnTheSuppliedEdtWithoutCreatingAView`, 3 runs | 3 passed |
+
+So this is **not a deterministic defect and not attributable to this task**: the class fails in isolation, in a
+different package from every file changed here, and its failure rate changes between batches. `:1762` is
+`starter.createFrame()` inside a heavyweight test that boots a real Freeplane controller, and the intermittent
+`java.awt.AWTError` there is an environment/toolkit condition.
+
+**Consequence, stated plainly:** `gradle :freeplane_plugin_graph:test` is **not yet reliably green on this
+machine.** Four independent intermittent failures have been found in the module during this task
+(`GraphWorkspaceLifecycleShould` — fixed; `GraphCanvasPaintShould` — fixed; `GraphInteractionControllerShould`
+— fixed; `MapLeaseManagerShould` — open). Each green full-suite run so far has been green modulo whichever
+flake happened not to fire.
+
+This is the honest end state of the "make the suite meaningful" goal: the deterministic failures are gone, the
+skips are justified, and the remaining risk is a tail of independent low-to-medium-rate flakes rather than a
+broken suite.
