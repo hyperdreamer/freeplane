@@ -2136,7 +2136,46 @@ public class GraphWorkspaceWindowModelShould {
                         restore.add("setResizable[false]");
                     }
                     restore.addAll(Arrays.asList("setResizable[true]", "setVisible[true]", "validate[]"));
-                    assertThat(operations).containsExactlyElementsOf(restore);
+                    // The window manager applies the un-maximize asynchronously, so by the time the peer
+                    // is mapped the saved rectangle may or may not already be in force. The specified
+                    // sequence is therefore this mandatory prefix plus at most one re-assert of the same
+                    // rectangle; any other trailing operation, or a re-assert of a different rectangle,
+                    // is a defect.
+                    final List<String> guardedReAssert = Arrays.asList(
+                        "setBounds[" + previous.bounds() + "]", "validate[]");
+                    assertThat(operations.size())
+                        .isBetween(restore.size(), restore.size() + guardedReAssert.size());
+                    assertThat(operations.subList(0, restore.size()))
+                        .containsExactlyElementsOf(restore);
+                    assertThat(new ArrayList<String>(
+                        operations.subList(restore.size(), operations.size())))
+                        .as("the only permitted trailing operations are the guarded re-assert")
+                        .isIn(Arrays.asList(Collections.<String> emptyList(), guardedReAssert));
+                }
+                finally {
+                    spy.dispose();
+                }
+            });
+        }
+    }
+
+    @Test
+    public void restatesTheSavedBoundsWhenTheWindowManagerDoesNotHonourThem() throws Exception {
+        // Forces the conditional branch of rawRestoreWindowed deterministically, so that branch is not
+        // covered only by whichever way the window manager happened to behave.
+        Assume.assumeFalse(GraphicsEnvironment.isHeadless());
+        try (DisplayFixture f = new DisplayFixture()) {
+            f.onEdt(() -> {
+                final GraphWorkspaceWindow spy = org.mockito.Mockito.spy(f.window);
+                final ScreenFillSurface.FrameState previous = spy.captureFrameState();
+                final java.awt.Rectangle displaced = new java.awt.Rectangle(0, 0,
+                    previous.bounds().width, previous.bounds().height);
+                // The window manager has placed the frame at the origin by the time the peer is mapped.
+                org.mockito.Mockito.doReturn(displaced).when(spy).getBounds();
+                try {
+                    spy.rawRestoreWindowed(previous);
+                    org.mockito.Mockito.verify(spy, org.mockito.Mockito.times(2))
+                        .setBounds(previous.bounds());
                 }
                 finally {
                     spy.dispose();
