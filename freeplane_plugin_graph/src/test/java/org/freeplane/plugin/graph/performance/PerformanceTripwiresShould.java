@@ -1,6 +1,7 @@
 package org.freeplane.plugin.graph.performance;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.ArrayList;
@@ -10,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.freeplane.plugin.graph.control.CanvasState;
 import org.freeplane.plugin.graph.control.NanoClock;
@@ -237,8 +239,37 @@ public class PerformanceTripwiresShould {
             .hasMessageContaining("complete-frame bound");
     }
 
-    private static void assertRawReferenceFrameBound(final GraphWorkspacePerformanceDiagnostic diagnostic) {
+    @Test
+    public void excludesOnlyTheWarmUpFrameFromTheCompleteFrameBound() throws Exception {
+        // The bound has to separate start-up cost from layout cost, and both directions have to be
+        // pinned: a stall confined to the warm-up frame must not fail the gate, while the sibling test
+        // rejectsAFrameWhoseRoutingExceedsTheCompleteFrameBound stalls every frame and must fail it.
+        final RoutingDelayClock clock = new RoutingDelayClock();
+        final AtomicInteger routes = new AtomicInteger();
+        final GraphWorkspacePerformanceDiagnostic diagnostic = new GraphWorkspacePerformanceDiagnostic(
+            temporaryFolder.newFolder("warm-up-stall").toPath(), false, clock,
+            (projection, positions, geometry, visible) -> {
+                final org.freeplane.plugin.graph.geometry.EdgePaths paths =
+                    new org.freeplane.plugin.graph.geometry.EdgeRouter().route(projection, positions,
+                        geometry, visible);
+                if (routes.getAndIncrement() == 0) {
+                    clock.value += GraphWorkspacePerformanceDiagnostic.RAW_REFERENCE_MAX_FRAME_NANOS + 1L;
+                }
+                return paths;
+            });
+        diagnostic.runRawReferenceFixture();
+
         assertThat(diagnostic.rawReferenceMaxFrameNanos())
+            .as("the warm-up frame itself is over the bound")
+            .isGreaterThan(GraphWorkspacePerformanceDiagnostic.RAW_REFERENCE_MAX_FRAME_NANOS);
+        assertThat(diagnostic.rawReferenceMeasuredMaxFrameNanos())
+            .as("the measured window excludes it")
+            .isLessThanOrEqualTo(GraphWorkspacePerformanceDiagnostic.RAW_REFERENCE_MAX_FRAME_NANOS);
+        assertThatCode(diagnostic::verifyRawReferenceFrameBound).doesNotThrowAnyException();
+    }
+
+    private static void assertRawReferenceFrameBound(final GraphWorkspacePerformanceDiagnostic diagnostic) {
+        assertThat(diagnostic.rawReferenceMeasuredMaxFrameNanos())
             .isLessThanOrEqualTo(GraphWorkspacePerformanceDiagnostic.RAW_REFERENCE_MAX_FRAME_NANOS);
     }
 
