@@ -174,3 +174,27 @@ To repair the ref without losing anything:
 
 **Do not merge the two lineages.** A merge would conflict in 16 files over content the local line already
 contains — busywork with no content gain, and a real chance of losing the residual lane in reconciliation.
+
+## 8. Closure: the recommendation was executed and verified
+
+The decision in §7.3 was carried out, and this section records the verified end state rather than a
+plan.
+
+| Check | Command | Result |
+|---|---|---|
+| Backup ref on the remote | `git ls-remote origin 'refs/heads/backup/*'` | `2b78cde01c99de65f82f09c449755d99834820d7 refs/heads/backup/graph-workspace-pre-sync-20261029` — the pre-sync remote tip is reachable on a named ref, so §7.3 step 1 is done and no remote-only commit was discarded. |
+| Delivery branch, local | `git rev-parse plugin/graph-workspace` | `127c3c3f96…` |
+| Delivery branch, remote | `git ls-remote origin refs/heads/plugin/graph-workspace` | `127c3c3f9603d54be46052cc25374c02120e95b4` — identical, so §7.3 step 2 is done and the two refs are in sync. |
+| No merge was performed | `git log --merges` on the branch | no merge of the two lineages exists; §5 and §7.3 "do not merge" was honoured. |
+
+Consequences for the other records:
+
+- The local lineage is canonical (§7.2) and is what ships. The `candidate/*` route of §7.3 step 3 is
+  therefore unnecessary.
+- The hygiene delta that §5 said should be *ported* to the remote is unnecessary as a port: the
+  remote is now the same lineage, and everything §4 listed as missing there — the driver exclusion,
+  `graphAcceptanceDrivers`, the `InitialSpacingShould` suite membership, the liveness split for the
+  wall-clock bound, the settle-budget discipline, `awaitWithin`, the EDT-atomic scroll assertion, the
+  Xvfb script and its document — is present on both refs because they are the same commit.
+
+No open work remains in this record.

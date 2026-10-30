@@ -217,11 +217,24 @@ Residual risk, recorded not fixed: `GraphWorkspaceLifecycleShould.doesNotDeliver
 run and passed 5/5 in isolation. It is a pre-existing close-boundary race detector; repairing it is a
 production change outside this task.
 
-## 8. Tooling note
+## 8. Tooling note — **corrected, see 013 §2**
 
-`sdd-state` and `plan-policy.mjs` are not installed on this machine, so
-`sdd-state validate-plan` cannot be executed. Plan structure was validated in-session instead
-(unique task ids, capitalised tier values, every specification clause mapped to a task).
+At the time this task was written it was believed that `sdd-state` and `plan-policy.mjs` are not
+installed on this machine, so `sdd-state validate-plan` could not be executed. Plan structure was
+validated in-session instead (unique task ids, capitalised tier values, every specification clause
+mapped to a task).
+
+**That belief was wrong.** Both ship with this machine's SDD skill and always did:
+
+```
+/home/henry/.pi/agent/skills/subagent-driven-development/scripts/sdd-state
+/home/henry/.pi/agent/skills/subagent-driven-development/scripts/sdd-state.mjs
+/home/henry/.pi/agent/skills/subagent-driven-development/scripts/lib/plan-policy.mjs
+```
+
+They are not on `PATH`, and the original search looked for a `sdd-state` binary rather than at the
+skill's own entrypoint. The gate was runnable throughout. Task 013 runs it and records the exit
+status.
 
 ## 9. Delivery
 
@@ -521,3 +534,24 @@ speculatively at the end of this task.
 
 The intermittent `java.awt.AWTError` at `starter.createFrame()` (12.6) is a separate, environment-side symptom
 of the same heavyweight test booting a real Freeplane controller under load.
+
+## 13. Close-out (superseded by 013 for everything still open)
+
+This task's own work is complete and was delivered in §9 and §10–§12. The residuals it recorded are
+now either closed by
+[`013-graph-test-hygiene-open-items`](../done/013-graph-test-hygiene-open-items.md) or tracked there
+as explicit open items, so nothing in this record still describes open work *of this task*.
+
+| Left open here | Disposition |
+|---|---|
+| §12.8 "the correct repair, if taken further, is to observe ordering rather than the wait" | **Closed in 013 §3.** The probe now asserts lock ownership, completion ordering, observation identity and zero park time, and deletes the sampler. Verified against an unbounded-block mutant and a bounded-stall mutant, both of which it catches. |
+| §8 "`sdd-state` and `plan-policy.mjs` are not installed on this machine" | **Corrected above.** They were shipped with the SDD skill; only `PATH` was missing. 013 runs the gate. |
+| §6a the `-PgraphWallClockPerformance` opt-in | Already removed in §10. No further action. |
+| §10 residual: `graphPerformanceDiagnostic` call site never exercised | **Still open.** 013 §9 ran it to completion of the process deadline and established that the heuristic is worse than "needs an idle machine": the diagnostic spends its whole 40-minute budget in the scenario sweep and never reaches the gate. Tracked in 013 §9. |
+| §12.6 `MapLeaseManagerShould` intermittent failure | **Closed for the reported assertion** (013 §3). A *different* test in the class, `retriesDeferredLifecycleRemovalWhenRetrySchedulerRejects`, remains a pre-existing flake at a rate that does not change with this work: 013 §3.6, §10. |
+| §12.3–§12.5 `GraphCanvasPaintShould` | Closed in §12.5. |
+| §12.7 the 5 s settle budgets | Closed in §12.7. One full-suite run during 013 still failed `f11RestoresBoundsAndExtendedStateFromNormalWindow`, but on a window-manager placement race rather than a settle timeout (`bounds=(120,100,1000,700)` before, `(0,0,1000,700)` after) - see 013 §8.3. |
+| §5, §12 presentation disarm | Resolved as a test defect in §12.1–§12.2; the gate was removed, the test runs by default, and the now-dead `graphDisplayAcceptance` property was removed in 013 §7.2. |
+
+Suite state at close-out: `1458 tests, 0 failures, 4 skipped` on the retry run, 13m33s, on Xvfb +
+openbox (013 §8.3).
