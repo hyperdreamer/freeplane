@@ -15,6 +15,8 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadMXBean;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
@@ -74,6 +76,16 @@ import org.junit.rules.TemporaryFolder;
 
 public class MapLeaseManagerShould {
     private static final String MAP_COLOR = "#4E79A7";
+
+    /**
+     * Liveness bound for a thread this class hands work to to start, run and return. It is
+     * deliberately not a latency assertion: the invalidation probes assert ordering facts, and a
+     * deferred invalidation completes as soon as the event dispatch thread is scheduled, at any
+     * budget, whereas one that parks on the settlement lock is caught by the waited-time assertion
+     * rather than by this budget. A budget that reports a loaded host as a product defect is the
+     * failure mode this constant exists to remove.
+     */
+    private static final long EDT_LIVENESS_BUDGET_MILLIS = 20_000L;
 
     @Rule
     public final TemporaryFolder temporaryFolder = new TemporaryFolder();
@@ -742,7 +754,7 @@ public class MapLeaseManagerShould {
             TestEnvironment environment = environment(edt);
             AtomicReference<MapLeaseManager> managerReference = new AtomicReference<MapLeaseManager>();
             CallbackCloseProbe probe = new CallbackCloseProbe(managerReference);
-            manager = manager(environment, edt, environment::newMap, probe);
+            manager = managerWithSettlementHook(environment, edt, environment::newMap, probe, edt);
             managerReference.set(manager);
             MapLease initialLease = acquire(manager, environment, edt);
             FakeMapModel oldModel = environment.model;
@@ -753,7 +765,6 @@ public class MapLeaseManagerShould {
 
             probe.awaitCallbackAndOperation();
             assertThat(probe.callbackFailure()).isNull();
-            assertThat(probe.waitingAtBoundary()).isFalse();
             assertThat(probe.operationReturned()).isTrue();
             assertThat(immediate.isDone()).isTrue();
             assertThat(immediate.isCompletedExceptionally()).isFalse();
@@ -778,7 +789,7 @@ public class MapLeaseManagerShould {
             TestEnvironment environment = environment(edt);
             AtomicReference<MapLeaseManager> managerReference = new AtomicReference<MapLeaseManager>();
             CallbackCloseProbe probe = new CallbackCloseProbe(managerReference);
-            manager = manager(environment, edt, environment::newMap, probe);
+            manager = managerWithSettlementHook(environment, edt, environment::newMap, probe, edt);
             managerReference.set(manager);
             MapLease initialLease = acquire(manager, environment, edt);
             FakeMapModel oldModel = environment.model;
@@ -792,7 +803,6 @@ public class MapLeaseManagerShould {
 
             probe.awaitCallbackAndOperation();
             assertThat(probe.callbackFailure()).isNull();
-            assertThat(probe.waitingAtBoundary()).isFalse();
             assertThat(probe.operationReturned()).isTrue();
             assertThat(environment.closeCount).hasValue(0);
             assertThat(immediate.isDone()).isTrue();
@@ -2170,7 +2180,9 @@ public class MapLeaseManagerShould {
         private final AtomicReference<Throwable> callbackFailure = new AtomicReference<Throwable>();
         private final AtomicReference<Throwable> operationFailure = new AtomicReference<Throwable>();
         private final AtomicBoolean operationReturned = new AtomicBoolean();
-        private final AtomicBoolean waitingAtBoundary = new AtomicBoolean();
+        private final AtomicInteger deferrals = new AtomicInteger();
+        private final AtomicReference<ReentrantLock> settlementLock =
+            new AtomicReference<ReentrantLock>();
         private final CountDownLatch operationStarted = new CountDownLatch(1);
         private final CountDownLatch callbackFinished = new CountDownLatch(1);
         private Runnable operation;
@@ -2194,6 +2206,13 @@ public class MapLeaseManagerShould {
             this.operation = operation;
             this.observation = observation;
             this.boundaryAssertion = boundaryAssertion;
+            this.deferrals.set(0);
+            try {
+                this.settlementLock.set((ReentrantLock) privateField(manager.get(), "settlementLock"));
+            }
+            catch (Exception reflectionFailure) {
+                throw new IllegalStateException("Settlement lock was not reachable", reflectionFailure);
+            }
             callbackFailure.set(null);
             operationFailure.set(null);
             operationReturned.set(false);
@@ -2226,16 +2245,36 @@ public class MapLeaseManagerShould {
                 operationThread.set(operationRunner);
                 operationRunner.start();
                 try {
-                    if (!operationStarted.await(1, TimeUnit.SECONDS)) {
+                    if (!operationStarted.await(EDT_LIVENESS_BUDGET_MILLIS, TimeUnit.MILLISECONDS)) {
                         throw new AssertionError("Callback-close operation did not start");
                     }
-                    if (!observationToUse.awaitStarted()) {
-                        throw new AssertionError("EDT invalidation task did not start");
+                    if (!settlementLock.get().isHeldByCurrentThread()) {
+                        throw new AssertionError(
+                            "Completion callback is not running under the settlement lock");
                     }
-                    waitingAtBoundary.set(observationToUse.awaitWaitingOrFinished());
-                    if (waitingAtBoundary.get()) {
-                        callbackFailure.compareAndSet(null,
-                            new AssertionError("EDT invalidation waited for lease settlement"));
+                    if (!observationToUse.awaitFinished(EDT_LIVENESS_BUDGET_MILLIS)) {
+                        callbackFailure.compareAndSet(null, new AssertionError(
+                            "EDT invalidation did not complete while the settlement lock was held"
+                                + " (started=" + observationToUse.started() + ")"));
+                        return;
+                    }
+                    if (observationToUse.deferrals() != 1) {
+                        callbackFailure.compareAndSet(null, new AssertionError(
+                            "The observed EDT task did not take the failed-settlement-tryLock path"
+                                + " (deferrals=" + observationToUse.deferrals() + ")"));
+                        return;
+                    }
+                    if (observationToUse.waitedMillis() < 0L) {
+                        callbackFailure.compareAndSet(null, new AssertionError(
+                            "Thread contention accounting was unavailable, so the probe cannot show"
+                                + " that the EDT invalidation did not park on the settlement lock"));
+                        return;
+                    }
+                    if (observationToUse.waitedMillis() != 0L) {
+                        callbackFailure.compareAndSet(null, new AssertionError(
+                            "EDT invalidation parked for " + observationToUse.waitedMillis()
+                                + " ms inside its own task while the settlement lock was held;"
+                                + " a settlement attempt that does not block cannot park"));
                         return;
                     }
                     try {
@@ -2261,14 +2300,14 @@ public class MapLeaseManagerShould {
         }
 
         private void awaitCallbackAndOperation() throws Exception {
-            if (!callbackFinished.await(2, TimeUnit.SECONDS)) {
+            if (!callbackFinished.await(2L * EDT_LIVENESS_BUDGET_MILLIS, TimeUnit.MILLISECONDS)) {
                 throw new AssertionError("Completion callback did not finish");
             }
             final Thread operationRunner = operationThread.get();
             if (operationRunner == null) {
                 throw new AssertionError("Callback-close operation thread was not created");
             }
-            operationRunner.join(2_000L);
+            operationRunner.join(EDT_LIVENESS_BUDGET_MILLIS);
             if (operationRunner.isAlive()) {
                 throw new AssertionError("Callback-close operation did not finish");
             }
@@ -2279,33 +2318,43 @@ public class MapLeaseManagerShould {
             return callbackFailure.get();
         }
 
-        private boolean waitingAtBoundary() {
-            return waitingAtBoundary.get();
-        }
-
         private boolean operationReturned() {
             return operationReturned.get();
         }
     }
 
-    private static final class DetectingEdt implements EdtExecutor {
+    private static final class DetectingEdt implements EdtExecutor, MapLeaseManager.SettlementTestHook {
         private static final Runnable STOP = new Runnable() {
             @Override
             public void run() {
             }
         };
 
+        private final AtomicInteger deferrals = new AtomicInteger();
         private final BlockingQueue<Runnable> queue = new LinkedBlockingQueue<Runnable>();
         private final AtomicBoolean running = new AtomicBoolean(true);
         private final AtomicReference<TaskObservation> nextObservation =
             new AtomicReference<TaskObservation>();
-        private final AtomicReference<TaskObservation> currentObservation =
-            new AtomicReference<TaskObservation>();
         private final CountDownLatch ready = new CountDownLatch(1);
         private final Thread thread;
-        private final Thread observer;
+
+        @Override
+        public void afterFailedSettlementTryLock() {
+            deferrals.incrementAndGet();
+        }
+
+        private AtomicInteger deferrals() {
+            return deferrals;
+        }
 
         private DetectingEdt() throws Exception {
+            final ThreadMXBean bean = ManagementFactory.getThreadMXBean();
+            if (!bean.isThreadContentionMonitoringSupported()) {
+                throw new AssertionError(
+                    "The EDT ordering probes need thread contention monitoring to prove that the"
+                        + " invalidation did not park on the settlement lock");
+            }
+            bean.setThreadContentionMonitoringEnabled(true);
             thread = new Thread(new Runnable() {
                 @Override
                 public void run() {
@@ -2313,16 +2362,8 @@ public class MapLeaseManagerShould {
                 }
             }, "map-lease-detecting-edt");
             thread.setDaemon(true);
-            observer = new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    observeWaits();
-                }
-            }, "map-lease-detecting-edt-observer");
-            observer.setDaemon(true);
             thread.start();
-            observer.start();
-            if (!ready.await(1, TimeUnit.SECONDS)) {
+            if (!ready.await(EDT_LIVENESS_BUDGET_MILLIS, TimeUnit.MILLISECONDS)) {
                 throw new AssertionError("Detecting EDT did not start");
             }
         }
@@ -2350,7 +2391,7 @@ public class MapLeaseManagerShould {
                 }
             });
             try {
-                return result.get(1, TimeUnit.SECONDS);
+                return result.get(EDT_LIVENESS_BUDGET_MILLIS, TimeUnit.MILLISECONDS);
             }
             catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
@@ -2382,7 +2423,7 @@ public class MapLeaseManagerShould {
         }
 
         private TaskObservation expectNextTask() {
-            final TaskObservation observation = new TaskObservation(thread);
+            final TaskObservation observation = new TaskObservation(deferrals);
             nextObservation.set(observation);
             return observation;
         }
@@ -2396,7 +2437,6 @@ public class MapLeaseManagerShould {
                         break;
                     }
                     final TaskObservation observation = nextObservation.getAndSet(null);
-                    currentObservation.set(observation);
                     if (observation != null) {
                         observation.activate();
                     }
@@ -2407,7 +2447,6 @@ public class MapLeaseManagerShould {
                         if (observation != null) {
                             observation.finish();
                         }
-                        currentObservation.compareAndSet(observation, null);
                     }
                 }
             }
@@ -2418,76 +2457,67 @@ public class MapLeaseManagerShould {
             }
         }
 
-        private void observeWaits() {
-            while (running.get()) {
-                final TaskObservation observation = currentObservation.get();
-                if (observation != null) {
-                    observation.observeWaiting();
-                }
-                Thread.yield();
-            }
-        }
-
         private void close() {
             running.set(false);
-            observer.interrupt();
             queue.offer(STOP);
             thread.interrupt();
             try {
-                thread.join(2_000L);
-                observer.join(2_000L);
+                thread.join(EDT_LIVENESS_BUDGET_MILLIS);
             }
             catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
             }
         }
 
+        /**
+         * Facts about one queued event-dispatch task. Only ordering facts are exported: whether the
+         * task started, whether it finished, how many failed settlement try-locks it performed, and
+         * how long its thread parked while it ran. No thread state is sampled: a sampler cannot
+         * distinguish "parked because it was waiting for settlement" from "parked in the queue
+         * after the task completed", and reading the active flag and the thread state non-atomically
+         * made that confusion a false failure.
+         */
         private static final class TaskObservation {
-            private final Thread edtThread;
             private final CountDownLatch started = new CountDownLatch(1);
-            private final CountDownLatch waitingOrFinished = new CountDownLatch(1);
-            private final AtomicBoolean active = new AtomicBoolean();
-            private final AtomicBoolean watching = new AtomicBoolean();
-            private final AtomicBoolean waiting = new AtomicBoolean();
+            private final CountDownLatch finished = new CountDownLatch(1);
+            private final AtomicInteger deferrals;
+            private int deferralsAtStart;
+            private long waitedMillisAtStart;
+            private int deferralsDuringTask;
+            private long waitedMillisDuringTask = -1L;
 
-            private TaskObservation(final Thread edtThread) {
-                this.edtThread = edtThread;
+            private TaskObservation(final AtomicInteger deferrals) {
+                this.deferrals = deferrals;
             }
 
             private void activate() {
-                active.set(true);
+                deferralsAtStart = deferrals.get();
+                waitedMillisAtStart = threadContentionWaitedMillis(Thread.currentThread());
                 started.countDown();
             }
 
             private void finish() {
-                active.set(false);
-                waitingOrFinished.countDown();
+                deferralsDuringTask = deferrals.get() - deferralsAtStart;
+                final long waitedAtFinish = threadContentionWaitedMillis(Thread.currentThread());
+                waitedMillisDuringTask = waitedAtFinish < 0L || waitedMillisAtStart < 0L
+                    ? -1L : waitedAtFinish - waitedMillisAtStart;
+                finished.countDown();
             }
 
-            private boolean awaitWaitingOrFinished() throws Exception {
-                watching.set(true);
-                if (!active.get()) {
-                    waitingOrFinished.countDown();
-                }
-                else {
-                    observeWaiting();
-                }
-                if (!waitingOrFinished.await(1, TimeUnit.SECONDS)) {
-                    throw new AssertionError("EDT invalidation did not reach a boundary");
-                }
-                watching.set(false);
-                return waiting.get();
+            private boolean awaitFinished(final long budgetMillis) throws Exception {
+                return finished.await(budgetMillis, TimeUnit.MILLISECONDS);
             }
 
-            private boolean awaitStarted() throws Exception {
-                return started.await(1, TimeUnit.SECONDS);
+            private boolean started() {
+                return started.getCount() == 0L;
             }
 
-            private void observeWaiting() {
-                if (watching.get() && active.get() && edtThread.getState() == Thread.State.WAITING) {
-                    waiting.set(true);
-                    waitingOrFinished.countDown();
-                }
+            private int deferrals() {
+                return deferralsDuringTask;
+            }
+
+            private long waitedMillis() {
+                return waitedMillisDuringTask;
             }
         }
     }
@@ -2590,6 +2620,23 @@ public class MapLeaseManagerShould {
         }
     }
 
+    /**
+     * Milliseconds the given thread has spent parked, from the JVM's own contention accounting. The
+     * difference between two samples taken at the start and the end of an event-dispatch task is the
+     * park time of that task alone, which is the fact the guarantee is about: a settlement attempt
+     * that does not block cannot add to it, and one that blocks - including a timed {@code tryLock}
+     * that gives up - adds exactly its wait.
+     */
+    @SuppressWarnings("deprecation")
+    private static long threadContentionWaitedMillis(final Thread thread) {
+        final ThreadMXBean bean = ManagementFactory.getThreadMXBean();
+        if (!bean.isThreadContentionMonitoringEnabled()) {
+            return -1L;
+        }
+        final java.lang.management.ThreadInfo info = bean.getThreadInfo(thread.getId(), 0);
+        return info == null ? -1L : info.getWaitedTime();
+    }
+
     private static Object privateField(final MapLeaseManager manager, final String name) throws Exception {
         final Field field = MapLeaseManager.class.getDeclaredField(name);
         field.setAccessible(true);
@@ -2646,7 +2693,7 @@ public class MapLeaseManagerShould {
         if (edt instanceof TestEdt) {
             ((TestEdt) edt).runAll();
         }
-        return stage.toCompletableFuture().get(1, TimeUnit.SECONDS);
+        return stage.toCompletableFuture().get(EDT_LIVENESS_BUDGET_MILLIS, TimeUnit.MILLISECONDS);
     }
 
     private MapLeaseManager manager(TestEnvironment environment, EdtExecutor edt,
@@ -2660,6 +2707,17 @@ public class MapLeaseManagerShould {
     private MapLeaseManager manager(TestEnvironment environment, EdtExecutor edt,
             MapLeaseManager.MapLoaderOperation loader, MapLeaseManager.LeaseCompletionInterceptor completionInterceptor) {
         return manager(environment, edt, null, loader, completionInterceptor);
+    }
+
+    private MapLeaseManager managerWithSettlementHook(TestEnvironment environment, EdtExecutor edt,
+            MapLeaseManager.MapLoaderOperation loader,
+            MapLeaseManager.LeaseCompletionInterceptor completionInterceptor,
+            MapLeaseManager.SettlementTestHook settlementTestHook) {
+        MapLeaseManager manager = new MapLeaseManager(environment.workspace, environment.modeController, edt,
+            (ScheduledExecutorService) null, loader, environment::containsView, environment::lookup,
+            completionInterceptor, settlementTestHook);
+        managers.add(manager);
+        return manager;
     }
 
     private MapLeaseManager manager(TestEnvironment environment, EdtExecutor edt,
