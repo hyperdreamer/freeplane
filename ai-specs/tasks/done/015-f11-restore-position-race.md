@@ -3,7 +3,7 @@
 Task Identifier: `015-f11-restore-position-race`
 Ticket ID: none (no external ticket exists for this task)
 Branch: `pm/graph-f11-bounds-015` (off `bd2be219d8`)
-Status: **diagnosis complete, no fix implemented** — the repair is a production change and needs approval (§6)
+Status: **delivered** — diagnosis in §2–§5, approved repair implemented in §6, verification in §9
 
 ## 1. Symptom
 
@@ -96,7 +96,7 @@ is therefore reporting the truth when it fires; it is not a bad assertion.
   position contract, and it would hide a genuine product defect behind a weaker test. This is the exact
   mistake task 013 §3 was created to remove.
 
-## 6. Proposed repair (production, needs approval)
+## 6. The repair (implemented after approval)
 
 One guarded re-assert in `GraphWorkspaceWindow.rawRestoreWindowed`, after `setVisible(true); validate();`:
 
@@ -115,9 +115,7 @@ Why it is safe: when the window manager already honoured the request the branch 
 it did not, this restates the same rectangle the method already asked for, after the peer exists. It
 touches no other platform path and no other restore behaviour.
 
-**Not implemented.** Production source is byte-identical to `bd2be219d8`
-(`git diff --exit-code bd2be219d8 -- freeplane_plugin_graph/src/main/java` → exit 0), because this is a
-product behaviour change and the standing rule is that those need explicit approval.
+Implemented exactly as proposed, with no other change to the method or to any other platform path.
 
 ## 7. How the repair would be verified, and the honest limit
 
@@ -130,12 +128,34 @@ product behaviour change and the standing rule is that those need explicit appro
 
 **Honest limit:** no deterministic reproduction inside Freeplane exists. The evidence is a
 product-external reproduction plus the exact signature match, so the fix is justified by mechanism and by
-a 60-round arm, not by a red-to-green Freeplane test. Anyone who wants stronger evidence should build the
-reproducer into the product's own fixture (drive `rawRestoreWindowed` against a deliberately slow window
-manager), which is a bigger job than the fix.
+a 60-round arm, not by a red-to-green Freeplane test. A green full suite is a *regression* result, not
+proof that the flake is gone: at ≈1 in 5 it would take twenty-odd clean full-suite runs to say that, and
+each costs thirteen minutes. Anyone who wants that strength should build the reproducer into the
+product's own fixture — drive `rawRestoreWindowed` against a deliberately slow window manager — which is
+a bigger job than the fix.
+**The mutation check that would prove the branch is exercised cannot be built honestly here:** making the
+re-assert a no-op leaves the suite green, because the suite cannot force the window manager to misplace the
+frame. That is stated rather than papered over.
 
-## 8. State on this branch
+## 8. Instrumentation discipline
 
-Record only. No test, production or build file is modified: `git status` is clean apart from this file.
-The instrumentation used for §2 and §3 (a `System.out` probe in `rawRestoreWindowed` and a throwaway
-repeated-round-trip test) was reverted and the tree verified byte-identical to `bd2be219d8`.
+Every probe used for §2 and §3 was reverted before anything was committed, and the tree verified
+byte-identical to `bd2be219d8`: a `System.out` probe inside `rawRestoreWindowed` and a throwaway
+repeated-round-trip test in `GraphWorkspaceWindowModelShould`. The delivered diff touches exactly one
+production method, `GraphWorkspaceWindow.rawRestoreWindowed`, and adds ten lines to it.
+
+## 9. Verification of the delivered fix
+
+All commands in `.worktrees/f11-bounds-015` with `JAVA_HOME=…/21.0.8-zulu`.
+
+| Gate | Command | Result |
+|---|---|---|
+| Compile | `gradle :freeplane_plugin_graph:compileJava` | BUILD SUCCESSFUL |
+| Window suite ×3 | `scripts/run-suite-on-xvfb.sh --tests '*GraphWorkspaceWindowModelShould'` | **118 tests, 0 failures, 0 skipped**, three times |
+| Full suite | `scripts/run-suite-on-xvfb.sh` | **exit 0 — 1459 tests, 0 failures, 4 skipped, 13m25s** |
+| Diff scope | `git diff --stat` | one file, `+10`, production only where intended |
+
+The bare-`JFrame` arms of §3 were measured **before** the fix and are what justify it: the shipped
+sequence lost the position in 1 of 60 round trips, the sequence with this re-assert in 0 of 60, in the
+same Xvfb + openbox environment the suite uses.
+
