@@ -125,13 +125,14 @@ It excludes an unbounded block, but not a bounded one: replacing `tryLock()` wit
 callback still owns the lock — the ordering witness passes. That is a real violation of "closing must
 not block the event dispatch thread", so the probe must measure the stall itself.
 
-The repair therefore asserts three independent facts inside the completion handler:
+The repair therefore asserts four independent facts inside the completion handler:
 
 ```java
 if (!settlementLock.get().isHeldByCurrentThread()) { … "not running under the settlement lock" }
 if (!observationToUse.awaitFinished(EDT_LIVENESS_BUDGET_MILLIS)) { … "did not complete" }
 if (observationToUse.deferrals() != 1) { … "did not take the failed-tryLock path" }
-if (observationToUse.waitedMillis() != 0L) { … "parked for N ms inside its own task" }
+if (observationToUse.contentionUnavailable()) { … "accounting was unavailable" }
+if (observationToUse.contended()) { … "parked or blocked … ; a settlement attempt that does not block cannot contend" }
 ```
 
 1. **Lock ownership** (`isHeldByCurrentThread`, read via the existing `privateField` helper) proves
@@ -322,7 +323,7 @@ from `build.gradle`.
 | `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/adapter/MapLeaseManagerShould.java` | probe redesign (§3.3) |
 | `freeplane_plugin_graph/build.gradle` | remove the dead `graphDisplayAcceptance` system property |
 | `freeplane_plugin_graph/doc/running-the-test-suite.md` | drop the stale gate row; record the liveness/ordering rule |
-| `ai-specs/tasks/in-progress/013-…md`, `013-…-plan.md` | this record and its plan |
+| `ai-specs/tasks/done/013-…md`, `013-…-plan.md` | this record and its plan |
 | `ai-specs/tasks/in-progress/010-…md` → `done/`, `in-progress/012-…md` → `done/` | close-out |
 
 No production file, no fixture, no test resource.
@@ -434,7 +435,7 @@ git status --porcelain freeplane_plugin_graph/src/main/java               → 0 
 
 ```
 ~/.pi/agent/skills/subagent-driven-development/scripts/sdd-state \
-  validate-plan ai-specs/tasks/in-progress/013-graph-test-hygiene-open-items-plan.md   → exit 0
+  validate-plan ai-specs/tasks/done/013-graph-test-hygiene-open-items-plan.md   → exit 0
 ```
 `5` tasks parsed, `5` `## Task` headings, so no task was silently truncated: 1 advanced, 2 standard,
 3 standard, 4 advanced, 5 standard.
@@ -522,3 +523,22 @@ the fact that the handler really runs under `settlementLock`; the mutation batte
 production byte-identity; that no named budget or tolerance was weakened; and that the plan gate exits 0
 with five tasks. It judged §9's non-reachability claim supported by the recorded log but the *general*
 claim unverified, which §9 already limits to "on this host in this run".
+
+### 11.4 Re-audit of the remediation
+
+The remediated commit was re-audited by a fresh frontier subsession, which independently rebuilt its own
+monitor mutant (flag-spin rendezvous, never awaiting on the EDT) and confirmed the finding is closed:
+
+| Variant | Lifecycle probe | External-reload probe |
+|---|---|---|
+| pristine | PASS | PASS |
+| intrinsic monitor, 250 ms holder | FAIL: `blocked on a monitor 1 time(s) for 250 ms`, parked 0 | FAIL, same |
+| `tryLock(100, MILLISECONDS)` | FAIL: parked 1 time for 101 ms | FAIL: parked 1 time for 100 ms |
+| unbounded `lock()` | FAIL, ordering, 22.3 s | FAIL, ordering, 22.5 s |
+| the same monitor mutant against the **pre**-remediation tests | PASS | PASS |
+
+It also ran both probes 10× normally and 10× pinned to two CPUs with no spuriously recorded contention,
+and confirmed 40 pristine repetitions published `parkedCount=0 blockedCount=0`. Two MINOR hygiene
+findings from that re-audit — a disconnected `deferrals` counter left in `CallbackCloseProbe`, an unused
+`DetectingEdt.deferrals()` accessor, and park-only wording left in the plan, the repair pseudocode and
+the suite document — were fixed rather than argued with.

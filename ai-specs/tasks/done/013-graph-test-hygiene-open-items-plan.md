@@ -27,9 +27,11 @@ Files: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/adapter/
 - Add the documented liveness constant `EDT_LIVENESS_BUDGET_MILLIS = 20_000L` explaining that it
   bounds scheduling, never latency.
 - Reduce `DetectingEdt.TaskObservation` to measured facts about one task: `started`, `finished`, the
-  delta of the settlement hook's failed-tryLock counter, and the delta of the JVM's per-thread park
-  time (`ThreadMXBean.getThreadInfo(...).getWaitedTime()`). Delete `active`, `watching`, `waiting`,
-  `awaitWaitingOrFinished()`, `awaitStarted()` and `observeWaiting()`.
+  delta of the settlement hook's failed-tryLock counter, and the deltas of both halves of the JVM's
+  per-thread contention accounting - park (`getWaitedCount`, `getWaitedTime`) and intrinsic-monitor
+  block (`getBlockedCount`, `getBlockedTime`) - taken from `ThreadMXBean.getThreadInfo(...)`.
+  Delete `active`, `watching`, `waiting`, `awaitWaitingOrFinished()`, `awaitStarted()` and
+  `observeWaiting()`.
 - Make `DetectingEdt` implement `MapLeaseManager.SettlementTestHook` so it owns the failed-tryLock
   counter that identifies the invalidation task, and enable thread contention monitoring for its
   lifetime (fail if unsupported rather than passing silently).
@@ -38,8 +40,9 @@ Files: `freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/adapter/
 - In `CallbackCloseProbe`, capture the settlement lock via the existing `privateField` helper and
   assert, inside the completion handler: the lock is held by the current thread; the observed task
   finished within the liveness budget; the observed task performed exactly one failed settlement
-  try-lock; and the observed task's park time is zero. Replace the sampled boundary with those four
-  checks and remove `waitingAtBoundary` and its accessor.
+  try-lock; and the observed task recorded no contention event of either kind - no park and no
+  intrinsic-monitor block - with unavailable accounting rejected rather than treated as a pass.
+  Replace the sampled boundary with those checks and remove `waitingAtBoundary` and its accessor.
 - Parameterize the fixture's thread-scheduling waits to the same constant: `ready.await`,
   `DetectingEdt.call`'s result wait, `DetectingEdt.close`'s join, `operationStarted.await`,
   `operationRunner.join`, `callbackFinished.await` (twice the constant, since it bounds a callback

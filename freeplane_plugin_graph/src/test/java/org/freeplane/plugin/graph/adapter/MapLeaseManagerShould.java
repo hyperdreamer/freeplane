@@ -2181,7 +2181,6 @@ public class MapLeaseManagerShould {
         private final AtomicReference<Throwable> callbackFailure = new AtomicReference<Throwable>();
         private final AtomicReference<Throwable> operationFailure = new AtomicReference<Throwable>();
         private final AtomicBoolean operationReturned = new AtomicBoolean();
-        private final AtomicInteger deferrals = new AtomicInteger();
         private final AtomicReference<ReentrantLock> settlementLock =
             new AtomicReference<ReentrantLock>();
         private final CountDownLatch operationStarted = new CountDownLatch(1);
@@ -2207,7 +2206,6 @@ public class MapLeaseManagerShould {
             this.operation = operation;
             this.observation = observation;
             this.boundaryAssertion = boundaryAssertion;
-            this.deferrals.set(0);
             try {
                 this.settlementLock.set((ReentrantLock) privateField(manager.get(), "settlementLock"));
             }
@@ -2347,10 +2345,6 @@ public class MapLeaseManagerShould {
             deferrals.incrementAndGet();
         }
 
-        private AtomicInteger deferrals() {
-            return deferrals;
-        }
-
         private DetectingEdt() throws Exception {
             final ThreadMXBean bean = ManagementFactory.getThreadMXBean();
             if (!bean.isThreadContentionMonitoringSupported()) {
@@ -2474,12 +2468,12 @@ public class MapLeaseManagerShould {
         }
 
         /**
-         * Facts about one queued event-dispatch task. Only ordering facts are exported: whether the
-         * task started, whether it finished, how many failed settlement try-locks it performed, and
-         * how long its thread parked while it ran. No thread state is sampled: a sampler cannot
-         * distinguish "parked because it was waiting for settlement" from "parked in the queue
-         * after the task completed", and reading the active flag and the thread state non-atomically
-         * made that confusion a false failure.
+         * Facts about one queued event-dispatch task: whether it started, whether it finished, how
+         * many failed settlement try-locks it performed, and what contention its thread accrued while
+         * running it - both park events and intrinsic-monitor block events, counts and durations. No
+         * thread state is sampled: a sampler cannot distinguish "parked because it was waiting for
+         * settlement" from "parked in the queue after the task completed", and reading an active flag
+         * and the thread state non-atomically made that confusion a false failure.
          */
         private static final class TaskObservation {
             private final CountDownLatch started = new CountDownLatch(1);
