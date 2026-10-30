@@ -3,7 +3,12 @@ package org.freeplane.plugin.graph.canvas;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
+import java.awt.Font;
+import java.awt.FontFormatException;
 import java.awt.geom.Rectangle2D;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -733,7 +738,7 @@ public class ScreenLabelPlacementShould {
     public void reusesTheCachedPlacementUntilTheKeyChanges() {
         List<SceneNode> scene = denseScene();
         Rectangle2D area = area(1128.0, 364.0);
-        LabelFonts fonts = LabelFonts.from(GraphTheme.resolve(CanvasTheme.LIGHT));
+        LabelFonts fonts = fonts();
         ScreenLabelPlacementCache cache = new ScreenLabelPlacementCache();
         LabelPlacementRequest request = request(scene, 1.0, area, forced("Axiom of Choice"),
             RenderingLevel.FULL);
@@ -952,7 +957,7 @@ public class ScreenLabelPlacementShould {
         List<Rectangle2D> obstacles = standIn == null
             ? Collections.<Rectangle2D>emptyList() : Collections.singletonList(standIn);
         return new ScreenLabelPlacement().place(request(scene, zoom, area, forced, level),
-            previous, LabelFonts.from(GraphTheme.resolve(CanvasTheme.LIGHT)), obstacles);
+            previous, fonts(), obstacles);
     }
 
     static LabelPlacementRequest request(List<SceneNode> scene, double zoom, Rectangle2D area,
@@ -981,8 +986,48 @@ public class ScreenLabelPlacementShould {
             area, forced, level);
     }
 
+    /**
+     * The fixtures in this class are measurements of one face, Noto Sans, and many assertions
+     * compare absolute screen-space coordinates against them. The theme's logical
+     * {@code SansSerif} resolves to whatever family the host prefers (DejaVu Sans on Ubuntu runner
+     * images, Noto Sans on many developer machines), so the pinned numbers only reproduce when the
+     * measured face comes from the repository instead of from the host.
+     */
     static LabelFonts fonts() {
-        return LabelFonts.from(GraphTheme.resolve(CanvasTheme.LIGHT));
+        GraphTheme theme = GraphTheme.resolve(CanvasTheme.LIGHT);
+        return LabelFonts.of(
+            FixtureFonts.REGULAR.deriveFont((float) theme.labelFont().getSize2D()),
+            FixtureFonts.REGULAR.deriveFont((float) theme.denseLabelFont().getSize2D()),
+            FixtureFonts.BOLD.deriveFont((float) theme.emphaticLabelFont().getSize2D()));
+    }
+
+    /**
+     * The stand-in label is painted with the theme's emphatic font derived to plain 10 pt, which is
+     * the regular face at 10 pt.
+     */
+    static Font standInFont() {
+        return FixtureFonts.REGULAR.deriveFont(10.0f);
+    }
+
+    private static final class FixtureFonts {
+        private static final String DIRECTORY = "/fonts/";
+        private static final Font REGULAR = load("NotoSans-Regular-subset.ttf");
+        private static final Font BOLD = load("NotoSans-Bold-subset.ttf");
+
+        private static Font load(String file) {
+            String resource = DIRECTORY + file;
+            InputStream stream = ScreenLabelPlacementShould.class.getResourceAsStream(resource);
+            assertThat(stream).as("fixture font " + resource).isNotNull();
+            try {
+                return Font.createFont(Font.TRUETYPE_FONT, stream);
+            }
+            catch (FontFormatException e) {
+                throw new AssertionError("fixture font " + resource, e);
+            }
+            catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        }
     }
 
     static List<PlacedLabel> placeEnclosure(String text, boolean emphatic, Rectangle2D area,
@@ -1095,8 +1140,7 @@ public class ScreenLabelPlacementShould {
         List<Rectangle2D> obstacles = standIn == null
             ? Collections.<Rectangle2D>emptyList() : Collections.singletonList(standIn);
         return new ScreenLabelPlacement().place(
-            request(scene, zoom, area, forced, level, centerX, centerY), previous,
-            LabelFonts.from(GraphTheme.resolve(CanvasTheme.LIGHT)), obstacles);
+            request(scene, zoom, area, forced, level, centerX, centerY), previous, fonts(), obstacles);
     }
 
     static Rectangle2D area(double width, double height) {
@@ -1114,12 +1158,10 @@ public class ScreenLabelPlacementShould {
             minX = Math.min(minX, node.x * zoom - node.radius * zoom);
             minY = Math.min(minY, node.y * zoom - node.radius * zoom);
         }
-        double width = ScreenLabelPlacement.textWidth("Basic Definitions and Theorems",
-            LabelFonts.from(GraphTheme.resolve(CanvasTheme.LIGHT)).emphatic()
-                .deriveFont(java.awt.Font.PLAIN, 10.0f));
-        double height = ScreenLabelPlacement.screenBounds("Basic Definitions and Theorems",
-            LabelFonts.from(GraphTheme.resolve(CanvasTheme.LIGHT)).emphatic()
-                .deriveFont(java.awt.Font.PLAIN, 10.0f)).getHeight();
+        Font font = standInFont();
+        double width = ScreenLabelPlacement.textWidth("Basic Definitions and Theorems", font);
+        double height = ScreenLabelPlacement.screenBounds("Basic Definitions and Theorems", font)
+            .getHeight();
         return new Rectangle2D.Double(minX - 11.0 + area.getWidth() * 0.5,
             minY - 18.0 - height + area.getHeight() * 0.5, width, height);
     }

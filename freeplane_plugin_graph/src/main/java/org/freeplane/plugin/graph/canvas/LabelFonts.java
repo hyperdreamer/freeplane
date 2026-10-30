@@ -19,6 +19,15 @@ public final class LabelFonts {
         return new LabelFonts(value.labelFont(), value.denseLabelFont(), value.emphaticLabelFont());
     }
 
+    /**
+     * Builds the three label fonts from explicit faces. The theme's fonts are logical
+     * ({@link Font#SANS_SERIF}) and therefore resolve to whatever family the host prefers, so
+     * screen-space geometry that pins measured metrics must supply the faces itself.
+     */
+    public static LabelFonts of(final Font full, final Font dense, final Font emphatic) {
+        return new LabelFonts(full, dense, emphatic);
+    }
+
     public Font full() {
         return full;
     }
