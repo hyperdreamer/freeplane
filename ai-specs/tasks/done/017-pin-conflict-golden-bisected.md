@@ -150,7 +150,11 @@ DiagnosticFailure: One or more performance ledger rows failed
 | `reference-2000-5000:full-worker` | 722 ms | 500 ms | 1.44 |
 
 All seven are wall-clock worker/first-frame/force rows on the three largest scenarios; every other row
-passes. **This is not classified here, and no threshold was touched.** Two candidate explanations, and the
+passes. **Classified by task 018: a real cost increase, not host calibration.** Running both campaigns on the
+same machine gave 6/102 failing rows at HEAD against 1/102 at `01d3900b28`, with only the layout stages
+moving (1.08-1.21x for everything else, 3.5-54x for `full-worker`/`accepted-batch-first-frame`) — see
+`018-perf-thresholds-classified.md`. The original note, kept below for the record, stated the position
+before that measurement existed, and no threshold was touched there either. Two candidate explanations, and the
 evidence does not yet separate them: the thresholds may be calibrated for a quieter host than this one
 (task 010 §1.3 measured the raw-reference fixture at 5.0–6.0 s on the *base* commit here, so this host is
 slow for this workload regardless of recent work), or the layout lanes since `01d3900b28` cost real time.
