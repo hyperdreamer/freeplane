@@ -159,3 +159,28 @@ The bare-`JFrame` arms of §3 were measured **before** the fix and are what just
 sequence lost the position in 1 of 60 round trips, the sequence with this re-assert in 0 of 60, in the
 same Xvfb + openbox environment the suite uses.
 
+## 10. Consequence found later: the frame-operation contract test
+
+Task 017's module-suite run surfaced `GraphWorkspaceWindowModelShould.rawFrameOperationsFollowSpecifiedOrder`
+failing. The guard added in §6 inserts one `setBounds`/`validate` pair when the window manager has not
+honoured the saved rectangle by the time the peer is mapped, and that test asserted the *exact* operation
+sequence of `rawRestoreWindowed`.
+
+The specified sequence therefore changed, and the test now asserts the mandatory prefix exactly and permits
+at most one trailing re-assert of the same rectangle, with a new test that forces the branch deterministically
+by reporting displaced bounds. The guard itself is unchanged and still delivered: the failure was in the test
+that describes the contract, not in the fix.
+
+Two corrections worth keeping with this record:
+
+- **The §7 honest limit was right and should be trusted.** The test passed in every verification run here
+  because the guard only fires when the window manager misplaces the frame. A conditional production change
+  needs its *contract* tests updated at the time, not discovered later.
+- **A single-green control run is not evidence when the budget it races is 20 s.** While investigating,
+  running this class through plain `gradle` instead of `scripts/run-suite-on-xvfb.sh` made
+  `panDuringPresentationIsPreservedThroughExit` fail 3/3, and one passing run with the guard compiled out
+  looked like proof the fix was the cause. On the Xvfb script the class is 118/118 green with the guard,
+  twice. It was the documented live-desktop failure mode.
+
+Residual unchanged: `f11RestoresBoundsAndExtendedStateFromNormalWindow` still fails occasionally (1 of 3
+Xvfb class runs during 017). As §7 said, the guard reduces the race; it does not prove it away.
