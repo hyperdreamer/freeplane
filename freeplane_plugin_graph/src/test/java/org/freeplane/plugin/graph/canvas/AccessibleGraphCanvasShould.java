@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import java.awt.AWTKeyStroke;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.awt.GraphicsEnvironment;
 import java.awt.KeyboardFocusManager;
 import java.awt.Point;
 import java.awt.Rectangle;
@@ -71,6 +72,7 @@ import org.freeplane.plugin.graph.workspace.model.PinRecord;
 import org.freeplane.plugin.graph.workspace.model.RelationshipDirection;
 import org.freeplane.plugin.graph.workspace.model.RelationshipId;
 
+import org.junit.Assume;
 import org.junit.Test;
 
 public class AccessibleGraphCanvasShould {
@@ -487,6 +489,11 @@ public class AccessibleGraphCanvasShould {
     }
 
     private static void withFocusedCanvas(final GraphCanvas canvas, final Runnable action) {
+        // A real window is unavoidable here: focus traversal and Swing key dispatch only exist
+        // with a displayable frame. Headless runs cannot exercise this behaviour, so they skip it
+        // visibly rather than failing on a JFrame constructor.
+        Assume.assumeFalse("focus traversal and Swing key dispatch require a displayable window",
+            GraphicsEnvironment.isHeadless());
         final JFrame[] frame = new JFrame[1];
         try {
             invokeOnEdt(new Runnable() {

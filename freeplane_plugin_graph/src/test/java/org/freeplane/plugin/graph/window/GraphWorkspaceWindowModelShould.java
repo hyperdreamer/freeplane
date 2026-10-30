@@ -1946,7 +1946,8 @@ public class GraphWorkspaceWindowModelShould {
             f.checkpoint = f.edt(() -> f.commands.size());
             f.pressF11();
             f.awaitActive(false);
-            f.await(() -> !(Boolean) GraphWindowChromeShould.field(f.model.presentationViewport(), "armed"));
+            f.awaitWithin(() -> !(Boolean) GraphWindowChromeShould.field(
+                f.model.presentationViewport(), "armed"), DisplayFixture.DISPLAY_SETTLE_BUDGET_MILLIS);
             f.assertView(changed);
             f.assertNoCommands();
         }
@@ -2147,6 +2148,21 @@ public class GraphWorkspaceWindowModelShould {
     private static final class DisplayFixture implements AutoCloseable {
         // X11 AWT geometry can lag the window manager by a couple of pixels.
         private static final int X11_AWT_BOUNDS_TOLERANCE = 2;
+        /**
+         * A maximized frame legitimately extends past the screen edge by the window manager's
+         * invisible resize border: measured at 4 px per horizontal edge and 2 px vertically under
+         * KWin, and 0 px under Xvfb/Openbox. This tolerance applies only to screen containment;
+         * work-area coverage stays at {@link #X11_AWT_BOUNDS_TOLERANCE} so a window that is short
+         * of the work area still fails.
+         */
+        private static final int X11_WM_BORDER_TOLERANCE = 8;
+        /**
+         * Liveness budget for a display condition, not an assertion about UI latency. These conditions
+         * settle within a few milliseconds on an idle machine, but they wait on the window manager and the
+         * EDT, so a busy host can delay them arbitrarily. At 5000 ms this class failed whenever the machine
+         * was under load (measured: load average 25), which reported the host's load as a code defect.
+         */
+        private static final long DISPLAY_SETTLE_BUDGET_MILLIS = 20000L;
         private final java.awt.Robot robot;
         private final List<GraphCommand> commands = new ArrayList<GraphCommand>();
         private final List<String> messages = new ArrayList<String>();
@@ -2228,12 +2244,34 @@ public class GraphWorkspaceWindowModelShould {
             assertThat(uncaught.get()).as("uncaught EDT error").isNull();
         }
 
-        private void await(final java.util.function.BooleanSupplier condition) throws Exception {
-            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(5000);
+        /**
+         * Waits with an explicit budget. Presentation settlement is capped at 5000 ms
+         * (scheduleQuietObservation), so waiting for the presentation hold to be released must budget
+         * strictly more than that cap; a 5000 ms wait races the cap itself.
+         */
+        private void awaitWithin(final java.util.function.BooleanSupplier condition, final long budgetMillis)
+                throws Exception {
+            final long deadline = System.nanoTime()
+                + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(budgetMillis);
             while (!edt(() -> condition.getAsBoolean())) {
                 assertThat(uncaught.get()).as("uncaught EDT error").isNull();
                 if (System.nanoTime() >= deadline) {
-                    throw new AssertionError("Display condition did not settle within 5000 ms; bounds="
+                    throw new AssertionError("Display condition did not settle within " + budgetMillis
+                        + " ms; bounds=" + edt(() -> window.getBounds()) + "; messages=" + messages);
+                }
+                Thread.sleep(10);
+            }
+            awaitEdt();
+        }
+
+        private void await(final java.util.function.BooleanSupplier condition) throws Exception {
+            final long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS
+                .toNanos(DISPLAY_SETTLE_BUDGET_MILLIS);
+            while (!edt(() -> condition.getAsBoolean())) {
+                assertThat(uncaught.get()).as("uncaught EDT error").isNull();
+                if (System.nanoTime() >= deadline) {
+                    throw new AssertionError("Display condition did not settle within "
+                        + DISPLAY_SETTLE_BUDGET_MILLIS + " ms; bounds="
                         + edt(() -> window.getBounds()) + "; messages=" + messages);
                 }
                 Thread.sleep(10);
@@ -2243,7 +2281,7 @@ public class GraphWorkspaceWindowModelShould {
 
         private void awaitCanvasFocus() throws Exception {
             final long deadline = System.nanoTime()
-                + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(5000);
+                + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(DISPLAY_SETTLE_BUDGET_MILLIS);
             while (!edt(() -> window.canvas().isFocusOwner())) {
                 onEdt(() -> {
                     if (window.isDisplayable() && window.isVisible()) {
@@ -2367,10 +2405,10 @@ public class GraphWorkspaceWindowModelShould {
                 && actual.y <= workArea.y + X11_AWT_BOUNDS_TOLERANCE
                 && actual.x + actual.width >= workArea.x + workArea.width - X11_AWT_BOUNDS_TOLERANCE
                 && actual.y + actual.height >= workArea.y + workArea.height - X11_AWT_BOUNDS_TOLERANCE
-                && actual.x >= screen.x - X11_AWT_BOUNDS_TOLERANCE
-                && actual.y >= screen.y - X11_AWT_BOUNDS_TOLERANCE
-                && actual.x + actual.width <= screen.x + screen.width + X11_AWT_BOUNDS_TOLERANCE
-                && actual.y + actual.height <= screen.y + screen.height + X11_AWT_BOUNDS_TOLERANCE;
+                && actual.x >= screen.x - X11_WM_BORDER_TOLERANCE
+                && actual.y >= screen.y - X11_WM_BORDER_TOLERANCE
+                && actual.x + actual.width <= screen.x + screen.width + X11_WM_BORDER_TOLERANCE
+                && actual.y + actual.height <= screen.y + screen.height + X11_WM_BORDER_TOLERANCE;
         }
 
         private void assertWorkAreaCoverage() {
@@ -2385,13 +2423,13 @@ public class GraphWorkspaceWindowModelShould {
             // X11 AWT can briefly report a cached outer bound while KWin has already
             // applied the current work-area placement; permit two pixels at each edge.
             assertThat(actual.x).as("full-screen frame left edge within screen")
-                .isGreaterThanOrEqualTo(screen.x - X11_AWT_BOUNDS_TOLERANCE);
+                .isGreaterThanOrEqualTo(screen.x - X11_WM_BORDER_TOLERANCE);
             assertThat(actual.y).as("full-screen frame top edge within screen")
-                .isGreaterThanOrEqualTo(screen.y - X11_AWT_BOUNDS_TOLERANCE);
+                .isGreaterThanOrEqualTo(screen.y - X11_WM_BORDER_TOLERANCE);
             assertThat(actual.x + actual.width).as("full-screen frame right edge within screen")
-                .isLessThanOrEqualTo(screen.x + screen.width + X11_AWT_BOUNDS_TOLERANCE);
+                .isLessThanOrEqualTo(screen.x + screen.width + X11_WM_BORDER_TOLERANCE);
             assertThat(actual.y + actual.height).as("full-screen frame bottom edge within screen")
-                .isLessThanOrEqualTo(screen.y + screen.height + X11_AWT_BOUNDS_TOLERANCE);
+                .isLessThanOrEqualTo(screen.y + screen.height + X11_WM_BORDER_TOLERANCE);
             assertThat(actual.x).as("full-screen frame covers work-area left edge")
                 .isLessThanOrEqualTo(workArea.x + X11_AWT_BOUNDS_TOLERANCE);
             assertThat(actual.y).as("full-screen frame covers work-area top edge")

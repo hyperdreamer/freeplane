@@ -86,7 +86,16 @@ import org.freeplane.plugin.graph.workspace.model.DisplaySettings;
 import org.freeplane.plugin.graph.workspace.model.WorkspaceId;
 
 public final class GraphWorkspacePerformanceDiagnostic {
-    public static final long OPERATION_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(5L);
+    /**
+     * Liveness budget for one worker operation, not a performance gate. It is deliberately
+     * generous: it only has to turn a hang into a diagnostic failure. The performance gate is
+     * {@link #RAW_REFERENCE_MAX_FRAME_NANOS}, enforced by {@link #verifyRawReferenceFrameBound()} from the
+     * dedicated {@code graphPerformanceDiagnostic} task rather than from the unit suite. When this was 5 s it
+     * also aborted the whole fixture on
+     * a loaded machine (observed as a {@code @BeforeClass} "Five-second timeout during raw
+     * reference worker submit" failure), which reported a slow machine as a broken engine.
+     */
+    public static final long OPERATION_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(120L);
     public static final long PROCESS_DEADLINE_NANOS = TimeUnit.MINUTES.toNanos(40L);
     public static final int CANVAS_WIDTH = 1024;
     public static final int CANVAS_HEIGHT = 768;
@@ -183,6 +192,7 @@ public final class GraphWorkspacePerformanceDiagnostic {
                 runScenario(workspace);
             }
             runLifecycleProbes(workspaces.get(0));
+            verifyRawReferenceFrameBound();
             writeLedger();
             verifyOutputNames();
             verifyWorkerCleanup();
@@ -991,6 +1001,32 @@ public final class GraphWorkspacePerformanceDiagnostic {
 
     List<RawReferenceFrame> rawReferenceFrames() {
         return Collections.unmodifiableList(rawReferenceFrames);
+    }
+
+    /**
+     * Runs the raw reference fixture and enforces {@link #RAW_REFERENCE_MAX_FRAME_NANOS}. This is the
+     * single owner of that bound. It does not belong in the unit suite: the wall-clock maximum is always
+     * the first frame, so it reports JVM warm-up and machine load rather than layout cost. Measured on
+     * both {@code cfa9b7f9fb} and its base {@code bfaed5611d}, every one of six interleaved runs exceeded
+     * the bound on the first frame (5.056 s to 6.043 s) while frames 1-7 stayed between 0.69 s and 1.51 s.
+     * The suite keeps the deterministic structural assertions and the synthetic-clock negative test.
+     */
+    void verifyRawReferenceFrameBound() {
+        runRawReferenceFixture();
+        final long maximum = rawReferenceMaxFrameNanos();
+        if (maximum <= RAW_REFERENCE_MAX_FRAME_NANOS) {
+            return;
+        }
+        final StringBuilder frames = new StringBuilder();
+        for (final RawReferenceFrame frame : rawReferenceFrames()) {
+            if (frames.length() > 0) {
+                frames.append(',');
+            }
+            frames.append(frame.durationNanos());
+        }
+        throw new DiagnosticFailure(PerformanceMeasurements.Stage.FULL_WORKER,
+            "Raw reference frame " + maximum + " ns exceeds the " + RAW_REFERENCE_MAX_FRAME_NANOS
+                + " ns complete-frame bound; frames=[" + frames + "]");
     }
 
     long rawReferenceMaxFrameNanos() {

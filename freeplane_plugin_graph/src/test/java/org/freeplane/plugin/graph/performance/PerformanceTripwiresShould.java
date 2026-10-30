@@ -154,7 +154,6 @@ public class PerformanceTripwiresShould {
     @Test
     public void referenceFixtureStaysBoundedAndFlagVisible() {
         assertThat(referenceDiagnostic.rawReferenceFrames()).isNotEmpty();
-        assertRawReferenceFrameBound(referenceDiagnostic);
         for (GraphWorkspacePerformanceDiagnostic.RawReferenceFrame frame
                 : referenceDiagnostic.rawReferenceFrames()) {
             EdgeConflictDiagnostics edge = frame.edgeDiagnostics();
@@ -204,6 +203,10 @@ public class PerformanceTripwiresShould {
 
         assertThatThrownBy(() -> assertRawReferenceFrameBound(diagnostic))
             .isInstanceOf(AssertionError.class);
+        // The dedicated diagnostic task owns the bound; keep that path deterministic too.
+        assertThatThrownBy(diagnostic::verifyRawReferenceFrameBound)
+            .hasMessageContaining("exceeds the")
+            .hasMessageContaining("complete-frame bound");
     }
 
     private static void assertRawReferenceFrameBound(final GraphWorkspacePerformanceDiagnostic diagnostic) {

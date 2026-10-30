@@ -40,6 +40,7 @@ import java.util.Set;
 
 import javax.imageio.ImageIO;
 import javax.swing.JScrollPane;
+import javax.swing.SwingUtilities;
 import javax.swing.JViewport;
 
 import org.freeplane.core.resources.ResourceController;
@@ -2328,13 +2329,29 @@ public class GraphCanvasPaintShould {
     }
 
     private static void assertHorizontallyReachable(final JViewport viewport, final double surfaceX) {
-        int extentWidth = viewport.getExtentSize().width;
-        int maximumX = Math.max(0, viewport.getView().getWidth() - extentWidth);
-        int centeredX = (int) Math.round(surfaceX - extentWidth * 0.5);
-        int viewX = Math.max(0, Math.min(maximumX, centeredX));
-        viewport.setViewPosition(new Point(viewX, viewport.getViewPosition().y));
-        double visibleX = surfaceX - viewport.getViewPosition().x;
-        assertThat(visibleX).isBetween(0.0, (double) extentWidth);
+        final int extentWidth = viewport.getExtentSize().width;
+        // Clamp against the size JViewport itself clamps with, not the laid-out component width.
+        final int maximumX = Math.max(0, viewport.getViewSize().width - extentWidth);
+        final int centeredX = (int) Math.round(surfaceX - extentWidth * 0.5);
+        final int viewX = Math.max(0, Math.min(maximumX, centeredX));
+        // Set and read atomically on the EDT. This thread is not the EDT, and a queued layout pass can
+        // otherwise reposition the viewport between the set and the read, which made this assertion
+        // fail intermittently with a position nobody asked for.
+        final double[] visibleX = new double[1];
+        try {
+            SwingUtilities.invokeAndWait(() -> {
+                viewport.setViewPosition(new Point(viewX, viewport.getViewPosition().y));
+                visibleX[0] = surfaceX - viewport.getViewPosition().x;
+            });
+        }
+        catch (final InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError("interrupted while scrolling to " + surfaceX, interrupted);
+        }
+        catch (final java.lang.reflect.InvocationTargetException failure) {
+            throw new AssertionError("scrolling to " + surfaceX + " failed", failure.getCause());
+        }
+        assertThat(visibleX[0]).isBetween(0.0, (double) extentWidth);
     }
 
     @Test
