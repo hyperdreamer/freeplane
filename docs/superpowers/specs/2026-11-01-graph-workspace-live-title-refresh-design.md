@@ -29,8 +29,12 @@ Revision history:
   source-text tests. Review round 5: **CHANGES_REQUIRED**, 3 blocking, 0 non-blocking. The remaining findings
   were that invariant 3 still ignored the font and eligibility transitions that step 3 requires, and that no
   test forced a *truncated retained* output or distinguished storing the source text from comparing against it.
-- r6 (this revision) — qualifies every unchanged-title claim with the font and eligibility conditions, adds the
-  truncated-retained-output and hidden-tail-edit cases, and records round 5 in section 12.
+- r6 (`97d7109f`) — qualified every unchanged-title claim with the font and eligibility conditions and closed the
+  source-text test gaps. Review round 6: **PASS**, 0 blocking, 2 non-blocking.
+- r7 (this revision) — applies the two round-6 non-blocking findings: the demotion row in 6.8 now names the
+  unchanged-font, eligible-face and acceptable-box conditions, and T4f's description now claims source
+  advancement rather than the comparison trigger, which T4c, T4e and T4g own. Both are precision changes with no
+  behavioural effect; the round-6 verdict covers the procedure unchanged.
 
 ## 1. Reported defect
 
@@ -294,7 +298,7 @@ caps apply.
 | --- | --- | --- |
 | Title, font and eligibility unchanged, box still acceptable | retained face and box | identical face, box, leader and numbers |
 | Title, font and eligibility unchanged, a neighbour moved so the box no longer fits | retention declines, ladder re-places | identical to today: the same decline, the same accumulated obstacles, and the same ladder outcome, which may include a face change |
-| Title unchanged, label stops being forced | box kept, flag updated | identical box and face; still kept |
+| Title and font unchanged, remembered face still eligible, box still acceptable, label stops being forced | box kept, flag updated | identical box and face; still kept |
 | Title changed, same face still draws it | stale text drawn | new text, same face, re-measured box in the same slot |
 | Title changed, needs a denser or truncated face | stale text drawn | new text in a denser or truncated face, still in the same slot |
 | Title changed, and truncation hid the change | stale text drawn | re-derived; a shorter title that now fits is drawn in full |
@@ -439,9 +443,12 @@ is the complement of T3c.
 ### T4f — the same truncated rendering for two titles is still a change
 
 Use two different titles that truncate to the identical string at the remembered face, neither of which fits a
-fuller face. Retitle one into the other. Assert the face is re-derived — and therefore that the comparison uses
-the stored source text rather than the rendered string — and assert that the emitted `sourceText()` is the
-second title, so a retained emission cannot silently carry the first one forward.
+fuller face. Retitle one into the other. Assert that the emitted `sourceText()` is the second title, so a
+retained emission cannot silently carry the first one forward.
+
+Because the face and the rendered string can coincide whether the label was re-derived or kept with an updated
+source, this test verifies that the stored source advances despite identical rendering. It does not by itself
+prove the comparison trigger; T4c, T4e and T4g own that.
 
 ### T4g — a hidden-tail edit is not a title change
 
@@ -595,3 +602,12 @@ findings were about the precision of the claims and the strength of one test.
 | R5-1 | blocking | Invariant 3 still required a declined fallback for an unchanged title even when a font change makes step 3 re-derive, so the two rules contradicted each other; P1, 6.7, 6.8 and risk 2 carried the same gap | Invariant 3, P1, 6.7, the 6.8 rows and risk 2 now all carry the unchanged-font and unchanged-eligibility conditions, and invariant 3 names step 3 as the owner of those transitions |
 | R5-2 | blocking | No test forced a truncated *retained* output, so initialising `sourceText` from the rendered text at the retention site could pass T4c, T4e and T4f | T4c requires a retained output that stays truncated with `sourceText()` ≠ `text()`, and uses it as the previous placement for a replay where freed space must not upgrade the face; T4f asserts the emitted source advances to the second title |
 | R5-3 | blocking | The `fullText()` versus `displayText()` fixture verified storage but not comparison, so an implementation comparing against `fullText()` could treat a hidden-tail edit as a change | T4g adds two projections with identical display text and different full text and asserts the remembered face survives the hidden-tail edit |
+
+### Round 6 (`reports/design-review-6.md`)
+
+Verdict **PASS**, zero blocking findings. Two non-blocking precision items were applied in this revision.
+
+| # | Severity | Finding | Resolution |
+| --- | --- | --- | --- |
+| N-1 | non-blocking | The 6.8 demotion row promised an identical box and face without naming the conditions steps 2 and 3 require | The row now names the unchanged-font, eligible-face and acceptable-box conditions |
+| N-2 | non-blocking | T4f claimed to prove the comparison trigger, although an identical rendering can result from either path | T4f now claims source advancement only, and names T4c, T4e and T4g as the trigger coverage |
