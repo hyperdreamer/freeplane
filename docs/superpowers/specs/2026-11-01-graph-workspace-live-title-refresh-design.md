@@ -22,9 +22,12 @@ Revision history:
   **CHANGES_REQUIRED**, 3 blocking, 2 non-blocking. The drawn string turned out to be the wrong signal: it
   conflated an obstructed label with a retitled one, it changed an uncapped remembered box on the forced-to-
   ordinary transition, and it hid a real title edit whose truncation rendered identically.
-- r4 (this revision) — the remembered label now carries the projection text it was derived from, so "did the
-  title change?" is answered exactly. A changed title is re-derived; an unchanged title is either kept or falls
-  back to the ordinary ladder exactly as today. Section 12 records every finding from all three rounds.
+- r4 (`d4145985`) — replaced the drawn-string signal with the source text. Review round 4: **CHANGES_REQUIRED**,
+  3 blocking, 0 non-blocking. The three-outcome rule was accepted as correct; the findings were overstated
+  guarantees in P3 and invariant 3, and a test that could not detect a mis-initialised `sourceText`.
+- r5 (this revision) — narrows the unchanged-title promises to "no additional face change relative to the
+  existing fallback", scopes the fresh-pass equality to the traced fixture, and strengthens the source-text
+  tests. Section 12 records every finding from all four rounds.
 
 ## 1. Reported defect
 
@@ -122,8 +125,9 @@ labels do not jump while the layout moves. It must therefore be repaired, not re
 2. Retention keeps doing its real job: an unchanged title keeps exactly the placement decision it makes today.
 3. A changed title takes the best face the label is eligible for at the slot it already occupies, so a title
    that shrank is no longer drawn small or truncated.
-4. A label whose title did not change never changes its face while the layout moves, and never changes its
-   fallback behaviour either.
+4. A label whose title did not change gains no new face change: while its title, its face font and its
+   eligibility are unchanged, retention either keeps exactly what it has today or falls back exactly as it does
+   today.
 5. Every way a label can change is covered: a different title, a longer or shorter title that changes the
    truncation, and a different font or theme.
 6. The rule is stated once and tested at the layer that owns it, plus at the component that renders it.
@@ -166,8 +170,11 @@ Three properties follow, and all three are testable:
   does today; what is promised is that no new style change appears.
 - **P2 — a changed title never keeps a stale face.** Any change to the title, including one whose truncation
   renders the same string, re-derives the face for the retained slot.
-- **P3 — no face oscillation.** Because the keep decision depends only on the title, the font and the
-  remembered face, none of which move during settling, a settling layout can never flip a label between faces.
+- **P3 — no additional face oscillation.** The keep decision depends only on the title, the font, the
+  remembered face and the eligibility rule, none of which move during settling, so retention itself can never
+  flip a face. The existing fallback can: when a remembered box stops being acceptable, the ordinary ladder runs
+  against the current obstacles and may land on a different face, exactly as it does today. This design neither
+  removes nor adds such changes; what it guarantees is that it introduces none of its own.
 
 ### 6.2 Retention, restated
 
@@ -216,9 +223,12 @@ Every rejection happens before anything is added to the obstacle list, so a decl
 
 ### 6.3 What "the title changed" means
 
-`PlacedLabel` gains one package-private field, `sourceText`: the projection display text the label was derived
-from. Every construction site sets it — the ladder, the forced base slot, hover-only, enclosure labels and
-retention itself.
+`PlacedLabel` gains one package-private field, `sourceText`: the **display** text of the projection label the
+placement was derived from — `node.label().displayText()`, the same value the placement itself reads, not the
+untruncated `fullText()` used by tooltips and search. A fixture whose `fullText()` and `displayText()` differ
+pins that choice, because an edit confined to the hidden tail must not count as a title change. Every
+construction site sets it — the ladder, the forced base slot, hover-only, enclosure labels and retention
+itself.
 
 This is required rather than convenient. Without it, the only available signal is the drawn string, and a
 truncated face can render the same prefix plus ellipsis for two different titles. Review round 3 showed that
@@ -277,7 +287,7 @@ Two rules constrain forced labels, and both are invariants rather than accidents
 | Situation | Before | After |
 | --- | --- | --- |
 | Title unchanged, box still acceptable | retained face and box | identical face, box, leader and numbers |
-| Title unchanged, a neighbour moved so the box no longer fits | retention declines, ladder re-places | identical to today: the same decline and the same ladder outcome |
+| Title unchanged, a neighbour moved so the box no longer fits | retention declines, ladder re-places | identical to today: the same decline, the same accumulated obstacles, and the same ladder outcome, which may include a face change |
 | Title unchanged, label stops being forced | box kept, flag updated | identical box and face; still kept |
 | Title changed, same face still draws it | stale text drawn | new text, same face, re-measured box in the same slot |
 | Title changed, needs a denser or truncated face | stale text drawn | new text in a denser or truncated face, still in the same slot |
@@ -358,10 +368,21 @@ placement chooses the other slot.
 ### T3c — an obstructed, unchanged label falls back exactly as today
 
 The round-3 counterexample: two ordinary nodes, one moved onto the other's remembered box, title and font
-unchanged. On the **first** pass after the move, assert that the retained pass and a `previous == null` pass
-produce the same face and slot for the affected node — a full-font `BELOW` in the traced fixture, never a
-dense `ABOVE`. Also assert that repeating the neighbouring positions (`-35, -20, +35, +20`) never toggles the
-face.
+unchanged. On the **first** pass after the move, assert that the affected node is placed exactly as the same
+pass places it when retention is not attempted for that node — a full-font `BELOW` in the traced fixture, never
+a dense `ABOVE`. Also assert that repeating the neighbouring positions (`-35, -20, +35, +20`) produces the same
+face sequence as a run with retention disabled.
+
+The equality is to *today's fallback under the current accumulated obstacles*, not to a `previous == null` pass,
+because earlier retained labels are already in the obstacle list. In this fixture no earlier label interferes,
+so the two coincide; T3d covers the case where they do not.
+
+### T3d — a declined label falls back under the accumulated obstacles
+
+Two ordinary labels where an earlier label is retained into this pass. One label's remembered box becomes
+unacceptable. Assert its placement equals what today's code produces with retention disabled **for that label
+only**, and that this may differ from a `previous == null` pass for the whole scene. This pins invariant 3's
+real scope.
 
 ### T4 — the face follows a changed title
 
@@ -385,10 +406,29 @@ The round-3 counterexample: a truncated long title is retitled to a shorter titl
 rendered string but fits a dense face in full. Assert the label is re-derived to the dense face with the whole
 title visible, and that the truncated flag is false.
 
+Assert `sourceText()` **directly** against the projection's `displayText()` for both the truncated ladder output
+and the retained output in this fixture. The visible result alone cannot distinguish a correct implementation
+from one that stores the rendered text, because here the new title and its rendering coincide. Add a fixture in
+which the projection's `fullText()` and `displayText()` differ, and assert `sourceText()` equals the display
+text.
+
 ### T4d — demotion never changes the drawing
 
 A forced over-cap label becomes ordinary with its title unchanged: assert the same face, box and anchor as the
 forced pass, on that pass and on the next, and that no cap-driven truncation appears.
+
+### T4e — a shortened title never re-adopts a fuller face because space appeared
+
+Start from a truncated label whose title is then left unchanged while a neighbouring box moves away, so a
+fuller face becomes geometrically acceptable at the retained slot. Assert the remembered face is kept, because
+the title did not change. This is the case a mis-initialised or mis-comparing `sourceText` gets wrong, and it
+is the complement of T3c.
+
+### T4f — the same truncated rendering for two titles is still a change
+
+Use two different titles that truncate to the identical string at the remembered face, neither of which fits a
+fuller face. Retitle one into the other. Assert the face is re-derived — and therefore that the comparison uses
+the stored source text rather than the rendered string.
 
 ### T5 — measurement follows the content
 
@@ -441,10 +481,12 @@ text they already use; their assertions stay untouched. The pinned absolute-coor
 
 1. `ScreenLabelPlacement.retained` never emits a `PlacedLabel` whose `text()`, `font()`, `truncated()` or
    `sourceText()` disagrees with the current projection, the current theme and the accepted face.
-2. An unchanged title with an acceptable remembered box keeps the remembered face and measurements, for every
-   history, including a face produced by an earlier retention or by `baseSlot`.
-3. An unchanged title whose remembered box is no longer acceptable produces the same placement as a fresh
-   pass, because retention declines.
+2. An unchanged title whose face font and eligibility are unchanged and whose remembered box is still
+   acceptable keeps the remembered face and measurements, for every history, including a face produced by an
+   earlier retention or by `baseSlot`.
+3. An unchanged title whose remembered box is no longer acceptable produces today's placement: retention
+   declines and the ordinary ladder runs under the current accumulated obstacles. That outcome may include a
+   face change, and it need not equal a pass that had no retained labels at all.
 4. `LADDER` remains the only face table. No second rung→font or rung→truncating mapping is introduced, and a
    retained slot never takes a face from the other slot family.
 5. Forced labels never take a dense or truncated face, on the keep path or on re-derivation, and they remain
@@ -457,8 +499,10 @@ text they already use; their assertions stay untouched. The pinned absolute-coor
 
 1. **Visible style change after a title edit.** A retitled label may switch to a denser or truncated face while
    staying in its slot. That is intended. T4 and T4c pin it.
-2. **Style flicker while settling.** Deciding the face from the drawn string would let a moved box change an
-   unchanged label's face. Step 2 decides from the source text, and T3c pins the transition.
+2. **Face changes while settling.** Retention itself cannot change an unchanged label's face, because the keep
+   decision depends only on the title, the font, the face and the eligibility rule. The existing fallback can:
+   when a remembered box stops being acceptable, the ordinary ladder runs and may choose a different face. That
+   behaviour predates this design and is unchanged by it; T3c and T3d pin both halves.
 3. **Visible movement after a title edit.** When no eligible face fits the retained slot, the label moves.
    T4's third case pins it.
 4. **Obstacle-accounting regressions.** Changing what is added to the obstacle list can move neighbouring
@@ -505,3 +549,14 @@ text they already use; their assertions stay untouched. The pinned absolute-coor
 | R3-3 | blocking | Rendering equality hid a real title edit whose truncation rendered identically, so the changed-title promise was false | `PlacedLabel` carries `sourceText`; the trigger is the title, never the pixels; 6.3, invariant 1 and T4c |
 | R3-4 | non-blocking | T4b did not prove eligibility on the keep path | Eligibility governs both paths; T4b adds a promotion test asserting no dense or truncated face survives |
 | R3-5 | non-blocking | The keep path did not define `truncated` | `truncated = !text.equals(fullText)` on both paths; section 8 and T4c pin it |
+
+### Round 4 (`reports/design-review-4.md`)
+
+The reviewer accepted the three-outcome rule and confirmed that the round-3 counterexamples are addressed. The
+findings were about the precision of the claims and the strength of one test.
+
+| # | Severity | Finding | Resolution |
+| --- | --- | --- | --- |
+| R4-1 | blocking | P3, goal 4, invariant 2 and risk 2 promised that an unchanged title never changes face, although declining invokes the existing ladder, which can change it; invariant 2 also omitted the font and eligibility conditions | P3 now promises no *additional* face change; goal 4, invariant 2 and risk 2 carry the font, eligibility and acceptable-box conditions; T3d traces the baseline sequence |
+| R4-2 | blocking | Invariant 3 claimed that declining one label equals a fresh pass, although earlier retained labels remain obstacles | Invariant 3 scopes the outcome to today's fallback under the current accumulated obstacles; T3c says why the two coincide in its fixture; T3d covers the case where they do not |
+| R4-3 | blocking | T4c could not detect a `sourceText` initialised with the rendered text, because the new title and its rendering coincide there | T4c asserts `sourceText()` directly against `displayText()` for both truncated and retained outputs, adds a `fullText()`≠`displayText()` fixture, and T4e/T4f pin the complement and the identical-rendering case |
