@@ -2664,4 +2664,186 @@ public class GraphCanvasPaintShould {
             this.secondHullEndpoint = secondHullEndpoint;
         }
     }
+
+    private static CanvasState liveTitleState(final long generation,
+            final String displayText, final LayoutPoint center) {
+        final ProjectedNodeKey key = ProjectedNodeKey.of(SourceNodeKey.persisted(
+            NodeReference.of(FIRST_MAP, PersistedNodeId.of("live-title-edited"))));
+        final ProjectedNode node = ProjectedNode.of(key,
+            SafeNodeLabel.of(displayText, displayText), "Map", false);
+        final GraphProjection projection = GraphProjection.projected(generation,
+            Collections.singletonList(node), Collections.<ProjectedEnclosure>emptyList(),
+            Collections.<ProjectedEdge>emptyList(), Collections.<RelationshipResolution>emptyList(),
+            Collections.<PinProjection>emptyList());
+        final Map<ProjectedNodeKey, LayoutPoint> positions = Collections.singletonMap(key, center);
+        final LayoutPositions layoutPositions = LayoutPositions.of(positions,
+            Collections.<EnclosureHullKey, LayoutPoint>emptyMap());
+        final LayoutFrame layout = LayoutFrame.of(generation, layoutPositions, false, 0);
+        final GraphGeometry geometry = GraphGeometry.of(
+            Collections.singletonMap(key, NodeGeometry.of(center, 8.0)),
+            Collections.<EnclosureHullKey, HullGeometry>emptyMap());
+        return CanvasState.of(generation, projection, layout, geometry, EdgePaths.empty(),
+            OperationalStatus.IDLE);
+    }
+
+    private static GraphCanvas liveTitleCanvas(final CanvasState state, final GraphTheme theme) {
+        assertThat(SwingUtilities.isEventDispatchThread()).isTrue();
+        final GraphCanvas canvas = new GraphCanvas();
+        canvas.setTheme(theme);
+        canvas.setViewport(GraphViewport.of(0.0, 0.0, 1.0));
+        canvas.setPaintState(GraphPaintState.empty());
+        canvas.setCanvasState(state);
+        canvas.setSize(SIZE);
+        return canvas;
+    }
+
+    private static LabelPlacementRequest liveTitleRequest(final CanvasState state) {
+        return LabelPlacementRequest.of(state.projection(), state.geometry(), state.layout().positions(),
+            1.0, 0.0, 0.0, new Rectangle2D.Double(0.0, 0.0, SIZE.width, SIZE.height),
+            Collections.<ProjectedEndpointKey>emptySet(), RenderingLevel.FULL);
+    }
+
+    @Test
+    public void paintsTheCurrentTitleOnAReusedCanvasLikeAnAgreeingFreshCanvas()
+            throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            final GraphTheme theme = lightTheme();
+            final LabelFonts fonts = LabelFonts.from(theme);
+            final CanvasState first = liveTitleState(1L, "alpha", LayoutPoint.of(0.0, 0.0));
+            final CanvasState second = liveTitleState(2L, "omega renamed", LayoutPoint.of(0.0, 0.0));
+            final ProjectedEndpointKey key = ProjectedEndpointKey.ofNode(
+                ProjectedNodeKey.of(SourceNodeKey.persisted(NodeReference.of(FIRST_MAP,
+                    PersistedNodeId.of("live-title-edited")))));
+            final ScreenLabelPlacement placement = new ScreenLabelPlacement();
+            final List<PlacedLabel> oldLabels = placement.place(liveTitleRequest(first), null, fonts);
+            final List<PlacedLabel> retainedLabels = placement.place(liveTitleRequest(second), oldLabels, fonts);
+            final List<PlacedLabel> freshLabels = placement.place(liveTitleRequest(second), null, fonts);
+            final PlacedLabel retained = retainedLabels.stream()
+                .filter(label -> label.endpoint().equals(key)).findFirst().get();
+            final PlacedLabel fresh = freshLabels.stream()
+                .filter(label -> label.endpoint().equals(key)).findFirst().get();
+            assertThat(retained.endpoint()).isEqualTo(fresh.endpoint());
+            assertThat(retained.text()).isEqualTo("omega renamed");
+            assertThat(fresh.text()).isEqualTo(retained.text());
+            assertThat(retained.sourceText()).isEqualTo("omega renamed");
+            assertThat(fresh.sourceText()).isEqualTo(retained.sourceText());
+            assertThat(retained.font()).isEqualTo(theme.labelFont());
+            assertThat(fresh.font()).isEqualTo(retained.font());
+            assertThat(retained.rung()).isEqualTo(PlacedLabel.Rung.FULL_NEAR);
+            assertThat(fresh.rung()).isEqualTo(retained.rung());
+            assertThat(retained.slot()).isEqualTo(ScreenLabelPlacement.Slot.ABOVE);
+            assertThat(fresh.slot()).isEqualTo(retained.slot());
+            assertThat(retained.mode()).isEqualTo(PlacedLabel.Mode.INTERIOR);
+            assertThat(fresh.mode()).isEqualTo(retained.mode());
+            assertThat(retained.truncated()).isFalse();
+            assertThat(fresh.truncated()).isFalse();
+            assertThat(new double[] {retained.width(), retained.height(), retained.anchorX(), retained.anchorY()})
+                .isEqualTo(new double[] {fresh.width(), fresh.height(), fresh.anchorX(), fresh.anchorY()});
+            assertThat(retained.leader()).isEmpty();
+            assertThat(fresh.leader()).isEmpty();
+            final GraphCanvas reusedCanvas = liveTitleCanvas(first, theme);
+            assertThat(reusedCanvas.getSize()).isEqualTo(SIZE);
+            final BufferedImage firstImage = paintCanvas(reusedCanvas);
+            reusedCanvas.setCanvasState(second);
+            assertThat(reusedCanvas.getSize()).isEqualTo(SIZE);
+            final BufferedImage reusedImage = paintCanvas(reusedCanvas);
+            final GraphCanvas freshCanvas = liveTitleCanvas(second, theme);
+            final BufferedImage freshImage = paintCanvas(freshCanvas);
+            assertThat(differentPixels(firstImage, reusedImage)).isGreaterThan(0);
+            assertThat(differentPixels(reusedImage, freshImage)).isZero();
+        });
+    }
+
+    @Test
+    public void paintsARefreshedRetainedFaceInsteadOfThePreviousTitleOnAReusedCanvas()
+            throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            final GraphTheme theme = lightTheme();
+            final LabelFonts fonts = LabelFonts.from(theme);
+            String oldTitle = null;
+            double fullWidth = 0.0;
+            double denseWidth = 0.0;
+            for (int n = 20; n <= 200; n++) {
+                final char[] characters = new char[n];
+                Arrays.fill(characters, 'W');
+                final String candidate = new String(characters);
+                fullWidth = ScreenLabelPlacement.textWidth(candidate, theme.labelFont());
+                denseWidth = ScreenLabelPlacement.textWidth(candidate, theme.denseLabelFont());
+                if (fullWidth > ScreenLabelPlacement.slotMaxWidth(ScreenLabelPlacement.Slot.ABOVE)) {
+                    oldTitle = candidate;
+                    break;
+                }
+            }
+            assertThat(oldTitle).as("bounded title search: full=%s dense=%s", fullWidth, denseWidth)
+                .isNotNull();
+            assertThat(fullWidth).as("full=%s dense=%s", fullWidth, denseWidth).isGreaterThan(200.0);
+            assertThat(denseWidth).as("full=%s dense=%s", fullWidth, denseWidth)
+                .isLessThanOrEqualTo(200.0);
+            final ProjectedEndpointKey key = ProjectedEndpointKey.ofNode(
+                ProjectedNodeKey.of(SourceNodeKey.persisted(NodeReference.of(FIRST_MAP,
+                    PersistedNodeId.of("live-title-edited")))));
+            final ScreenLabelPlacement placement = new ScreenLabelPlacement();
+            final List<LayoutPoint> candidates = Arrays.asList(LayoutPoint.of(-40.0, 0.0),
+                LayoutPoint.of(-30.0, 0.0), LayoutPoint.of(-20.0, 0.0), LayoutPoint.of(-50.0, 0.0));
+            final List<String> observed = new ArrayList<String>();
+            LayoutPoint chosen = null;
+            for (final LayoutPoint candidate : candidates) {
+                final List<PlacedLabel> old = placement.place(
+                    liveTitleRequest(liveTitleState(1L, oldTitle, candidate)), null, fonts);
+                final List<PlacedLabel> fresh = placement.place(
+                    liveTitleRequest(liveTitleState(2L, "alpha", candidate)), null, fonts);
+                final PlacedLabel oldLabel = old.stream()
+                    .filter(label -> label.endpoint().equals(key)).findFirst().get();
+                final PlacedLabel freshLabel = fresh.stream()
+                    .filter(label -> label.endpoint().equals(key)).findFirst().get();
+                observed.add(candidate + ": old=" + oldLabel.rung() + "/" + oldLabel.slot()
+                    + " fresh=" + freshLabel.rung() + "/" + freshLabel.slot());
+                if (oldLabel.rung() != freshLabel.rung() || oldLabel.slot() != freshLabel.slot()) {
+                    chosen = candidate;
+                    break;
+                }
+            }
+            assertThat(chosen).as("diverging candidate rows/slots: %s", observed).isNotNull();
+            final CanvasState first = liveTitleState(1L, oldTitle, chosen);
+            final CanvasState second = liveTitleState(2L, "alpha", chosen);
+            final List<PlacedLabel> oldLabels = placement.place(liveTitleRequest(first), null, fonts);
+            final List<PlacedLabel> refreshedLabels = placement.place(liveTitleRequest(second), oldLabels, fonts);
+            final List<PlacedLabel> freshLabels = placement.place(liveTitleRequest(second), null, fonts);
+            final PlacedLabel oldLabel = oldLabels.stream()
+                .filter(label -> label.endpoint().equals(key)).findFirst().get();
+            final PlacedLabel refreshed = refreshedLabels.stream()
+                .filter(label -> label.endpoint().equals(key)).findFirst().get();
+            final PlacedLabel fresh = freshLabels.stream()
+                .filter(label -> label.endpoint().equals(key)).findFirst().get();
+            assertThat(oldLabel.mode()).isNotEqualTo(PlacedLabel.Mode.HOVER_ONLY);
+            assertThat(refreshed.mode()).isEqualTo(PlacedLabel.Mode.INTERIOR);
+            assertThat(refreshed.text()).isEqualTo("alpha");
+            assertThat(refreshed.sourceText()).isEqualTo("alpha");
+            assertThat(refreshed.font()).isEqualTo(theme.labelFont());
+            assertThat(refreshed.truncated()).isFalse();
+            assertThat(refreshed.slot()).isEqualTo(oldLabel.slot());
+            final boolean far = oldLabel.slot() == ScreenLabelPlacement.Slot.ABOVE_FAR
+                || oldLabel.slot() == ScreenLabelPlacement.Slot.BELOW_FAR
+                || oldLabel.slot() == ScreenLabelPlacement.Slot.RIGHT_FAR
+                || oldLabel.slot() == ScreenLabelPlacement.Slot.LEFT_FAR;
+            assertThat(refreshed.rung()).isEqualTo(far
+                ? PlacedLabel.Rung.FULL_DISPLACED : PlacedLabel.Rung.FULL_NEAR);
+            assertThat(refreshed.rung() != fresh.rung() || refreshed.slot() != fresh.slot())
+                .as("retained=%s/%s fresh=%s/%s; candidates=%s", refreshed.rung(),
+                    refreshed.slot(), fresh.rung(), fresh.slot(), observed).isTrue();
+            final GraphCanvas reusedCanvas = liveTitleCanvas(first, theme);
+            assertThat(reusedCanvas.getSize()).isEqualTo(SIZE);
+            final BufferedImage firstImage = paintCanvas(reusedCanvas);
+            reusedCanvas.setCanvasState(second);
+            assertThat(reusedCanvas.getSize()).isEqualTo(SIZE);
+            final BufferedImage reusedImage = paintCanvas(reusedCanvas);
+            final BufferedImage staleImage = paintPlaced(second, oldLabels, theme, 1.0, SIZE,
+                GraphPaintState.empty());
+            final BufferedImage expectedImage = paintPlaced(second, refreshedLabels, theme, 1.0, SIZE,
+                GraphPaintState.empty());
+            assertThat(differentPixels(firstImage, reusedImage)).isGreaterThan(0);
+            assertThat(differentPixels(reusedImage, staleImage)).isGreaterThan(0);
+            assertThat(differentPixels(reusedImage, expectedImage)).isZero();
+        });
+    }
 }
