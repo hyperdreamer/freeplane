@@ -1918,7 +1918,7 @@ public class GraphCanvasPaintShould {
         PlacedLabel above = ordinary.get(0);
         PlacedLabel hidden = new PlacedLabel(above.endpoint(), above.text(), above.font(),
             PlacedLabel.Mode.HOVER_ONLY, PlacedLabel.Rung.HOVER_ONLY, above.anchorX(), above.anchorY(),
-            above.width(), above.height(), false, false, false, false, false,
+            above.width(), above.height(), false, above.text(), false, false, false, false,
             Optional.<LeaderLine>empty(), ScreenLabelPlacement.Slot.ABOVE);
         BufferedImage base = paintPlaced(state, Collections.<PlacedLabel>emptyList(), lightTheme(), 1.0,
             new Dimension(1128, 364), GraphPaintState.empty());
@@ -1975,8 +1975,8 @@ public class GraphCanvasPaintShould {
         Rectangle2D bounds = font.getStringBounds(node.label().displayText(), ScreenLabelPlacement.SCREEN_FRC);
         PlacedLabel previous = new PlacedLabel(ProjectedEndpointKey.ofNode(node.key()),
             node.label().displayText(), font, PlacedLabel.Mode.INTERIOR, PlacedLabel.Rung.FULL_DISPLACED,
-            0, 0, bounds.getWidth(), bounds.getHeight(), false, false, false, false, false,
-            Optional.<LeaderLine>empty(), slot);
+            0, 0, bounds.getWidth(), bounds.getHeight(), false, node.label().displayText(),
+            false, false, false, false, Optional.<LeaderLine>empty(), slot);
         LabelPlacementRequest request = LabelPlacementRequest.of(state.projection(), state.geometry(),
             state.layout().positions(), zoom, 0, 0, new Rectangle2D.Double(0, 0, 1128, 364),
             Collections.<ProjectedEndpointKey>emptySet(), RenderingLevel.FULL);

@@ -27,6 +27,7 @@ public final class PlacedLabel {
     private final double width;
     private final double height;
     private final boolean truncated;
+    final String sourceText;
     private final boolean forced;
     private final boolean emphaticAtAnchor;
     private final boolean forcedAtBaseSlot;
@@ -34,12 +35,12 @@ public final class PlacedLabel {
     private final Optional<LeaderLine> leader;
     private final ScreenLabelPlacement.Slot slot;
 
-    PlacedLabel(final ProjectedEndpointKey endpoint, final String text, final Font font, final Mode mode,
-            final Rung rung, final double anchorX, final double anchorY, final double width,
-            final double height, final boolean truncated, final boolean forced,
-            final boolean emphaticAtAnchor, final boolean forcedAtBaseSlot,
-            final boolean fullTextSlotWasFree, final Optional<LeaderLine> leader,
-            final ScreenLabelPlacement.Slot slot) {
+    PlacedLabel(final ProjectedEndpointKey endpoint, final String text, final Font font,
+            final Mode mode, final Rung rung, final double anchorX, final double anchorY,
+            final double width, final double height, final boolean truncated,
+            final String sourceText, final boolean forced, final boolean emphaticAtAnchor,
+            final boolean forcedAtBaseSlot, final boolean fullTextSlotWasFree,
+            final Optional<LeaderLine> leader, final ScreenLabelPlacement.Slot slot) {
         this.endpoint = Objects.requireNonNull(endpoint, "endpoint");
         this.text = Objects.requireNonNull(text, "text");
         this.font = Objects.requireNonNull(font, "font");
@@ -54,6 +55,7 @@ public final class PlacedLabel {
         this.width = width;
         this.height = height;
         this.truncated = truncated;
+        this.sourceText = Objects.requireNonNull(sourceText, "sourceText");
         this.forced = forced;
         this.emphaticAtAnchor = emphaticAtAnchor;
         this.forcedAtBaseSlot = forcedAtBaseSlot;
@@ -104,6 +106,10 @@ public final class PlacedLabel {
 
     public boolean truncated() {
         return truncated;
+    }
+
+    String sourceText() {
+        return sourceText;
     }
 
     public boolean forced() {

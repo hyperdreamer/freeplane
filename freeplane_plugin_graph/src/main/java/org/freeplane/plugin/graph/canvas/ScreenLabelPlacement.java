@@ -339,7 +339,7 @@ public final class ScreenLabelPlacement {
             final double anchorY, final Rectangle2D size, final boolean forced,
             final boolean emphaticAtAnchor, final Optional<LeaderLine> leader) {
         return new PlacedLabel(endpoint, text, font, mode, rung, anchorX, anchorY, size.getWidth(),
-            size.getHeight(), false, forced, emphaticAtAnchor, false, false, leader, Slot.ABOVE);
+            size.getHeight(), false, text, forced, emphaticAtAnchor, false, false, leader, Slot.ABOVE);
     }
 
     private static List<LayoutPoint> screenPolygon(final Context context, final HullGeometry hull) {
@@ -466,10 +466,10 @@ public final class ScreenLabelPlacement {
         context.obstacles.add(candidate);
         return new PlacedLabel(previous.endpoint(), previous.text(), previous.font(), previous.mode(),
             previous.rung(), anchor[0], anchor[1], previous.width(), previous.height(),
-            previous.truncated(), isForced(context, key), previous.emphaticAtAnchor(),
-            false, false, nodeLeader(previous.slot(), centerX, centerY, radius, anchor[0], anchor[1],
-                previous.width(), previous.height()),
-            previous.slot());
+            previous.truncated(), context.nodes.get(key).label().displayText(),
+            isForced(context, key), previous.emphaticAtAnchor(), false, false,
+            nodeLeader(previous.slot(), centerX, centerY, radius, anchor[0], anchor[1],
+                previous.width(), previous.height()), previous.slot());
     }
 
     private static PlacedLabel ladder(final Context context, final ProjectedNodeKey key,
@@ -512,7 +512,7 @@ public final class ScreenLabelPlacement {
                     : fullTextSlotWasFree;
                 return new PlacedLabel(endpoint, candidateText, font, PlacedLabel.Mode.INTERIOR,
                     rung.rung, anchor[0], anchor[1], size.getWidth(), size.getHeight(),
-                    truncated, forced, false, false,
+                    truncated, fullText, forced, false, false,
                     fullTextWasFree, nodeLeader(slot, centerX, centerY, radius, anchor[0], anchor[1],
                         size.getWidth(), size.getHeight()), slot);
             }
@@ -614,7 +614,7 @@ public final class ScreenLabelPlacement {
         context.obstacles.add(candidate);
         return new PlacedLabel(endpoint, fullText, font, PlacedLabel.Mode.INTERIOR,
             PlacedLabel.Rung.FULL_NEAR, anchor[0], anchor[1], size.getWidth(), size.getHeight(),
-            false, forced, false, true, false, Optional.<LeaderLine>empty(), Slot.ABOVE);
+            false, fullText, forced, false, true, false, Optional.<LeaderLine>empty(), Slot.ABOVE);
     }
 
     private static PlacedLabel hoverOnly(final Context context, final ProjectedNodeKey key,
@@ -625,7 +625,7 @@ public final class ScreenLabelPlacement {
             context.radius(key), size.getWidth(), size.getHeight());
         return new PlacedLabel(endpoint, fullText, font, PlacedLabel.Mode.HOVER_ONLY,
             PlacedLabel.Rung.HOVER_ONLY, anchor[0], anchor[1], size.getWidth(), size.getHeight(),
-            false, false, false, false, false, Optional.<LeaderLine>empty(), Slot.ABOVE);
+            false, fullText, false, false, false, false, Optional.<LeaderLine>empty(), Slot.ABOVE);
     }
 
     private static List<PlacedLabel> filterByLevel(final LabelPlacementRequest request,
