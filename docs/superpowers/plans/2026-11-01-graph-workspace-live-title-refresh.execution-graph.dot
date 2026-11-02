@@ -1,0 +1,15 @@
+digraph execution {
+  rankdir=LR;
+  subgraph cluster_live_title_refresh {
+    label="live-title-refresh";
+    T-001 [label="T-001\nTask 1: Add mandatory source metadata and update all seven constructor sites\n[Standard]"];
+    T-002 [label="T-002\nTask 2: Replace stale retention with KEEP, RE-DERIVE and DECLINE\n[Standard]"];
+    T-003 [label="T-003\nTask 3: Add all T1–T7 placement and cache regressions\n[Advanced]"];
+    T-004 [label="T-004\nTask 4: Add T8 real-canvas refresh controls\n[Advanced]"];
+    T-005 [label="T-005\nTask 5: Verify the full ordinary module suite and implementation boundaries\n[Standard]"];
+    T-001 -> T-002;
+    T-002 -> T-003;
+    T-003 -> T-004;
+    T-004 -> T-005;
+  }
+}

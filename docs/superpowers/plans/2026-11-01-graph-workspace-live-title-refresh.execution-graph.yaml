@@ -1,0 +1,308 @@
+source_plan:
+  path: "docs/superpowers/plans/2026-11-01-graph-workspace-live-title-refresh.md"
+  sha256: f6ff2b2af06003e908dd460e71dbec628808042c650640385e8e2b5f27c07ccc
+  commit: 1ee41d83dbfb47bbeaaa4eecd798ae609a9e30ee
+  commit_oid: 1ee41d83dbfb47bbeaaa4eecd798ae609a9e30ee
+  parsed_tasks: [1, 2, 3, 4, 5]
+  task_numbers: [1, 2, 3, 4, 5]
+  task_count: 5
+schema_version: 1
+module: freeplane_plugin_graph
+baseline: "8267175e52f49216ae6222bc002e48020690d67c"
+binding_inputs:
+  specification:
+    path: "docs/superpowers/specs/2026-11-01-graph-workspace-live-title-refresh-spec.md"
+    commit: 7df2d081a67c0363bc9a2061b0261907d45d583c
+    sha256: 3954e06cb201a79deb20bdded9589945abbbcf83864e14743853191b6ff57367
+  design:
+    path: "docs/superpowers/specs/2026-11-01-graph-workspace-live-title-refresh-design.md"
+    commit: 42cb992ceb1810bc662a81dd34e281dfbd92bf41
+    sha256: 9f19e43599129b5d44c01b984ed65e77548008c3f2de5a12c27ad112a0176c91
+validation_env:
+  JAVA_HOME: "~/.sdkman/candidates/java/21.0.8-zulu"
+  source_target: "Java 8"
+lanes:
+  - lane_id: live-title-refresh
+    id: live-title-refresh
+    task_ids: [T-001, T-002, T-003, T-004, T-005]
+    sequence: [1, 2, 3, 4, 5]
+    exclusive_resources: ["gradle-daemon", "freeplane_plugin_graph/build/"]
+produces:
+  - task: T-001
+    id: canvas.placed-label.source-text
+    name: canvas.placed-label.source-text
+    interface: canvas.placed-label.source-text
+    digest: sha256:233614d8e08a24dd4da8311a6f2bcfb41217a4dbd14a8dab65c0b5964ed6dbcf
+    sha256: sha256:233614d8e08a24dd4da8311a6f2bcfb41217a4dbd14a8dab65c0b5964ed6dbcf
+    signature: "PlacedLabel.PlacedLabel(ProjectedEndpointKey endpoint, String text, Font font, Mode mode, Rung rung, double anchorX, double anchorY, double width, double height, boolean truncated, String sourceText, boolean forced, boolean emphaticAtAnchor, boolean forcedAtBaseSlot, boolean fullTextSlotWasFree, Optional<LeaderLine> leader, ScreenLabelPlacement.Slot slot): void; PlacedLabel.sourceText(): String; package-private field, package-private accessor, immutable"
+  - task: T-002
+    id: canvas.retention.three-outcomes
+    name: canvas.retention.three-outcomes
+    interface: canvas.retention.three-outcomes
+    digest: sha256:aa6b94f9954446e04cb03150f1b6bb7003c9c91ab945059ef80cf8ce7cfc1da9
+    sha256: sha256:aa6b94f9954446e04cb03150f1b6bb7003c9c91ab945059ef80cf8ce7cfc1da9
+    signature: "ScreenLabelPlacement.retained(Context context, ProjectedNodeKey key, PlacedLabel previous): PlacedLabel; KEEP keeps the remembered rung while sourceText, face font and eligibility are unchanged and the box is acceptable, with no width-cap test; RE-DERIVE walks LADDER restricted to the remembered slot when sourceText, font or eligibility changed, applying the cap only to non-forced non-truncating rows; DECLINE returns null before any obstacle insertion"
+  - task: T-003
+    id: test.screen-label-live-title-refresh
+    name: test.screen-label-live-title-refresh
+    interface: test.screen-label-live-title-refresh
+    digest: sha256:b8dfd40a892a14177b8170e451f3401705f956626cdeede642f267698a7b78e3
+    sha256: sha256:b8dfd40a892a14177b8170e451f3401705f956626cdeede642f267698a7b78e3
+    signature: "ScreenLabelLiveTitleRefreshShould: JUnit 4 class with one method per specification section 7 entry T1, T2, T3, T3b, T3c, T3d, T4, T4b, T4c, T4d, T4e, T4f, T4g, T5, T6, T7, each asserting observable values rather than names"
+  - task: T-004
+    id: test.canvas-reused-title-refresh
+    name: test.canvas-reused-title-refresh
+    interface: test.canvas-reused-title-refresh
+    digest: sha256:a98a74cf63f4d6057e872fca83185878ab6ab7af466c97584b91331ca07d30ec
+    sha256: sha256:a98a74cf63f4d6057e872fca83185878ab6ab7af466c97584b91331ca07d30ec
+    signature: "GraphCanvasPaintShould.paintsTheCurrentTitleOnAReusedCanvasLikeAnAgreeingFreshCanvas(): void; GraphCanvasPaintShould.paintsARefreshedRetainedFaceInsteadOfThePreviousTitleOnAReusedCanvas(): void"
+  - task: T-005
+    id: evidence.full-module-verification
+    name: evidence.full-module-verification
+    interface: evidence.full-module-verification
+    digest: sha256:46e7b0eb95be8f0e49d328203e14e717722a1817f79f1cabef1684f973c0f62d
+    sha256: sha256:46e7b0eb95be8f0e49d328203e14e717722a1817f79f1cabef1684f973c0f62d
+    signature: "Verification record for the ordinary :freeplane_plugin_graph:test task: exit status, XML-derived class, test, failure, error and skip counts for each focused class filter and for the full task; no production interface"
+consumes:
+  - task: T-002
+    id: canvas.placed-label.source-text
+    from: T-001
+    digest: sha256:233614d8e08a24dd4da8311a6f2bcfb41217a4dbd14a8dab65c0b5964ed6dbcf
+  - task: T-003
+    id: canvas.retention.three-outcomes
+    from: T-002
+    digest: sha256:aa6b94f9954446e04cb03150f1b6bb7003c9c91ab945059ef80cf8ce7cfc1da9
+  - task: T-003
+    id: canvas.placed-label.source-text
+    from: T-001
+    digest: sha256:233614d8e08a24dd4da8311a6f2bcfb41217a4dbd14a8dab65c0b5964ed6dbcf
+  - task: T-004
+    id: canvas.retention.three-outcomes
+    from: T-002
+    digest: sha256:aa6b94f9954446e04cb03150f1b6bb7003c9c91ab945059ef80cf8ce7cfc1da9
+  - task: T-004
+    id: canvas.placed-label.source-text
+    from: T-001
+    digest: sha256:233614d8e08a24dd4da8311a6f2bcfb41217a4dbd14a8dab65c0b5964ed6dbcf
+  - task: T-005
+    id: test.screen-label-live-title-refresh
+    from: T-003
+    digest: sha256:b8dfd40a892a14177b8170e451f3401705f956626cdeede642f267698a7b78e3
+  - task: T-005
+    id: test.canvas-reused-title-refresh
+    from: T-004
+    digest: sha256:a98a74cf63f4d6057e872fca83185878ab6ab7af466c97584b91331ca07d30ec
+tasks:
+  - id: T-001
+    plan_task: 1
+    lane: live-title-refresh
+    sequence: 1
+    title: "Add mandatory source metadata and update all seven constructor sites"
+    tier: "Standard"
+    implementer_tier: "Standard"
+    depends_on: []
+    owns:
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/PlacedLabel.java"
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/ScreenLabelPlacement.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphCanvasPaintShould.java"
+    ownership:
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/PlacedLabel.java"
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/ScreenLabelPlacement.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphCanvasPaintShould.java"
+    resources: []
+    exclusive_resources:
+      - "gradle-daemon"
+      - "freeplane_plugin_graph/build/"
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/PlacedLabel.java"
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/ScreenLabelPlacement.java"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphCanvasPaintShould.java"
+    produces:
+      - id: canvas.placed-label.source-text
+        name: canvas.placed-label.source-text
+        digest: sha256:233614d8e08a24dd4da8311a6f2bcfb41217a4dbd14a8dab65c0b5964ed6dbcf
+        signature: "PlacedLabel.PlacedLabel(ProjectedEndpointKey endpoint, String text, Font font, Mode mode, Rung rung, double anchorX, double anchorY, double width, double height, boolean truncated, String sourceText, boolean forced, boolean emphaticAtAnchor, boolean forcedAtBaseSlot, boolean fullTextSlotWasFree, Optional<LeaderLine> leader, ScreenLabelPlacement.Slot slot): void; PlacedLabel.sourceText(): String; package-private field, package-private accessor, immutable"
+    consumes: []
+    interfaces:
+      produces:
+        - id: canvas.placed-label.source-text
+          digest: sha256:233614d8e08a24dd4da8311a6f2bcfb41217a4dbd14a8dab65c0b5964ed6dbcf
+          signature: "PlacedLabel.PlacedLabel(ProjectedEndpointKey endpoint, String text, Font font, Mode mode, Rung rung, double anchorX, double anchorY, double width, double height, boolean truncated, String sourceText, boolean forced, boolean emphaticAtAnchor, boolean forcedAtBaseSlot, boolean fullTextSlotWasFree, Optional<LeaderLine> leader, ScreenLabelPlacement.Slot slot): void; PlacedLabel.sourceText(): String; package-private field, package-private accessor, immutable"
+      consumes: []
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould"]
+        cwd: "."
+        timeout_seconds: 1800
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould"]
+        cwd: "."
+        timeout_seconds: 1800
+  - id: T-002
+    plan_task: 2
+    lane: live-title-refresh
+    sequence: 2
+    title: "Replace stale retention with KEEP, RE-DERIVE and DECLINE"
+    tier: "Standard"
+    implementer_tier: "Standard"
+    depends_on: [T-001]
+    owns:
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/ScreenLabelPlacement.java"
+    ownership:
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/ScreenLabelPlacement.java"
+    resources: []
+    exclusive_resources:
+      - "gradle-daemon"
+      - "freeplane_plugin_graph/build/"
+      - "freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/canvas/ScreenLabelPlacement.java"
+    produces:
+      - id: canvas.retention.three-outcomes
+        name: canvas.retention.three-outcomes
+        digest: sha256:aa6b94f9954446e04cb03150f1b6bb7003c9c91ab945059ef80cf8ce7cfc1da9
+        signature: "ScreenLabelPlacement.retained(Context context, ProjectedNodeKey key, PlacedLabel previous): PlacedLabel; KEEP keeps the remembered rung while sourceText, face font and eligibility are unchanged and the box is acceptable, with no width-cap test; RE-DERIVE walks LADDER restricted to the remembered slot when sourceText, font or eligibility changed, applying the cap only to non-forced non-truncating rows; DECLINE returns null before any obstacle insertion"
+    consumes:
+      - id: canvas.placed-label.source-text
+        from: T-001
+        digest: sha256:233614d8e08a24dd4da8311a6f2bcfb41217a4dbd14a8dab65c0b5964ed6dbcf
+    interfaces:
+      produces:
+        - id: canvas.retention.three-outcomes
+          digest: sha256:aa6b94f9954446e04cb03150f1b6bb7003c9c91ab945059ef80cf8ce7cfc1da9
+          signature: "ScreenLabelPlacement.retained(Context context, ProjectedNodeKey key, PlacedLabel previous): PlacedLabel; KEEP keeps the remembered rung while sourceText, face font and eligibility are unchanged and the box is acceptable, with no width-cap test; RE-DERIVE walks LADDER restricted to the remembered slot when sourceText, font or eligibility changed, applying the cap only to non-forced non-truncating rows; DECLINE returns null before any obstacle insertion"
+      consumes:
+        - id: canvas.placed-label.source-text
+          from: T-001
+          digest: sha256:233614d8e08a24dd4da8311a6f2bcfb41217a4dbd14a8dab65c0b5964ed6dbcf
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould"]
+        cwd: "."
+        timeout_seconds: 1800
+  - id: T-003
+    plan_task: 3
+    lane: live-title-refresh
+    sequence: 3
+    title: "Add all T1–T7 placement and cache regressions"
+    tier: "Advanced"
+    implementer_tier: "Advanced"
+    depends_on: [T-002]
+    owns:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/ScreenLabelLiveTitleRefreshShould.java"
+    ownership:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/ScreenLabelLiveTitleRefreshShould.java"
+    resources: []
+    exclusive_resources:
+      - "gradle-daemon"
+      - "freeplane_plugin_graph/build/"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/ScreenLabelLiveTitleRefreshShould.java"
+    produces:
+      - id: test.screen-label-live-title-refresh
+        name: test.screen-label-live-title-refresh
+        digest: sha256:b8dfd40a892a14177b8170e451f3401705f956626cdeede642f267698a7b78e3
+        signature: "ScreenLabelLiveTitleRefreshShould: JUnit 4 class with one method per specification section 7 entry T1, T2, T3, T3b, T3c, T3d, T4, T4b, T4c, T4d, T4e, T4f, T4g, T5, T6, T7, each asserting observable values rather than names"
+    consumes:
+      - id: canvas.retention.three-outcomes
+        from: T-002
+        digest: sha256:aa6b94f9954446e04cb03150f1b6bb7003c9c91ab945059ef80cf8ce7cfc1da9
+      - id: canvas.placed-label.source-text
+        from: T-001
+        digest: sha256:233614d8e08a24dd4da8311a6f2bcfb41217a4dbd14a8dab65c0b5964ed6dbcf
+    interfaces:
+      produces:
+        - id: test.screen-label-live-title-refresh
+          digest: sha256:b8dfd40a892a14177b8170e451f3401705f956626cdeede642f267698a7b78e3
+          signature: "ScreenLabelLiveTitleRefreshShould: JUnit 4 class with one method per specification section 7 entry T1, T2, T3, T3b, T3c, T3d, T4, T4b, T4c, T4d, T4e, T4f, T4g, T5, T6, T7, each asserting observable values rather than names"
+      consumes:
+        - id: canvas.retention.three-outcomes
+          from: T-002
+          digest: sha256:aa6b94f9954446e04cb03150f1b6bb7003c9c91ab945059ef80cf8ce7cfc1da9
+        - id: canvas.placed-label.source-text
+          from: T-001
+          digest: sha256:233614d8e08a24dd4da8311a6f2bcfb41217a4dbd14a8dab65c0b5964ed6dbcf
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.canvas.ScreenLabelLiveTitleRefreshShould"]
+        cwd: "."
+        timeout_seconds: 1800
+  - id: T-004
+    plan_task: 4
+    lane: live-title-refresh
+    sequence: 4
+    title: "Add T8 real-canvas refresh controls"
+    tier: "Advanced"
+    implementer_tier: "Advanced"
+    depends_on: [T-003]
+    owns:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphCanvasPaintShould.java"
+    ownership:
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphCanvasPaintShould.java"
+    resources: []
+    exclusive_resources:
+      - "gradle-daemon"
+      - "freeplane_plugin_graph/build/"
+      - "freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/canvas/GraphCanvasPaintShould.java"
+    produces:
+      - id: test.canvas-reused-title-refresh
+        name: test.canvas-reused-title-refresh
+        digest: sha256:a98a74cf63f4d6057e872fca83185878ab6ab7af466c97584b91331ca07d30ec
+        signature: "GraphCanvasPaintShould.paintsTheCurrentTitleOnAReusedCanvasLikeAnAgreeingFreshCanvas(): void; GraphCanvasPaintShould.paintsARefreshedRetainedFaceInsteadOfThePreviousTitleOnAReusedCanvas(): void"
+    consumes:
+      - id: canvas.retention.three-outcomes
+        from: T-002
+        digest: sha256:aa6b94f9954446e04cb03150f1b6bb7003c9c91ab945059ef80cf8ce7cfc1da9
+      - id: canvas.placed-label.source-text
+        from: T-001
+        digest: sha256:233614d8e08a24dd4da8311a6f2bcfb41217a4dbd14a8dab65c0b5964ed6dbcf
+    interfaces:
+      produces:
+        - id: test.canvas-reused-title-refresh
+          digest: sha256:a98a74cf63f4d6057e872fca83185878ab6ab7af466c97584b91331ca07d30ec
+          signature: "GraphCanvasPaintShould.paintsTheCurrentTitleOnAReusedCanvasLikeAnAgreeingFreshCanvas(): void; GraphCanvasPaintShould.paintsARefreshedRetainedFaceInsteadOfThePreviousTitleOnAReusedCanvas(): void"
+      consumes:
+        - id: canvas.retention.three-outcomes
+          from: T-002
+          digest: sha256:aa6b94f9954446e04cb03150f1b6bb7003c9c91ab945059ef80cf8ce7cfc1da9
+        - id: canvas.placed-label.source-text
+          from: T-001
+          digest: sha256:233614d8e08a24dd4da8311a6f2bcfb41217a4dbd14a8dab65c0b5964ed6dbcf
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test", "--tests", "org.freeplane.plugin.graph.canvas.GraphCanvasPaintShould"]
+        cwd: "."
+        timeout_seconds: 1800
+  - id: T-005
+    plan_task: 5
+    lane: live-title-refresh
+    sequence: 5
+    title: "Verify the full ordinary module suite and implementation boundaries"
+    tier: "Standard"
+    implementer_tier: "Standard"
+    depends_on: [T-004]
+    owns: []
+    ownership: []
+    resources: []
+    exclusive_resources:
+      - "gradle-daemon"
+      - "freeplane_plugin_graph/build/"
+    produces:
+      - id: evidence.full-module-verification
+        name: evidence.full-module-verification
+        digest: sha256:46e7b0eb95be8f0e49d328203e14e717722a1817f79f1cabef1684f973c0f62d
+        signature: "Verification record for the ordinary :freeplane_plugin_graph:test task: exit status, XML-derived class, test, failure, error and skip counts for each focused class filter and for the full task; no production interface"
+    consumes:
+      - id: test.screen-label-live-title-refresh
+        from: T-003
+        digest: sha256:b8dfd40a892a14177b8170e451f3401705f956626cdeede642f267698a7b78e3
+      - id: test.canvas-reused-title-refresh
+        from: T-004
+        digest: sha256:a98a74cf63f4d6057e872fca83185878ab6ab7af466c97584b91331ca07d30ec
+    interfaces:
+      produces:
+        - id: evidence.full-module-verification
+          digest: sha256:46e7b0eb95be8f0e49d328203e14e717722a1817f79f1cabef1684f973c0f62d
+          signature: "Verification record for the ordinary :freeplane_plugin_graph:test task: exit status, XML-derived class, test, failure, error and skip counts for each focused class filter and for the full task; no production interface"
+      consumes:
+        - id: test.screen-label-live-title-refresh
+          from: T-003
+          digest: sha256:b8dfd40a892a14177b8170e451f3401705f956626cdeede642f267698a7b78e3
+        - id: test.canvas-reused-title-refresh
+          from: T-004
+          digest: sha256:a98a74cf63f4d6057e872fca83185878ab6ab7af466c97584b91331ca07d30ec
+    validation:
+      - argv: ["gradle", ":freeplane_plugin_graph:test"]
+        cwd: "."
+        timeout_seconds: 5400
