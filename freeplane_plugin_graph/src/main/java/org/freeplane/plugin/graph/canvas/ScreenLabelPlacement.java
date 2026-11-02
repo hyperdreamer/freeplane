@@ -453,23 +453,74 @@ public final class ScreenLabelPlacement {
         if (previous == null || previous.mode() == PlacedLabel.Mode.HOVER_ONLY) {
             return null;
         }
+        final String source = context.nodes.get(key).label().displayText();
+        final Slot slot = previous.slot();
+        final boolean forced = isForced(context, key);
         final double centerX = context.screenX(key);
         final double centerY = context.screenY(key);
         final double radius = context.radius(key);
-        final double[] anchor = slotAnchor(previous.slot(), centerX, centerY, radius,
-            previous.width(), previous.height());
-        final Rectangle2D candidate = rectangle(anchor[0], anchor[1], previous.width(), previous.height());
-        if (!context.request.placementArea().contains(candidate)
-                || intersectsAny(context.obstacles, candidate)) {
-            return null;
+        final boolean far = slot == Slot.ABOVE_FAR || slot == Slot.BELOW_FAR
+            || slot == Slot.RIGHT_FAR || slot == Slot.LEFT_FAR;
+        LadderRung rememberedRow = null;
+        for (final LadderRung row : LADDER) {
+            if (row.rung == previous.rung()) {
+                rememberedRow = row;
+                break;
+            }
         }
-        context.obstacles.add(candidate);
-        return new PlacedLabel(previous.endpoint(), previous.text(), previous.font(), previous.mode(),
-            previous.rung(), anchor[0], anchor[1], previous.width(), previous.height(),
-            previous.truncated(), context.nodes.get(key).label().displayText(),
-            isForced(context, key), previous.emphaticAtAnchor(), false, false,
-            nodeLeader(previous.slot(), centerX, centerY, radius, anchor[0], anchor[1],
-                previous.width(), previous.height()), previous.slot());
+        final boolean keepClass = rememberedRow != null && rememberedRow.far == far
+            && (!forced || rememberedRow.rung == PlacedLabel.Rung.FULL_NEAR
+                || rememberedRow.rung == PlacedLabel.Rung.FULL_DISPLACED)
+            && previous.sourceText().equals(source)
+            && rememberedRow.font(context.fonts).equals(previous.font());
+        if (keepClass) {
+            final Font font = rememberedRow.font(context.fonts);
+            final String text = rememberedRow.truncating
+                ? truncateTo(source, font, slotMaxWidth(slot)) : source;
+            final boolean truncated = !text.equals(source);
+            final Rectangle2D size = screenBounds(text, font);
+            final double[] anchor = slotAnchor(slot, centerX, centerY, radius,
+                size.getWidth(), size.getHeight());
+            final Rectangle2D box = rectangle(anchor[0], anchor[1], size.getWidth(), size.getHeight());
+            if (!context.request.placementArea().contains(box)
+                    || intersectsAny(context.obstacles, box)) {
+                return null;
+            }
+            final Optional<LeaderLine> leader = nodeLeader(slot, centerX, centerY, radius,
+                anchor[0], anchor[1], size.getWidth(), size.getHeight());
+            context.obstacles.add(box);
+            return new PlacedLabel(previous.endpoint(), text, font, previous.mode(), rememberedRow.rung,
+                anchor[0], anchor[1], size.getWidth(), size.getHeight(), truncated, source, forced,
+                previous.emphaticAtAnchor(), false, false, leader, slot);
+        }
+        for (final LadderRung row : LADDER) {
+            if (row.far != far || (forced && row.rung != PlacedLabel.Rung.FULL_NEAR
+                    && row.rung != PlacedLabel.Rung.FULL_DISPLACED)) {
+                continue;
+            }
+            final Font font = row.font(context.fonts);
+            final double limit = slotMaxWidth(slot);
+            if (!forced && !row.truncating && textWidth(source, font) > limit) {
+                continue;
+            }
+            final String text = row.truncating ? truncateTo(source, font, limit) : source;
+            final boolean truncated = !text.equals(source);
+            final Rectangle2D size = screenBounds(text, font);
+            final double[] anchor = slotAnchor(slot, centerX, centerY, radius,
+                size.getWidth(), size.getHeight());
+            final Rectangle2D box = rectangle(anchor[0], anchor[1], size.getWidth(), size.getHeight());
+            if (!context.request.placementArea().contains(box)
+                    || intersectsAny(context.obstacles, box)) {
+                continue;
+            }
+            final Optional<LeaderLine> leader = nodeLeader(slot, centerX, centerY, radius,
+                anchor[0], anchor[1], size.getWidth(), size.getHeight());
+            context.obstacles.add(box);
+            return new PlacedLabel(previous.endpoint(), text, font, previous.mode(), row.rung,
+                anchor[0], anchor[1], size.getWidth(), size.getHeight(), truncated, source, forced,
+                previous.emphaticAtAnchor(), false, false, leader, slot);
+        }
+        return null;
     }
 
     private static PlacedLabel ladder(final Context context, final ProjectedNodeKey key,
