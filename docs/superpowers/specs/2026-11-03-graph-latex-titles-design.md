@@ -2,7 +2,7 @@
 
 Task identifier: `2026-11-03-graph-latex-titles`
 
-Status: **design draft, revision 7, for frontier review.** The user answered the collaborative design gate with
+Status: **design draft, revision 8, for the design-continuation gate.** The user answered the collaborative design gate with
 "as proposed", accepting the four decisions recorded in section 2. Section 12 lists the questions this revision
 puts to the reviewer.
 
@@ -43,12 +43,17 @@ Revision history:
   eviction now rebuilds the icon from the cached measurement instead of re-enqueueing the key, which r5's
   no-reentry rule forbids. The memory paragraph names the form flag in the key, counts icons retained by live
   rows, and states plainly that a pathological projection can exhaust the heap rather than implying a bound.
-- r7 (this revision) — applies the second focused review's consistency findings: the follow-up and stall
+- r7 — applies the second focused review's consistency findings: the follow-up and stall
   predicates are written as one formula with stall precedence and invariant 7 now mirrors it; the pass-count
   terminology distinguishes measurement passes from deferring passes and defines N as "unmeasured after the
   discovering pass"; invariant 8 states that a terminal measurement is not a promise of typeset rendering, since
   an over-width formula still degrades; the invariant's test references name the section 8 rows instead of the
   retired T-identifiers; and the risk section no longer claims an idempotence test.
+- r8 (this revision) — closes the three residual contradictions the verification pass found in r7: the budget rule
+  no longer excludes the discovering pass from being a deferring pass and defines `T` (all keys in the generation)
+  separately from the `N` used in the follow-up bound; the deferral and terminal-measurement promises are
+  qualified by the two states that legitimately end a queue, the stall diagnostic and a projection generation
+  change; and invariant 7 names the three cache tests that falsify it instead of miscounting them.
 
 ## 1. Reported need
 
@@ -335,7 +340,9 @@ Two states are recorded on the placed label and are *not* the same thing:
 
 - `deferredForBudget` — the formula was not measured because the pass budget ran out (section 4.6). It is
   transient, but its promise is **eventual, not next-pass**: a deferred key is measured in a later batch of the
-  same queue. A label in the final batch of a three-batch queue is deferred twice.
+  same queue, unless the run stalls (zero budget, or a broken engine that cannot produce a measurement) or the
+  projection generation changes, either of which ends that queue. A label in the final batch of a three-batch
+  queue is deferred twice.
 - `truncated` — the drawn text ends with the ellipsis, as today.
 
 Consequences, stated plainly because they are visible to users:
@@ -422,10 +429,11 @@ Two caches with different jobs, because one cannot do both:
 Rules:
 
 - The **build budget** `MAX_NEW_ICONS_PER_PASS = 200` counts *keys measured* per placement pass — not paints,
-  not cache hits, and not queue entries that are already served from the measurement cache. A generation with N
-  distinct `(title, font)` keys therefore needs `ceil(N / 200)` measurement passes: one discovering pass plus
-  `ceil(N / 200) - 1` follow-ups. Only the follow-ups can be deferring passes, and a batch smaller than the budget
-  produces none.
+  not cache hits, and not queue entries that are already served from the measurement cache. Let `T` be the number
+  of distinct `(title, font)` keys in the generation. A generation therefore needs `ceil(T / 200)` measurement
+  passes in total (`0` when `T = 0`): the discovering pass measures up to 200 and defers any remainder, and each
+  later pass measures up to 200 more. A pass that defers work is a deferring pass, so the discovering pass is one
+  whenever `T > 200`.
 - When the budget is exhausted, the remaining math titles are measured as `DEGRADED` **with
   `deferredForBudget = true`**, which section 4.4 distinguishes from a genuine unrenderable verdict.
 - **Retention must not pin a deferred face.** `ScreenLabelPlacement.retained` (`:451-500`) keeps a remembered
@@ -518,10 +526,11 @@ Stated once, because it is user-visible and section 3.3 removed the claim that b
    are measured per pass, no measured key re-enters the queue within a generation, and the follow-up predicate of
    section 4.6 holds exactly — `followUp = deferred > 0 && measured > 0`, with `stall` taking precedence when
    `deferred > 0 && measured == 0`. A stable generation with N keys still unmeasured after the discovering pass
-   completes in `ceil(N / budget)` further passes. Falsified by the two cache tests named in section 8, rows 7
-   and 8.
-8. A budget-deferred label is never retained, and it reaches a **terminal measurement** within the queue's
-   remaining batches — not necessarily on the next pass. Terminal measurement is not a promise that the label is
+   completes in `ceil(N / budget)` further passes. Falsified by `convergesAcrossFollowUps`,
+   `convergesBeyondAnyFixedCacheSize` and `stallsOnlyWhenAPassThatDeferredWorkMeasuresNothing`.
+8. A budget-deferred label is never retained, and wherever the queue is allowed to finish — that is, unless the
+   run stalls or the projection generation changes — it reaches a **terminal measurement** within the queue's
+   remaining batches, not necessarily on the next pass. Terminal measurement is not a promise that the label is
    drawn typeset: an engine rejection makes the terminal result degraded, and an accepted formula whose width
    exceeds the slot is still degraded by section 4.4 rule 2. The promise is that the label is no longer deferred.
 9. The bundle gate passes with the new jar: pinned checksums, exact `Bundle-ClassPath`, no
