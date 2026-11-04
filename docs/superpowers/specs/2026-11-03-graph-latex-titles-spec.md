@@ -2,20 +2,29 @@
 
 Task identifier: `2026-11-03-graph-latex-titles`
 
-Specification date: 2026-11-03. Revision: draft 3. Status: ready for review; implementation and verification have
+Specification date: 2026-11-03. Revision: draft 4. Status: ready for review; implementation and verification have
 not been run by this authoring task.
 
 Design authority: [2026-11-03-graph-latex-titles-design.md](2026-11-03-graph-latex-titles-design.md), approved
-revision **r8**, design commit `6f8ac68e3f37be08334108a6ecf6158129eeddf1`, blob
-`067ea560f75a6044828005a774f1bd523fd8c0dd`, SHA-256
-`1ade315ce6e3216e5c1c2a6bd287b5cd2b581492f2b76af8c8d393f3fe068935`, approved by the operator on 2026-11-03.
+revision **r9**, design commit `8c729643bf4e54bbabbb260fa5cd72632ee5fd42`, blob
+`5903f6c00e9312fb2255429aae4cb3859a98b5df`, SHA-256
+`c9ef6da9495b355fe4a131ab5df64b80454b6515b38694aa9a8389ab9067bf85`. Design r8 was approved by the operator on
+2026-11-03; r9 is the narrow amendment that authorises this specification's paint-ready row.
 
 Application baseline: `fd7488d5ae7f92bcdb3f70fc76b09f6e881aacc0` (branch `plugin/graph-workspace`).
 
 Authoring this specification authorised no build, test, commit, branch, worktree, or host transition.
 
-Draft history: draft 1 (`933cb6f19c`) first specification; draft 2 (`b969b60b5a`) applied specification review
-round 1; draft 3 (this revision) applies review round 2 and re-bases on design r8. The changes are: the resolved
+Draft history: draft 1 (`933cb6f19c`); draft 2 (`b969b60b5a`) applied review round 1; draft 3 (`f637b89297`)
+applied review round 2; draft 4 (this revision) applies review round 3 and re-bases on design r9. The changes are:
+the plain paint baseline is taken from the derived font's `LineMetrics` including leading, with the font derived by
+the exact existing float expression (Q1); the resolved row is explicitly a *separate* paint structure, so the
+label's screen-pixel geometry and the row's paint geometry are never compared (Q2); degraded truncation compares
+logical-font, screen-pixel metrics against the slot cap (Q3); the truncation-equality test moves to `canvas` (Q4);
+the convergence tests restore the 20000-key case, the no-follow-up assertion and the terminal-degraded case (Q5);
+and the bundle-gate control now also asserts the production assertion's own text, so deleting it is detected
+(S17). The stall state is documented as unreachable under the declared contract, with the constructor rejecting a
+zero budget (S16). The changes are: the resolved
 row is now a **paint-ready world-unit** structure built at placement time, so the painter never measures anything
 (S4, R2); deferral is a distinct memo form so a deferred entry is never served as a terminal measurement (S6);
 budget consumption has one authoritative point and never touches plain titles (S7); the parser's escape rules keep
@@ -135,9 +144,10 @@ starts at `:526`.
 - `public static final double MAX_HEIGHT_FACTOR = 2.0;`
 - `public static int px(Font font)` → `Math.max(1, Math.round(font.getSize2D()))`.
 - `public static double lineHeight(Font font)` → `font.getLineMetrics("Hg", SCREEN_FRC).getHeight()`.
-- `public static Font worldFont(Font logicalFont, double zoom)` → `logicalFont.deriveFont(Math.max(1.0f, (float)
-  (logicalFont.getSize2D() / zoom)))`. This is the clamp `GraphPainter` uses today (`:281-282`), extracted so the
-  row builder and the painter cannot disagree.
+- `public static Font worldFont(Font logicalFont, double zoom)` →
+  `logicalFont.deriveFont(Math.max(1.0f, logicalFont.getSize2D() / (float) zoom))`. This reproduces the exact
+  expression and the exact float/double operation order of `GraphPainter.java:281-282`, which divides by a
+  **float** zoom, so the derived font is bit-identical to today's plain paint font (Q1).
 
 ### 3.5 `MeasuredTitle`
 
@@ -228,12 +238,15 @@ starts at `:526`.
   - `final double scale = 1.0 / zoom;`
   - plain runs: `String paintText = source`; `Rectangle2D b = worldFont.getStringBounds(paintText,
     TitleMetrics.SCREEN_FRC)`; `LineMetrics lm = worldFont.getLineMetrics(paintText, TitleMetrics.SCREEN_FRC)`;
-    run geometry `x = measuredRun.x() * scale`, `width = b.getWidth()`, `ascent = -b.getY()`,
-    `descent = b.getHeight() + b.getY()`.
-  - math runs: `x = measuredRun.x() * scale`, `width = measuredRun.width() * scale`,
+    run width `b.getWidth()`; **run ascent `lm.getAscent()` and descent `lm.getDescent()`**, so leading is not
+    folded into the baseline (Q1). Run offsets are computed **cumulatively from the resolved widths**, starting at
+    `0.0`, never by scaling the placement offsets (Q2).
+  - math runs: offset cumulative as above; `width = measuredRun.width() * scale`,
     `ascent = measuredRun.ascent() * scale`, `descent = measuredRun.descent() * scale`, and the icon from
     `icons.icon(body, TitleMetrics.px(logicalFont), TitleMetrics.STYLE)`.
-  - row `width` is the sum of run widths; `ascent`/`descent` are the maxima; `height = ascent + descent`.
+  - row `width` is the sum of the resolved run widths; `ascent`/`descent` are the maxima over runs (plain runs
+    contribute their `LineMetrics` values); `height = ascent + descent`. The row's `width` is therefore the paint
+    width, which at the clamp differs from the label's screen-pixel placement width by design.
   - **The form never changes here.** A `RENDERED` measurement whose icon lookup returns `null` throws
     `IllegalStateException("rendered measurement lost its icon")`; a `DEGRADED` measurement contains no math runs,
     so it resolves without an icon lookup.
@@ -285,9 +298,10 @@ starts at `:526`.
   `NullPointerException("titleRow")`.
 - Every existing accessor and rule keeps its meaning; `truncated()` keeps its existing definition (the drawn text
   differs from the source), not "ends with an ellipsis" (S13).
-- Geometry consistency: `titleRow.width() * zoom` must equal `width` within `1e-6`, and likewise for height;
-  a mismatch throws `IllegalArgumentException("title row geometry must match the label")`. The placement that
-  builds the label supplies the `zoom` it used.
+- **No geometric equality is required between `titleRow` and the label.** The label's `width`/`height` are
+  placement screen pixels used by the slot caps and the ink tests; the row's numbers are paint units. At the font
+  clamp they legitimately differ (Q2). The only requirement is that both were produced from the same
+  `MeasuredTitle` and the same `LabelFonts` face.
 
 ### 3.14 `ScreenLabelPlacement`
 
@@ -431,9 +445,10 @@ capacity; `RuntimeException` → record failure, return `null`.
 1. `TitleText title = node.label().title()`; `Font font` is the rung's face from `LadderRung.font(LabelFonts)`.
 2. Non-truncating rung: `MeasuredTitle rendered = measurer.measure(title, font)`; accept when
    `rendered.availability() == RENDERED` and `rendered.width() <= slotMaxWidth(slot)`.
-3. Truncating rung: `MeasuredTitle degraded = measurer.measureDegraded(title, font)`; when its width exceeds the
-   limit, truncate its text with `TitleTruncation.truncated(text, TitleMetrics.worldFont(font, zoom), limit)` and
-   build the row from the truncated string as one plain run.
+3. Truncating rung: `MeasuredTitle degraded = measurer.measureDegraded(title, font)`; when its screen-pixel width
+   exceeds the limit, truncate its text with `TitleTruncation.truncated(text, font, limit)` — the **logical** font
+   and the **screen-pixel** limit, so the comparison is in one unit system (Q3) — and build the row from the
+   truncated string as one plain run.
 4. A `DEGRADED` result offers only the degraded form.
 5. `baseSlot`/`hoverOnly` use the degraded form.
 6. `retained(...)` refuses a remembered placement whose `titleRow().deferredForBudget()` is true.
@@ -473,7 +488,10 @@ Given `row`, `anchorX`, `anchorY`, `zoom`, `colour`, `baseTransform`:
    stall    = deferredThisPass > 0 && measuredThisPass == 0
    ```
 6. On stall the measurer records `FORMULA_MEASUREMENT_STALL: <n> formula titles unmeasured after <p> passes`,
-   requests no further follow-up, and keeps deferred titles degraded until the generation changes.
+   requests no further follow-up, and keeps deferred titles degraded until the generation changes. Because the
+   constructor rejects a non-positive budget and no key re-enters `pending`, this state is **unreachable under the
+   declared contract**: it exists as a guard against a broken engine, and T7c pins the constructor rejection that
+   makes it unreachable.
 7. No key can re-enter `pending` within a generation, so a stable generation with `T` distinct keys completes in
    `ceil(T / budget)` measurement passes; `T = 0` completes in one pass with no deferral.
 
@@ -527,9 +545,10 @@ always resolve, so no pinned font bytes are needed (S15).
 | T6 | `canvas.title.TitlePainterShould` | `painterHasNoMeasurementDependency` | reflection over declared fields and `paint` parameters plus a source read of `TitlePainter.java` | a paint-time lookup adds a dependency or a `getStringBounds` call |
 | T6b | `canvas.title.TitlePainterShould` | `nonIdentityBaseTransformPositionsTheIconOnce` | `B = translate(37,11)·scale(1.25)`, zoom 1.6; icon origin equals independently computed `B·W·p` within 0.5 px; a following plain run keeps world coordinates | a double-applied `B` lands at `B²Wp` |
 | T7 | `canvas.ScreenLabelPlacementCacheShould` | `measuresAtMostTheBudgetAndDefersTheRest` | budget 2, five unknown titles; after one pass `newMeasurementsInLastPass() == 2`, `pendingCount() == 3`, follow-up requested | removing the budget measures all five |
-| T7b | `canvas.ScreenLabelPlacementCacheShould` | `completesInTheQueueBound` | budget 2, 600 titles; follow-ups continue until `pendingCount() == 0`, the pass count is `ceil(600/2)`, `stalled()` false | a stalled or endless chain fails the count |
-| T7c | `canvas.ScreenLabelPlacementCacheShould` | `stallsOnlyWhenAPassThatDeferredWorkMeasuresNothing` | budget 0 injected; first pass defers 1 and measures 0; `stalled()` true, diagnostic prefix `FORMULA_MEASUREMENT_STALL`, no follow-up | a stall without the predicate fails the prose expectation |
+| T7b | `canvas.ScreenLabelPlacementCacheShould` | `completesInTheQueueBound` | budget 200, **20000** titles; follow-ups continue until `pendingCount() == 0`, the pass count is `ceil(20000/200)`, `stalled()` false, `takeFollowUpRequest()` false afterwards, and a further identical request returns the same instances without new measurements | a reintroduced fixed memo capacity stalls or re-measures and fails the counts (Q5) |
+| T7c | `canvas.title.TitleMeasurerShould` | `rejectsANonPositiveBudget` | `new TitleMeasurer(icons, 0)` | the constructor throws `IllegalArgumentException`, which is what makes the stall state unreachable under the declared contract (S16) |
 | T8 | `canvas.ScreenLabelPlacementCacheShould` | `deferredTitleIsMeasuredWithinTheQueueBound` | budget 1, three unknown titles; first pass defers two, subsequent passes measure them, all `RENDERED` at the end | removing `passEpoch` returns the first degraded list forever |
+| T8c | `canvas.ScreenLabelPlacementCacheShould` | `deferredUnrenderableFormulaFinishesTerminallyDegraded` | budget 1, a `\leslant` title plus a plain title; the deferred formula is measured in the next pass and ends `DEGRADED` with `deferredForBudget()` false | a deferred entry served as terminal leaves the flag set |
 | T8b | `canvas.ScreenLabelPlacementShould` | `doesNotRetainABudgetDeferredFace` | remembered, non-`HOVER_ONLY`, `TRUNCATED_NEAR` deferred row; `retained` returns null | retaining it returns the degraded row |
 | T9 | `canvas.ScreenLabelPlacementShould` | `enclosureLabelWithMathTitleKeepsPlainGeometry` | enclosure built via `SafeNodeLabel.of(raw, display, TitleText.of(Math))`; one `PlainRunRow`, frozen geometry constants | engine-facing enclosure measurement changes the width |
 | T10 | `adapter.SafeNodeLabelExtractorShould` | `combinedPatternFormatAndLatexPrefixIsParsedAsOneFormula` | `latexPatternFormat` node whose source starts with `\latex`; `displayText` unchanged, `title()` one `Math` run, `rawSource` keeps the prefix | dropping the prefix rule yields a plain title (R4) |
@@ -537,7 +556,7 @@ always resolve, so no pinned font bytes are needed (S15).
 | T12 | `projection.input.TitleTextParserShould` | `ordinaryBackslashesSurvive` | `C:\tmp and $\alpha$` splits with `C:\tmp` intact | consuming every escape yields `C:tmp` (R1) |
 | T13 | `projection.input.TitleTextParserShould` | `escapedBracesDoNotAffectDepth` | `$\{x$` is one math run with body `\{x` | naive depth counting rolls the title back (R1) |
 | T14 | `projection.input.TitleTextParserShould` | `unmatchedDelimiterRollsBackTheWholeTitle` | `$a$ and $b`; one plain run | leaking the first formula fails |
-| T15 | `canvas.title.TitleTruncationShould` | `matchesPlacementTruncationForSharedFixtures` | three widths; `TitleTruncation.truncated` equals `ScreenLabelPlacement.truncateTo` when called from a `canvas` test | a differing loop yields different ellipsis positions |
+| T15 | `canvas.ScreenLabelPlacementShould` | `titleTruncationMatchesPlacementTruncationForSharedFixtures` | three widths at zoom 1 and 2; `TitleTruncation.truncated` equals `ScreenLabelPlacement.truncateTo` (both package-accessible here) | a differing loop yields different ellipsis positions (Q4) |
 | T16 | `canvas.title.FormulaIconsShould` | `buildsEachKeyOnce`, `cachesFailuresWithoutRebuilding`, `evictsLeastRecentlyUsedBeyondCapacity` | counting stub engine via capacity 1 and repeated keys | removing failure memoization rebuilds |
 | T17 | `canvas.ScreenLabelPlacementCacheShould` | `structuredKeySeparation` | a plain title whose text is `$a$` and a parsed math title with the same characters; `cacheSize() == 2` | joined-string keys collapse to one |
 | T18 | `canvas.ScreenLabelPlacementCacheShould` | `resolvedRowSurvivesIconEviction` | resolve a row, evict its icon (capacity 1 plus a second key), repaint; no exception, icon present in the row | a row that refers to the cache fails |
@@ -570,6 +589,9 @@ def expectedNames = bundledChecksums.keySet().toList().sort()
 def sameNameSet = { List<String> names -> names.collect { it }.sort() == expectedNames }
 assert [true, false] == [sameNameSet(dependencyFiles*.name),
                          sameNameSet(expectedNames.findAll { it != 'jlatexmath-1.0.7.jar' })]
+// The control above cannot detect deletion of the whole assertion, so the gate also
+// asserts that the production comparison is present in its own source text.
+assert buildFile.text.contains('sameNameSet(dependencyFiles*.name)')
 
 bundledChecksums.each { fileName, expectedChecksum ->
     final File dependency = dependencyFiles.find { it.name == fileName }
