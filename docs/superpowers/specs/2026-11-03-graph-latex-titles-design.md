@@ -2,24 +2,25 @@
 
 Task identifier: `2026-11-03-graph-latex-titles`
 
-Status: **design draft, revision 2, for frontier review.** The user answered the collaborative design gate
-with "as proposed", accepting the four decisions recorded in section 2. Section 12 lists the questions this
-revision puts to the reviewer.
+Status: **design draft, revision 3, for frontier review.** The user answered the collaborative design gate with
+"as proposed", accepting the four decisions recorded in section 2. Section 12 lists the questions this revision
+puts to the reviewer.
 
-Baseline: `plugin/graph-workspace` at `fd7488d5ae7f92bcdb3f70fc76b09f6e881aacc0`. All investigation ran in the
-PM integration worktree; the user's delivery checkout was read only and never built.
+Baseline: `plugin/graph-workspace` at `fd7488d5ae7f92bcdb3f70fc76b09f6e881aacc0`. All investigation ran in the PM
+integration worktree; the user's delivery checkout was read only and never built.
 
 Revision history:
 
-- r1 — first complete design, grounded in a read-only trace of the label pipeline, the module's bundle gate,
-  and the JLaTeXMath 1.0.7 jar that the distribution already ships.
-- r2 (this revision) — applies review round 1's five blocking and three non-blocking findings. F1 reconciled
-  truncation with D3 in 4.4; F2 scoped the width invariant to non-forced labels in 5.5; F3 added the follow-up
-  pass lifecycle and the two files it needs in 4.6 and 6; F4 replaced identity-transform painting with an
-  explicit coordinate contract in 4.5; F5 added the missing falsifying tests in 8; F6 removed the unplumbed
-  `latex_macros` claim from 3.3; F7 replaced the unenforceable documentation requirement with a user-visible
-  behaviour section and an explicit out-of-scope wiki follow-on; F8 corrected the truncation character, the
-  method visibility wording, and the combined jar size.
+- r1 — first complete design.
+- r2 — applied review round 1 (F1–F8).
+- r3 (this revision) — applies review round 2. F2 and F4 were judged not resolved and are corrected here:
+  invariant 5 is now scoped to ladder candidates (the retained face after demotion legitimately exceeds the cap),
+  and the math-run transform now applies the base transform exactly once. Four new blocking findings are
+  answered: N1 gives budget deferral its own recorded state so a retained truncated face cannot pin a deferred
+  label; N2 separates the compact measurement cache from the icon cache and states a convergence and termination
+  contract; N3 makes the placer produce a resolved row that the painter consumes without re-deciding anything;
+  N4 corrects the baseline unit error (`getBaseLine()` is a ratio, not pixels). N5 adds the test and evidence
+  files to the change set; N6 swaps the two font-pack sizes.
 
 ## 1. Reported need
 
@@ -52,9 +53,9 @@ The user accepted all four recommendations verbatim ("as proposed"):
 - **D4 — width budget.** A formula must fit today's slot limits (200 px vertical, 130 px horizontal, 150 px
   diagonal) and degrade like any other long title. The limits do not change.
 
-D3 and D4 together are the whole degradation contract, and section 4.4 is its single normative statement: a
-label that overflows shows raw source, and that raw row may be ellipsized exactly as a long plain title is
-today. "Never blank" forbids the empty label; it does not forbid the ellipsis that D4 explicitly allows.
+D3 and D4 together are the whole degradation contract, and section 4.4 is its single normative statement: a label
+that overflows shows raw source, and that raw row may be ellipsized exactly as a long plain title is today.
+"Never blank" forbids the empty label; it does not forbid the ellipsis that D4 explicitly allows.
 
 ## 3. Measured evidence
 
@@ -90,8 +91,9 @@ Two further consumers read `SafeNodeLabel.displayText()` and must not change:
   `GeometryTextMetrics.measure(String, BoundaryTier)` (implementation `AwtGeometryTextMetrics`) to reserve hull
   padding. `layout.graphstream.GraphStreamLayoutEngine` reserves relation spacing from
   `displayText().length() * CHAR_WIDTH_UPPER_BOUND`.
-- `window.ContributorInspector` shows the title in the sidebar, and `canvas.AccessibleGraphCanvas` derives the
-  accessible name and description from `info.label`.
+- `window.ContributorInspector` shows the title in the sidebar, `canvas.AccessibleGraphCanvas` derives the
+  accessible name from `node.label().fullText()` (`AccessibleGraphCanvas.java:473`), and
+  `canvas.GraphSearchModel` searches `fullText()`.
 
 Raw LaTeX source is therefore *wider* than a rendered formula at the same font size — `$\alpha$` measures as
 seven characters of plain text but paints as one glyph. Every `displayText()` consumer that reserves space from
@@ -124,7 +126,7 @@ Cyrillic font packs), and the installed distribution carries the jars under
 
 - class-file major version is **51** for all 196 classes, so the gate's `maximumClassMajor(dependency) <= 52`
   assertion passes;
-- jar sizes are 669,575 bytes (core), 185,652 (Greek) and 188,924 (Cyrillic): **1,044,151 bytes** for all three;
+- jar sizes are 669,575 bytes (core), 188,924 (Greek) and 185,652 (Cyrillic): **1,044,151 bytes** for all three;
 - `org/scilab/forge/jlatexmath/TeXSymbols.xml` defines `leqslant`; it does **not** define `leslant`, so the
   screenshot's `\leslant` is not renderable by this engine — D3's raw-source degradation is a live requirement,
   not a hypothetical. The user's Freeplane configuration defines no `latex_macros` override, so nothing in this
@@ -135,38 +137,45 @@ Cyrillic font packs), and the installed distribution carries the jars under
 - the jar carries `META-INF/COPYING`, `META-INF/LICENSE`, and the font licences under
   `org/scilab/forge/jlatexmath/fonts/licences/`.
 
-`freeplane_plugin_latex/src/main/java/org/freeplane/plugin/latex/TeXText.java` is the in-repo reference for the
-build call:
+`freeplane_plugin_latex/src/main/java/org/freeplane/plugin/latex/TeXText.java:31-46` is the in-repo reference for
+the build call, and it also shows that the map path prepends the `latex_macros` resource property. **The graph
+path in this design does not honour that property** (section 10 records the follow-on). Until then the map and
+the graph can disagree about macros the engine does not know.
 
-```java
-return tf.new TeXIconBuilder()
-    .setFGColor(fgColor)
-    .setStyle(style)
-    .setSize(size)
-    .setWidth(TeXConstants.UNIT_PIXEL, maxWidth, align)
-    .setIsMaxWidth(true)
-    .setInterLineSpacing(latexInterlineSpacingUnit, latexInterlineSpacingValue)
-    .build();
-```
+### 3.4 The engine's baseline is a ratio, and paint colour is icon-local
 
-It also shows that the map path prepends the `latex_macros` resource property (`TeXText.java:31-46`). **The
-graph path in this design does not honour that property.** Plumbing it would put Freeplane's resource layer
-inside `canvas..` or duplicate cache invalidation for macro changes, and section 10 records it as a follow-on
-with the seam it would use. Until then the statement in this section is the honest one: the map and the graph
-can disagree about macros the engine does not know.
+Two facts from disassembling the shipped `TeXIcon.class` decide the design of sections 4.3 and 4.5, so they are
+recorded with their evidence rather than assumed:
 
-### 3.4 The forced-label exception to the width cap
+- `getBaseLine()F` computes `(float)(above / (above + below))` where `above = box.getHeight()*size + c +
+  insets.top` and `below = box.getDepth()*size + c + insets.bottom`, ending in `ddiv`, `d2f`, `freturn`. It
+  returns a **ratio of the above-baseline extent to the total extent**, not a pixel distance. Pixel ascent is
+  therefore `getBaseLine() * getIconHeight()`, and descent is the remainder.
+- `paintIcon(Component, Graphics, int, int)` casts the graphics to `Graphics2D` and chooses its colour as:
+  `this.foreground` when set, else `component.getForeground()` when the component is non-null, else
+  `Color.black`. A cached icon can therefore be recoloured with `setForeground(...)` immediately before painting,
+  which is safe because painting is confined to the EDT.
 
-`placeNode` (`ScreenLabelPlacement.java:433-448`) falls back to `baseSlot` for a forced label, and `baseSlot`
-(`:658-668`) measures the full text and returns it without any width check. `ScreenLabelLiveTitleRefreshShould
-.keepsAnUnchangedForcedOverCapFace` (`:618-627`) pins that behaviour, asserting a forced `FULL_NEAR` label of
-width `274.130005` — greater than `VERTICAL_MAX_WIDTH = 200` — with `forcedAtBaseSlot() == true`. The width cap
-is therefore a property of the ladder, not of every placed label, and the design must not claim otherwise.
+### 3.5 The width cap has two documented exceptions
 
-### 3.5 Environment prerequisite for build and test evidence
+The cap is a property of the ladder, not of every placed label, and two existing tests pin that:
 
-The checkout this design was written in has **no JDK and no Gradle**: `/usr/lib/jvm` holds two JRE-only
-installs, `javac` is absent, `gradle` is not on `PATH`, and the network is unreachable. `AGENTS.md` specifies
+- **Forced labels.** `placeNode` falls back to `baseSlot` for a forced label (`ScreenLabelPlacement.java:433-448`),
+  and `baseSlot` (`:658-668`) measures the full text and returns it without any width check.
+  `ScreenLabelLiveTitleRefreshShould.keepsAnUnchangedForcedOverCapFace` (`:618-627`) asserts a forced `FULL_NEAR`
+  label of width `274.130005`, greater than `VERTICAL_MAX_WIDTH = 200`, with `forcedAtBaseSlot() == true`.
+- **Retained faces, including after demotion.** `keepsAnOverCapFaceAfterDemotionAndOnTheNextReplay` (`:768-787`)
+  asserts that a label that was forced keeps its over-cap face after it stops being forced: `forced()` is false,
+  `forcedAtBaseSlot()` is false, `width() > 200`, and the drawn text is unchanged. A retained face is not
+  re-checked against the cap.
+
+The design must therefore scope any width invariant to width-checked ladder candidates, which is what section 5.5
+now does.
+
+### 3.6 Environment prerequisite for build and test evidence
+
+The checkout this design was written in has **no JDK and no Gradle**: `/usr/lib/jvm` holds two JRE-only installs,
+`javac` is absent, `gradle` is not on `PATH`, and the network is unreachable. `AGENTS.md` specifies
 `~/.sdkman/candidates/java/21.0.8-zulu` plus `gradle`, and neither exists here. Every test command in section 8
 must therefore run on a machine that has them; this is recorded as a question in section 12, not as a design
 assumption.
@@ -226,36 +235,50 @@ deterministic, allocation-light, and total: it never throws.
 | empty after delimiters | that run is dropped; `TitleText.of` rejects an empty run list, so the parser returns `TitleText.plain(source)` |
 
 The parser does not do macro substitution, does not interpret `\text{...}`, and does not look for `$$` beyond the
-two-dollar case above. Brace-depth tracking exists only to stop a `$` inside `\text{$...}$` from closing the
+two-dollar case above. Brace-depth tracking exists only to stop a `$` inside `\text{$...$}` from closing the
 formula early.
 
-### 4.3 Measurement seam
+### 4.3 Measurement
 
-A new package `canvas.title` holds the rendering-side types, which may use AWT and JLaTeXMath:
+Three types, with a strict division of labour: **measurement produces numbers**, **icons are a cache**, and
+**the resolved row is what the painter consumes**.
 
 ```java
-public interface TitleMetrics {
-    Box measure(TitleText title, Font font);      // screen-space pixels, matches SCREEN_FRC
+// canvas.title — numbers only, cacheable, never holds an icon
+public final class MeasuredTitle {
+    public enum Availability { RENDERED, DEGRADED }
+    Availability availability();
+    List<MeasuredRun> runs();                 // offsets and extents in screen px
+    double width(), height(), ascent(), descent();
 }
-public final class AwtTitleMetrics implements TitleMetrics { ... }        // default
-public final class MemoizedTitleMetrics implements TitleMetrics { ... }   // per pass, per (title, size)
+
+// canvas.title — the pass-scoped icon service
+public final class FormulaIcons {
+    TeXIcon icon(String source, int px, int style);   // null when the engine rejects the source
+}
 ```
 
-`Box` carries `width`, `height`, `ascent`, `descent`. Rules:
+Rules:
 
 - A title with no math measures **exactly** as today: `font.getStringBounds(plainSource, SCREEN_FRC)`, same
   `Rectangle2D` — a pure-plain label must be pixel-identical to the baseline.
 - A title with math measures as the horizontal sum of its runs; `ascent` is the maximum of the plain font's
-  ascent and every formula icon's `getBaseLine()`; `descent` is the maximum of the plain descent and every
-  icon's `getIconHeight() - getBaseLine()`; `height` is `ascent + descent`.
-- Formula icons are built at `Math.round(font.getSize2D())` pixels, `TeXConstants.STYLE_TEXT`, and no maximum
-  width, because the slot limit is enforced by the ladder, not by the engine.
-- Every box must be finite and strictly positive. A run whose icon violates that, or whose height exceeds
-  `2.0 ×` the plain line height of the font, is reported by the metrics as **unrenderable** and the whole title
-  is measured in its degraded form (section 4.4 rule 3). The metrics never return a non-finite box.
+  ascent and every formula icon's pixel ascent; `descent` is the maximum of the plain descent and every icon's
+  pixel descent; `height` is `ascent + descent`.
+- **Pixel ascent and descent.** Icons are built at `Math.round(font.getSize2D())` pixels and
+  `TeXConstants.STYLE_TEXT`. Because `getBaseLine()` is a ratio (section 3.4), a run's pixel ascent is
+  `icon.getBaseLine() * icon.getIconHeight()` and its pixel descent is `icon.getIconHeight() - ascent`. The
+  design does not use `getBaseLine()` as a distance anywhere.
+- **Availability.** A title is `DEGRADED` when any math run is unrenderable. A run is unrenderable when the
+  engine throws, when the icon's metrics are non-finite or not strictly positive, or when the icon height exceeds
+  `2.0 ×` the plain line height of the font. `MeasuredTitle` never carries a non-finite number, and
+  `availability()` is the only channel for the unrenderable verdict.
+- **Memoization.** `MeasuredTitle` is memoized by `(source-key, px, style)` in a compact bounded map with
+  capacity 8192. The key is the joined run source plus a form flag, so no icon is retained. This is what makes
+  progress monotone across passes (section 4.6).
 
 `ScreenLabelPlacement` keeps its package-visible `screenBounds` for plain-only paths and gains the injected
-`TitleMetrics` for the title-measuring call sites. `screenBounds(String, Font)` and `textWidth(String, Font)`
+measurement service for the title-measuring call sites. `screenBounds(String, Font)` and `textWidth(String, Font)`
 stay package-visible and unchanged so the existing placement tests keep compiling and keep asserting the same
 numbers.
 
@@ -265,14 +288,20 @@ numbers.
 titles. Math titles are resolved by one normative rule set, which is D3 and D4 applied to the existing rungs:
 
 1. **Rendered form** — the title as runs. Used by every non-truncating rung (`FULL_NEAR`, `FULL_DISPLACED`,
-   `DENSE_NEAR`, `DENSE_DISPLACED`). Such a rung yields a candidate only if the rendered row is renderable and
-   its measured width is within `slotMaxWidth(slot)`; otherwise that rung yields no candidate, exactly as an
-   over-wide plain title yields no candidate today.
+   `DENSE_NEAR`, `DENSE_DISPLACED`). Such a rung yields a candidate only if the measured title is `RENDERED` and
+   its width is within `slotMaxWidth(slot)`; otherwise that rung yields no candidate, exactly as an over-wide
+   plain title yields no candidate today.
 2. **Degraded form** — every `Math` run replaced by a `Plain` run over its `rawSource`. Used by the truncating
    rungs (`TRUNCATED_*`) and as the final fallback. A truncating rung measures the degraded row and, if it
    exceeds the limit, applies the existing `truncateTo` character loop to that plain text.
-3. **Unrenderable title** — if any math run is unrenderable, the rendered form does not exist and only the
-   degraded form is offered, through rungs 2.
+3. **Unrenderable title** — when `availability()` is `DEGRADED` in the measured cache, the rendered form does not
+   exist and only the degraded form is offered, through rungs 2.
+
+Two states are recorded on the placed label and are *not* the same thing:
+
+- `deferredForBudget` — the formula was not measured because the pass budget ran out (section 4.6). It is
+  transient: the next pass measures it.
+- `truncated` — the drawn text ends with the ellipsis, as today.
 
 Consequences, stated plainly because they are visible to users:
 
@@ -283,72 +312,96 @@ Consequences, stated plainly because they are visible to users:
   outcome: the slot is narrower than the source, and D4 accepts that.
 - The reference case `Theorem: $\bigcup\alpha\leqslant\alpha$` fits the 200 px vertical slot in rendered form
   (roughly 150 px), so it renders; the same title in a 130 px horizontal slot degrades.
-- Wholesale degradation in a truncating rung is a deliberate simplification of "which run gives way", chosen
-  because any finer rule either drops a formula or cuts a control sequence — the two outcomes D3 forbids.
-  Section 12, question 1 asks the reviewer to confirm this reading.
 
 The ladder in `ScreenLabelPlacement.LADDER` is untouched. Formula rendering changes only *what* a rung measures
-and *what* a truncating rung draws. `PlacedLabel.truncated()` keeps its meaning: the drawn text ends with the
-ellipsis.
+and *what* a truncating rung draws.
 
-### 4.5 Painting and the coordinate contract
+### 4.5 The resolved row, and painting
 
-`GraphPainter.drawCentered` is replaced by `TitlePainter.paint(Graphics2D g, TitleText title, Font font,
-double worldX, double worldY, Color color, AffineTransform baseTransform)`, which keeps the current centring
-rule (`baseline = (ascent - descent) / 2`) over the shared row box from `TitleMetrics`.
+The placer produces a `TitleRow` — the resolved, measured row that the painter consumes as data:
+
+```java
+// canvas.title
+public final class TitleRow {
+    public enum Form { RENDERED, DEGRADED }
+    Form form();
+    List<RunRow> runs();            // left-to-right, offsets in screen px
+    double width(), height(), ascent(), descent();
+    boolean deferredForBudget();
+}
+public interface RunRow { double x(), width(); }
+public final class PlainRunRow implements RunRow { String text; ... }
+public final class MathRunRow implements RunRow { String source; TeXIcon icon; double ascent, descent; ... }
+```
+
+`PlacedLabel` carries the `TitleRow` alongside its existing fields. **The painter consumes the row and never
+re-measures, never re-decides degradation, and never chooses the form.** That makes invariant 6 structural
+rather than a promise.
+
+`GraphPainter.drawCentered` is replaced by
+`TitlePainter.paint(Graphics2D g, TitleRow row, Font logicalFont, double worldX, double worldY, double zoom,
+Color color, AffineTransform baseTransform)`.
 
 **Coordinate contract.** Two transforms exist and the design names both:
 
-- the **base transform** is the `Graphics2D` transform `GraphPainter.paint` receives from the component. It is
-  not assumed to be the identity: `GraphCanvas.paintComponent` passes the component graphics, and a scaled
-  display or an offscreen image can arrive already transformed;
-- the **world transform** is what `GraphPainter.paint` then concatenates for `GraphViewport`. It is world space,
-  and it is the only transform `TitlePainter` is allowed to remove.
+- the **base transform** `B` is the `Graphics2D` transform `GraphPainter.paint` receives from the component. It is
+  not assumed to be the identity: a scaled display or an offscreen image can arrive already transformed;
+- the **world transform** `W` is what `GraphPainter.paint` then concatenates for `GraphViewport`. The transform at
+  paint time is therefore `T = B·W`.
 
-`GraphPainter.paint` captures `baseTransform = graphics.getTransform()` **before** applying the world transform
-and passes it down. For a math run, `TitlePainter` computes the run's device anchor by transforming the world
-anchor through the current transform, then paints the icon inside `graphics.create()` with
-`copy.setTransform(baseTransform)` and a translation to the device anchor. That removes the world transform
-while preserving the component's device transform, so a scaled display keeps correct icon size and position.
+`GraphPainter.paint` captures `B = graphics.getTransform()` **before** applying `W` and passes it down. Row
+offsets and extents are in screen pixels, so they convert to world units by dividing by `zoom`; that is why the
+painter takes `zoom` explicitly instead of inferring it from a derived font size.
 
-- `Plain` runs draw with `graphics.drawString` at the world-space font the caller already derives, i.e. exactly
-  as today.
-- `Math` runs paint as described, at the logical font size, so the icon cache is zoom-independent.
-- Colour comes from the caller (`theme.labelColor()`); the dimming composite `paintLabels` already sets stays in
-  force because `graphics.create()` inherits it. `TitlePainter` disposes the derived graphics in a `finally`.
+- `PlainRunRow` draws with `graphics.drawString` after `graphics.setFont(logicalFont.deriveFont(size / zoom))`,
+  at `worldX + run.x()/zoom` — the same call the painter makes today, so plain labels are unchanged.
+- `MathRunRow` paints the icon exactly once through the base transform:
+  1. `deviceAnchor = T.transform(worldAnchor)` — screen position of the run;
+  2. `componentAnchor = B⁻¹.transform(deviceAnchor)` — the same point in component coordinates;
+  3. `copy = graphics.create(); copy.setTransform(B); copy.translate(componentAnchor.x, componentAnchor.y);
+     rowIcon.setForeground(color); rowIcon.paintIcon(null, copy, 0, 0); copy.dispose();`
+
+  Step 2 is the correction from review round 2: painting under `B` while translating by the *device* anchor
+  would have applied `B` twice. Translating by `componentAnchor` applies `B` exactly once, so a scaled display
+  keeps correct icon size and position.
+- Colour comes from `setForeground`, which section 3.4 shows is what `paintIcon` honours. Dimming is unaffected:
+  the composite `paintLabels` sets is inherited by `graphics.create()`.
 
 `PlacedLabel.text()` keeps returning the drawn plain string, so `GraphCanvasPaintShould.texts(...)`,
-`ScreenLabelPlacementShould`, the hover bar, and the accessible name all keep working. `PlacedLabel` gains
-`title()` and exposes it for the painter; for a plain label `title()` is a single `Plain` run equal to `text()`.
-For a truncated math label, `text()` is the degraded, ellipsized plain text — which is exactly what is drawn.
+`ScreenLabelPlacementShould`, the hover bar, and the accessible name all keep working. For a `RENDERED` math
+label, `text()` is the source string (what the user typed); for a `DEGRADED` label it is the degraded text,
+which is exactly what is drawn.
 
-### 4.6 Icon cache, build budget, and the follow-up pass
+### 4.6 Measurement cache, icon cache, budget, and convergence
 
-Parsing and icon construction are the only new per-pass costs. `FormulaIcons` is a bounded cache:
+Two caches with different jobs, because one cannot do both:
 
-- key `(source, pixelSize, style)`, LRU, capacity 512;
-- one build per key per pass, memoized through `MemoizedTitleMetrics`;
-- failures (`ParseException`, `InvalidSymbolTypeException`, or any other `RuntimeException` from the engine) are
-  cached as failures, so a broken macro costs one attempt, not one per pass;
-- a per-pass build budget of `MAX_NEW_ICONS_PER_PASS = 200`. A pass that exhausts the budget treats every
-  remaining math run as unrenderable, so D3's degraded form is used for those labels in that pass, and records
-  that the budget was hit.
+| Cache | Contents | Capacity | Purpose |
+| --- | --- | --- | --- |
+| measurement cache | `MeasuredTitle` numbers + availability, no icons | 8192 | makes placement progress monotone |
+| icon cache | `TeXIcon` per `(source, px, style)`, plus cached failures | 512, LRU | paint-ready icons; failures cost one attempt |
 
-**The follow-up pass.** A deferred label cannot be recovered by simply repainting: `ScreenLabelPlacementCache
-.place` returns `lastPlacements` whenever its `Key` matches (`ScreenLabelPlacementCache.java:17-24`), and a
-repaint of an unchanged canvas produces an identical key. The design therefore names the mechanism:
+Rules:
 
-- `ScreenLabelPlacement` owns the `FormulaIcons` instance and exposes `boolean budgetExhaustedInLastPass()`;
-- `ScreenLabelPlacementCache.place` consults it after a computation and, when true, sets a one-shot
-  `followUpPending` flag and includes a `passEpoch` component in its `Key` that it increments, so the very next
-  `place` call for the same state is a cache miss;
-- `GraphCanvas.labelsFor` calls `labelPlacementCache.place(...)` and then, if `takeFollowUpRequest()` returns
-  true, posts a single `repaint()`.
-
-The result is deterministic and testable: at most one extra placement pass per budget exhaustion, no timers, no
-threads, no partial frames. The budget matters because a first pass over a large formula-heavy map is otherwise
-unbounded work on the EDT. Its value is a starting point that the section 8 acceptance measurement must confirm
-or replace with a measured number; it is not presented as a measured threshold.
+- The **build budget** `MAX_NEW_ICONS_PER_PASS = 200` counts *new measurement-cache entries* per placement pass,
+  not paints and not cache hits. Because the measurement cache is keyed by source, a map of N distinct formula
+  keys needs `ceil(N/200)` deferring passes and then converges.
+- When the budget is exhausted, the remaining math titles are measured as `DEGRADED` **with
+  `deferredForBudget = true`**, which section 4.4 distinguishes from a genuine unrenderable verdict.
+- **Retention must not pin a deferred face.** `ScreenLabelPlacement.retained` (`:451-500`) keeps a remembered
+  placement when its `sourceText` and font are unchanged, and re-draws it with
+  `rememberedRow.truncating ? truncateTo(...) : source`. A deferred label remembered on a truncating rung would
+  therefore stay degraded forever. The design adds one rule to `retained`: **a remembered placement whose
+  `TitleRow.deferredForBudget()` is true is not retained**, so the next pass recomputes it. Ordinary plain-label
+  retention is untouched, which keeps `ScreenLabelLiveTitleRefreshShould` meaningful.
+- **Convergence and termination.** `ScreenLabelPlacementCache.place` reports `budgetExhaustedInLastPass()`. The
+  cache sets a one-shot `followUpPending` flag and calls `GraphCanvas.labelsFor`, which posts exactly one
+  `repaint()`. The follow-up is a cache miss because the cache's `Key` includes a `passEpoch` that the
+  exhaustion increments. A follow-up is scheduled only when a pass deferred work **and** that pass added at least
+  one measurement-cache entry; a pass that adds none stops the chain and is recorded as `FORMULA_MEASUREMENT_STALL`.
+  With a budget above zero and a monotone measurement cache this terminates: the pass after the last new entry
+  defers nothing.
+- Memory is bounded: 8192 measurement entries and 512 icons are both fixed, and neither grows with map size.
 
 ### 4.7 Bundle and licence
 
@@ -390,22 +443,29 @@ Stated once, because it is user-visible and section 3.3 removed the claim that b
 1. A title whose `TitleText` has no math produces byte-identical `drawString` calls and identical placement
    geometry to the baseline at the same request.
 2. `SafeNodeLabel.displayText()`, `fullText()`, `equals` and `hashCode` are unchanged, so projection identity,
-   deduplication, sidebar text, hull padding, and the accessible name are unchanged.
+   deduplication, sidebar text, hull padding, accessibility, and search are unchanged.
 3. No math run is omitted from the label, and no rendered formula is partially painted. In a truncating rung the
    whole title is drawn in degraded form, so a formula contributes its complete source text to the row that
    `truncateTo` may then ellipsize.
-4. Every measured box is finite and positive; a formula whose height exceeds `2.0 ×` the plain line height of
-   its font is treated as unrenderable and degrades through section 4.4 rule 3.
-5. For a **non-forced** label, every placed label respects `slotMaxWidth` for its slot. A forced label may
-   exceed it through `baseSlot`, exactly as `keepsAnUnchangedForcedOverCapFace` pins today (section 3.4);
-   formula rendering does not narrow that exception and does not widen the cap.
-6. Placement and painting agree: the painter never re-measures with a different metric than the placer used.
-7. Icon construction is bounded: at most one build per `(source, size, style)` per pass, at most
-   `MAX_NEW_ICONS_PER_PASS` builds per pass, and at most one scheduled follow-up pass per exhaustion.
-8. The bundle gate passes with the new jar: pinned checksums, exact `Bundle-ClassPath`, no
+4. Every measured box is finite and positive; a formula whose pixel height exceeds `2.0 ×` the plain line height
+   of its font is `DEGRADED` and resolved through section 4.4 rule 3.
+5. **Every candidate produced by the ladder is within `slotMaxWidth` for its slot.** A forced label may exceed it
+   through `baseSlot`, and a retained face may remain over the cap after demotion, exactly as
+   `keepsAnUnchangedForcedOverCapFace` and `keepsAnOverCapFaceAfterDemotionAndOnTheNextReplay` pin today
+   (section 3.5). Formula rendering neither narrows nor widens those exceptions.
+6. The painter consumes the resolved `TitleRow`: it never re-measures, never re-decides availability, and never
+   chooses between rendered and degraded forms.
+7. Measurement progress is monotone and bounded: each `(source, px, style)` is measured at most once per
+   measurement-cache lifetime, at most `MAX_NEW_ICONS_PER_PASS` new entries are added per pass, and the follow-up
+   chain terminates with `FORMULA_MEASUREMENT_STALL` if a deferring pass makes no progress.
+8. A budget-deferred label is never retained; the next pass recomputes it, and an unchanged follow-up request
+   renders the icon it deferred.
+9. The bundle gate passes with the new jar: pinned checksums, exact `Bundle-ClassPath`, no
    `Import-Package`/`Export-Package`, class major `<= 52`.
 
 ## 6. Exact change set
+
+Production files:
 
 | File | Change |
 | --- | --- |
@@ -413,34 +473,53 @@ Stated once, because it is user-visible and section 3.3 removed the claim that b
 | `projection/input/TitleTextParser.java` | new total, deterministic parser (section 4.2) |
 | `projection/input/SafeNodeLabel.java` | add derived `title()`; existing constructor and equality unchanged |
 | `adapter/SafeNodeLabelExtractor.java` | compute the math-signal flag from `NodeStyleModel.getNodeFormat` and the `\latex`/`\unparsedlatex` prefix, then pass it to the parser |
-| `canvas/title/Box.java` | new measured box (`width`, `height`, `ascent`, `descent`) |
-| `canvas/title/TitleMetrics.java`, `AwtTitleMetrics.java`, `MemoizedTitleMetrics.java` | new measurement seam, including the unrenderable verdict of section 4.3 |
-| `canvas/title/FormulaIcons.java` | new bounded icon cache with failure memoization and per-pass budget |
-| `canvas/title/TitleTruncation.java` | new rendered/degraded form selection and degraded-row truncation (section 4.4) |
-| `canvas/title/TitlePainter.java` | new painter with the explicit base/world coordinate contract (section 4.5) |
-| `canvas/ScreenLabelPlacement.java` | thread `TitleText` + `TitleMetrics` through the measuring sites; rendered form for non-truncating rungs, degraded form for truncating rungs; plain behaviour unchanged; expose the budget signal |
-| `canvas/ScreenLabelPlacementCache.java` | `passEpoch` in `Key`, one-shot `followUpPending`, `takeFollowUpRequest()` |
-| `canvas/PlacedLabel.java` | carry the `TitleText` alongside `text()`; no accessor removed |
-| `canvas/GraphPainter.java` | capture `baseTransform`, pass it to `TitlePainter`, replace `drawCentered`; label colour and dimming unchanged |
-| `canvas/GraphCanvas.java` | one line in `labelsFor`: post a single `repaint()` when `takeFollowUpRequest()` is true |
-| `freeplane_plugin_graph/build.gradle` | add the `lib` dependency, update `verifyGraphBundle` per section 4.7 |
+| `canvas/title/MeasuredTitle.java`, `MeasuredRun.java` | new measurement result: numbers and availability only, no icons |
+| `canvas/title/TitleMeasurer.java` | new measurement service with the compact 8192-entry memo (section 4.3) |
+| `canvas/title/FormulaIcons.java` | new 512-entry LRU icon cache with failure memoization |
+| `canvas/title/TitleRow.java`, `RunRow.java`, `PlainRunRow.java`, `MathRunRow.java` | new resolved row the painter consumes |
+| `canvas/title/TitleTruncation.java` | rendered/degraded form selection and degraded-row truncation (section 4.4) |
+| `canvas/title/TitlePainter.java` | new painter with the base/world coordinate contract (section 4.5) |
+| `canvas/ScreenLabelPlacement.java` | thread `TitleText` and the measurer through the measuring sites; rendered form for non-truncating rungs, degraded form for truncating rungs; plain behaviour unchanged; refuse to retain a budget-deferred face; expose the budget signal |
+| `canvas/ScreenLabelPlacementCache.java` | `passEpoch` in `Key`, one-shot `followUpPending`, `takeFollowUpRequest()`, `budgetExhaustedInLastPass()` |
+| `canvas/PlacedLabel.java` | carry the `TitleRow`; no accessor removed |
+| `canvas/GraphPainter.java` | capture `baseTransform`, pass it and `zoom` to `TitlePainter`, replace `drawCentered`; label colour and dimming unchanged |
+| `canvas/GraphCanvas.java` | post a single `repaint()` in `labelsFor` when `takeFollowUpRequest()` is true |
+| `freeplane_plugin_graph/build.gradle` | add the `lib` dependency; update `verifyGraphBundle`; no other target changes |
 | `src/main/resources/META-INF/NOTICE.jlatexmath.txt` | new licence provenance file |
 
-No file outside `freeplane_plugin_graph` changes, and no user-facing documentation file exists in the
-repository to update: `doc/` holds only the two edge-node-crossing study directories. The user-visible
-behaviour is recorded in section 4.8, and the wiki update is the out-of-scope follow-on recorded in section 10.
+Test and evidence files (the inventory is exact, so section 8's files are listed here too):
+
+| File | Change |
+| --- | --- |
+| `test/.../projection/input/TitleTextParserShould.java` | new |
+| `test/.../canvas/title/TitleMeasurerShould.java` | new, including the baseline-ratio fixture |
+| `test/.../canvas/title/TitleTruncationShould.java` | new |
+| `test/.../canvas/title/TitlePainterShould.java` | new, including the non-identity base transform |
+| `test/.../canvas/title/FormulaIconsShould.java` | new |
+| `test/.../canvas/ScreenLabelPlacementShould.java` | extended |
+| `test/.../canvas/ScreenLabelPlacementCacheShould.java` | new, follow-up and convergence |
+| `test/.../canvas/GraphCanvasPaintShould.java` | extended |
+| `test/.../canvas/ScreenLabelLiveTitleRefreshShould.java` | extended for the deferred-retention rule, existing cases unchanged |
+| `test/.../adapter/SafeNodeLabelExtractorShould.java` | extended |
+| `test/.../smoke/GraphWorkspaceUiEvidence.java` | extend the fixture with the four reference titles and emit first-pass timing |
+
+No file outside `freeplane_plugin_graph` changes, and no user-facing documentation file exists in the repository
+to update: `doc/` holds only the two edge-node-crossing study directories. The user-visible behaviour is
+recorded in section 4.8, and the wiki update is the out-of-scope follow-on recorded in section 10.
 
 ## 7. Failure modes
 
 | Failure | Behaviour |
 | --- | --- |
-| unknown macro (`\leslant`) | engine throws; the run is unrenderable; the title uses degraded form; the failure is cached |
+| unknown macro (`\leslant`) | engine throws; the run is `DEGRADED`; the title uses degraded form; the failure is cached in the icon cache |
 | unbalanced `$` | parser produces literal `Plain` text; no engine call |
 | formula wider than the slot | rendered form yields no candidate; the truncating rungs use degraded form, then `truncateTo` |
-| formula taller than `2.0 ×` line height | unrenderable; degraded form |
-| engine returns non-finite or non-positive metrics | unrenderable; invariant 4 keeps the box contract |
-| budget exhausted mid-pass | remaining math runs unrenderable this pass; exactly one follow-up pass scheduled |
-| icon cache eviction under memory pressure | rebuild on demand; correctness unaffected |
+| formula taller than `2.0 ×` line height | `DEGRADED`; degraded form |
+| engine returns non-finite or non-positive metrics | `DEGRADED`; invariant 4 keeps the box contract |
+| budget exhausted mid-pass | remaining math runs are `DEGRADED` with `deferredForBudget`; never retained; one follow-up pass |
+| deferring pass adds no new measurement | `FORMULA_MEASUREMENT_STALL`, no further follow-up, degraded text stays visible |
+| icon evicted from the 512-entry cache | rebuilt on paint from the measurement cache key; correctness unaffected |
+| icon build throws inside painting | caught per run, the run's raw source is drawn instead (last-resort paint guard), never a blank label |
 
 ## 8. Test strategy
 
@@ -452,31 +531,38 @@ fails if the invariant is removed.
 | 1 | `GraphCanvasPaintShould.plainTitlesDrawTheSameStringsAsTheBaseline` |
 | 2 | `SafeNodeLabelExtractorShould` existing cases plus `safeNodeLabelEqualityIgnoresTheDerivedTitle` |
 | 3 | `GraphCanvasPaintShould.unrenderableFormulaDrawsItsCompleteRawSource` and `truncatingRungNeverPaintsAPartialIcon` |
-| 4 | `AwtTitleMetricsShould.rejectsNonFiniteAndNonPositiveIconMetrics` and `rejectsFormulaTallerThanTwiceTheLineHeight` |
-| 5 | `ScreenLabelPlacementShould.formulaLabelRespectsItsSlotLimit` and `ScreenLabelLiveTitleRefreshShould.keepsAnUnchangedForcedOverCapFace` (existing) |
-| 6 | `GraphCanvasPaintShould.paintedRunOriginsMatchTheMeasuredBox` |
-| 7 | `FormulaIconsShould.buildsEachKeyOncePerPass`, `exhaustsItsBudgetThenRequestsOneFollowUp`, and `ScreenLabelPlacementCacheShould.followUpPassIsACacheMissExactlyOnce` |
-| 8 | `verifyGraphBundle`, plus `graphBundleGateFailsWhenTheFormulaJarIsDropped` as a deliberate mutation of the pinned set |
+| 4 | `TitleMeasurerShould.rejectsNonFiniteAndNonPositiveIconMetrics` and `rejectsFormulaTallerThanTwiceTheLineHeight` |
+| 5 | `ScreenLabelPlacementShould.formulaCandidateRespectsItsSlotLimit` plus the two existing over-cap tests, unchanged |
+| 6 | `TitlePainterShould.painterConsumesTheResolvedRowWithoutMeasuring` (a measurer that throws if called during paint) |
+| 7 | `ScreenLabelPlacementCacheShould.convergesAcrossFollowUps` with more distinct keys than the icon cache holds, and `stallsOnlyWhenAPassMakesNoProgress` |
+| 8 | `ScreenLabelPlacementCacheShould.deferredFollowUpRendersTheIconItDeferred` and `ScreenLabelPlacementShould.doesNotRetainABudgetDeferredFace` |
+| 9 | `verifyGraphBundle`, plus `graphBundleGateFailsWhenTheFormulaJarIsDropped` as a deliberate mutation of the pinned set |
 
 Additional new tests:
 
 - `projection/input/TitleTextParserShould` — plain text is one run; single and double delimiters; escaped `\$`;
   unmatched and unbalanced delimiters yield one literal `Plain`; `wholeTextIsMath` yields one `Math` run;
   `\text{$...}$` does not close early; empty-run dropping.
-- `canvas/title/AwtTitleMetricsShould` — a plain title measures exactly as
-  `font.getStringBounds(displayText, SCREEN_FRC)`; a math title measures as the run sum; ascent/descent are the
-  maxima; height is `ascent + descent`.
+- `canvas/title/TitleMeasurerShould` — a plain title measures exactly as
+  `font.getStringBounds(displayText, SCREEN_FRC)`; a math title measures as the run sum; ascent and descent are
+  the maxima; height is `ascent + descent`; **`baselineMatchesAnIndependentPixelFixture`** asserts that a
+  single-letter icon's ascent, computed as `getBaseLine() * getIconHeight()`, lands within 1 px of the ascent
+  implied by a reference `TeXIcon.paintIcon` render into a `BufferedImage` — the fixture that fails if the ratio
+  is ever treated as a pixel distance again.
 - `canvas/title/TitleTruncationShould` — rendered form is chosen for a fitting title; degraded form for an
   overflowing one; `truncateTo` is applied to the degraded row; a plain-only title behaves exactly as today.
 - `canvas/title/TitlePainterShould` — a plain run draws at the world-space `drawString` coordinates; a math run
-  paints at the device anchor with `baseTransform` preserved; a following plain label still draws in world
-  space after a math run; a non-identity incoming transform (`scale(1.25, 1.25)`) positions and sizes the icon
-  consistently with the measured box.
-- `canvas/title/FormulaIconsShould` — one build per `(source, size, style)` per pass; a failing source is
-  attempted once and then served from the failure cache; the budget stops builds at the limit; the cache is LRU
-  bounded.
+  paints once at the component anchor with `B` preserved; a following plain label still draws in world space
+  after a math run; a non-identity incoming transform (`scale(1.25, 1.25)`) positions and sizes the icon
+  consistently with the measured box; painting twice at the same anchor is idempotent (catches a double-applied
+  transform).
+- `canvas/title/FormulaIconsShould` — one icon per `(source, px, style)`; a failing source is attempted once and
+  then served from the failure cache; the LRU is bounded at 512.
 - `canvas/ScreenLabelPlacementShould` (extend) — a math label is measured by the icon, reaches `HOVER_ONLY`
   through the same ladder a plain over-long title does, and never exceeds `slotMaxWidth` when not forced.
+- `canvas/ScreenLabelPlacementCacheShould` (new) — `followUpPassIsACacheMissExactlyOnce`; `convergesAcrossFollowUps`
+  with 1000 distinct formula keys against a 200 budget and a 512 icon cache, asserting every key is finally
+  measured and no further follow-up is requested; `stallsOnlyWhenAPassMakesNoProgress`.
 - `canvas/GraphCanvasPaintShould` (extend) — plain-title `drawString` capture is identical to the baseline; a
   math run paints at the shared baseline; the dimming composite applies to formula runs; a forced hover label
   paints its formula; an unrenderable formula paints its complete raw source.
@@ -492,19 +578,20 @@ gradle :freeplane_plugin_graph:verifyGraphBundle
 gradle :freeplane_plugin_graph:graphUiEvidence
 ```
 
-Acceptance evidence additionally requires a screenshot of a fixture map containing the user's four label shapes
-rendered by the real canvas, showing a rendered formula for the renderable one and readable raw source for
-`\leslant`, plus the first-pass timing that confirms or replaces `MAX_NEW_ICONS_PER_PASS`.
+Acceptance evidence requires the `GraphWorkspaceUiEvidence` fixture to carry the four reference titles and to
+print the first-pass timing, so the screenshot and the budget number come from the same run. The current fixture
+(`GraphWorkspaceUiEvidence.java:244`) supplies only `SafeNodeLabel.of("Alpha", "Alpha")` and `"Beta"`, so the
+command as it stands can pass with formula rendering disabled — that gap is closed in the change set.
 
 ## 9. Risks
 
 1. **Bundle-gate drift.** The gate is the only thing keeping the graph plugin's dependency set honest; changing
    four assertions in one commit without a test that fails on each of them individually is the main regression
-   risk. The change adds one assertion per pinned property, not one combined check, and section 8 names the
-   mutation test for the pinned set.
+   risk. The change adds one assertion per pinned property, and section 8 names the mutation test for the pinned
+   set.
 2. **Two coordinate spaces in one painter.** The base/world contract of section 4.5 is the part most likely to
-   regress silently, because a wrong choice only shows on a scaled display. `TitlePainterShould` must include
-   the non-identity incoming transform case and a following plain label.
+   regress silently, because a wrong choice only shows on a scaled display or as a double-applied offset.
+   `TitlePainterShould` covers the non-identity transform and the idempotence case.
 3. **Wholesale degradation in a truncating rung.** A slightly over-wide label loses all of its icons at once
    rather than keeping the leading ones. This is deliberate (section 4.4) and the alternative is cutting a
    control sequence. It is listed because users will notice the visual discontinuity between the `FULL` and
@@ -516,12 +603,14 @@ rendered by the real canvas, showing a rendered formula for the renderable one a
 5. **`\leslant` is unrepresentable here.** The user's own screenshot and the empty `latex_macros` configuration
    mean the first visible result is a partially degraded label. The fallback must look intentional rather than
    broken, which is why the degraded form keeps the complete source text.
-6. **Performance on formula-heavy maps.** Unmeasured in this environment (section 3.5). The budget is a
-   structural guard, not a measured threshold.
+6. **Performance on formula-heavy maps.** Unmeasured in this environment (section 3.6). The budget is a
+   structural guard with a stated convergence contract, not a measured threshold.
 7. **Truncation semantics vs. the live-title-refresh contract.** `ScreenLabelLiveTitleRefreshShould` pins that a
-   retained label is only kept while its `sourceText` is unchanged. A formula whose rendering changes without a
-   source change (a theme or font change) must go through the same font/eligibility conditions that contract
-   already defines, not through a new rule.
+   retained label is only kept while its `sourceText` is unchanged. A deferred face is now excluded from
+   retention (section 4.6), which is the one deliberate addition to that contract and is tested directly.
+8. **Two caches drifting apart.** A measurement entry that survives while its icon was evicted must not change
+   the measured numbers. `TitleMeasurerShould` measures the same key twice with the icon cache cleared in
+   between and asserts identical numbers.
 
 ## 10. Out of scope
 
@@ -535,26 +624,26 @@ rendered by the real canvas, showing a rendered formula for the renderable one a
 - Rendering formulas on edges, pins, hulls, or the hover bar.
 - **Follow-on, not this change:** honouring the `latex_macros` resource property in graph labels. The seam it
   would use is a `FormulaMacros` provider supplied by `adapter` (the only layer allowed to read Freeplane
-  resources) and included in the `FormulaIcons` cache key, so a macro edit invalidates correctly.
+  resources) and included in the measurement and icon cache keys, so a macro edit invalidates correctly.
 - **Follow-on, not this change:** the user-wiki text for section 4.8.
 
 ## 11. Accessibility and identity
 
-Unchanged by construction, and asserted by invariant 2: the accessible name and description keep using the
-plain source text, the hover bar and `ContributorInspector` keep showing `displayText()`, and projection identity
-keeps comparing `fullText` and `displayText`. A screen reader therefore continues to read `$N$ is well-ordered by
-$\in$` verbatim, which is the same string it reads today.
+Unchanged by construction, and asserted by invariant 2: the accessible name keeps using
+`node.label().fullText()`, `GraphSearchModel` keeps searching `fullText()`, `ContributorInspector` keeps showing
+`displayText()`, and projection identity keeps comparing `fullText` and `displayText`. A screen reader therefore
+continues to read `$N$ is well-ordered by $\in$` verbatim, which is the same string it reads today.
 
 ## 12. Questions for the reviewer
 
 1. Is the section 4.4 split — rendered form for non-truncating rungs, wholesale degraded form for truncating
    rungs — the right reading of D3 and D4, given that the alternative either drops a formula or cuts a control
    sequence?
-2. Is the follow-up mechanism in section 4.6 (a `passEpoch` in the cache key plus a one-shot flag) the smallest
-   correct recovery, or should `ScreenLabelPlacementCache` expose an explicit `invalidate()` instead?
-3. Is `baseTransform` captured in `GraphPainter.paint` the right carrier for the device transform, or should
-   `TitlePainter` derive it from the current transform by inverting the world transform instead?
+2. Is the two-cache split of section 4.6 (8192 measurement entries, 512 icons) the right way to make progress
+   monotone, or should the measurement cache simply be unbounded for the session?
+3. Section 4.6 excludes a budget-deferred face from retention. Is that narrow enough to leave
+   `ScreenLabelLiveTitleRefreshShould`'s plain-label contract intact?
 4. Is `MAX_NEW_ICONS_PER_PASS = 200` the right structural guard before measurement, or should the first
-   implementation ship without a budget and rely on the cache alone?
-5. Section 3.5 records that no JDK or Gradle exists in this environment. Which machine runs the section 8
+   implementation ship without a budget and rely on the measurement cache alone?
+5. Section 3.6 records that no JDK or Gradle exists in this environment. Which machine runs the section 8
    commands, and who confirms the first-pass timing and the acceptance screenshot?
