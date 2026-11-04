@@ -21,6 +21,12 @@ Revision history:
   contract; N3 makes the placer produce a resolved row that the painter consumes without re-deciding anything;
   N4 corrects the baseline unit error (`getBaseLine()` is a ratio, not pixels). N5 adds the test and evidence
   files to the change set; N6 swaps the two font-pack sizes.
+- r4 (this revision) — applies review round 3. F2's remaining test wording is corrected; N2 (round 2) is answered
+  with a deferred queue so cache capacity can never block progress; N3 (round 2) removes the paint-time icon
+  lookup that contradicted the resolved-row contract; and the four round-3 findings are applied: the measurement
+  key now includes the logical font, the plain-run font derivation keeps the existing `Math.max(1.0f, …)` clamp,
+  the "no file outside the module changes" claim is narrowed to production source, and the transform test asserts
+  an absolute expected position instead of repaint idempotence.
 
 ## 1. Reported need
 
@@ -178,7 +184,9 @@ The checkout this design was written in has **no JDK and no Gradle**: `/usr/lib/
 `javac` is absent, `gradle` is not on `PATH`, and the network is unreachable. `AGENTS.md` specifies
 `~/.sdkman/candidates/java/21.0.8-zulu` plus `gradle`, and neither exists here. Every test command in section 8
 must therefore run on a machine that has them; this is recorded as a question in section 12, not as a design
-assumption.
+assumption. The repository's own CI (`.github/workflows/ci.yml:15-16`) runs `ubuntu-latest` with Java 21, so
+`gradle :freeplane_plugin_graph:test` and `verifyGraphBundle` have a designated machine; only the headful
+acceptance run is unassigned.
 
 ## 4. Design
 
@@ -273,9 +281,12 @@ Rules:
   engine throws, when the icon's metrics are non-finite or not strictly positive, or when the icon height exceeds
   `2.0 ×` the plain line height of the font. `MeasuredTitle` never carries a non-finite number, and
   `availability()` is the only channel for the unrenderable verdict.
-- **Memoization.** `MeasuredTitle` is memoized by `(source-key, px, style)` in a compact bounded map with
-  capacity 8192. The key is the joined run source plus a form flag, so no icon is retained. This is what makes
-  progress monotone across passes (section 4.6).
+- **Memoization.** `MeasuredTitle` is memoized by `(source-key, logical font, form flag)` in a compact bounded
+  map with capacity 8192, where `logical font` is the full `Font` identity — family, style and `getSize2D()` — not
+  the rounded icon pixel size. The plain runs' widths and the `2.0 ×` line-height threshold both depend on that
+  font, and `LabelFonts.of(Font, Font, Font)` accepts arbitrary faces, so a key without it would return one
+  face's numbers for another. No icon is retained in the measurement cache. The *icon* key stays narrower,
+  `(source, px, style)`, because an icon depends only on the formula and its pixel size (section 4.6).
 
 `ScreenLabelPlacement` keeps its package-visible `screenBounds` for plain-only paths and gains the injected
 measurement service for the title-measuring call sites. `screenBounds(String, Font)` and `textWidth(String, Font)`
@@ -334,9 +345,10 @@ public final class PlainRunRow implements RunRow { String text; ... }
 public final class MathRunRow implements RunRow { String source; TeXIcon icon; double ascent, descent; ... }
 ```
 
-`PlacedLabel` carries the `TitleRow` alongside its existing fields. **The painter consumes the row and never
-re-measures, never re-decides degradation, and never chooses the form.** That makes invariant 6 structural
-rather than a promise.
+`PlacedLabel` carries the `TitleRow` alongside its existing fields. A `MathRunRow` holds a **strong reference to
+its `TeXIcon`**, so the row stays complete for as long as it is placed and icon-cache eviction cannot affect it.
+**The painter consumes the row and never re-measures, never re-decides degradation, never chooses the form, and
+never consults `FormulaIcons`.** That makes invariant 6 structural rather than a promise.
 
 `GraphPainter.drawCentered` is replaced by
 `TitlePainter.paint(Graphics2D g, TitleRow row, Font logicalFont, double worldX, double worldY, double zoom,
@@ -353,8 +365,10 @@ Color color, AffineTransform baseTransform)`.
 offsets and extents are in screen pixels, so they convert to world units by dividing by `zoom`; that is why the
 painter takes `zoom` explicitly instead of inferring it from a derived font size.
 
-- `PlainRunRow` draws with `graphics.drawString` after `graphics.setFont(logicalFont.deriveFont(size / zoom))`,
-  at `worldX + run.x()/zoom` — the same call the painter makes today, so plain labels are unchanged.
+- `PlainRunRow` draws with `graphics.drawString` after
+  `graphics.setFont(logicalFont.deriveFont(Math.max(1.0f, size / (float) zoom)))`, at `worldX + run.x()/zoom`.
+  The `Math.max(1.0f, …)` clamp is part of today's behaviour (`GraphPainter.java:281-282`) and is preserved
+  verbatim, so plain labels are unchanged even at zoom values where `size / zoom` would fall below one point.
 - `MathRunRow` paints the icon exactly once through the base transform:
   1. `deviceAnchor = T.transform(worldAnchor)` — screen position of the run;
   2. `componentAnchor = B⁻¹.transform(deviceAnchor)` — the same point in component coordinates;
@@ -378,14 +392,14 @@ Two caches with different jobs, because one cannot do both:
 
 | Cache | Contents | Capacity | Purpose |
 | --- | --- | --- | --- |
-| measurement cache | `MeasuredTitle` numbers + availability, no icons | 8192 | makes placement progress monotone |
-| icon cache | `TeXIcon` per `(source, px, style)`, plus cached failures | 512, LRU | paint-ready icons; failures cost one attempt |
+| measurement cache | `MeasuredTitle` numbers + availability, no icons | 8192 | supplies cached numbers; progress is tracked separately by the deferred queue |
+| icon cache | `TeXIcon` per `(source, px, style)`, plus cached failures | 512, LRU | supplies icons during measurement; a placed row keeps its own reference afterwards |
 
 Rules:
 
-- The **build budget** `MAX_NEW_ICONS_PER_PASS = 200` counts *new measurement-cache entries* per placement pass,
-  not paints and not cache hits. Because the measurement cache is keyed by source, a map of N distinct formula
-  keys needs `ceil(N/200)` deferring passes and then converges.
+- The **build budget** `MAX_NEW_ICONS_PER_PASS = 200` counts *keys measured* per placement pass — not paints,
+  not cache hits, and not queue entries that are already served from the measurement cache. A map with N distinct
+  `(source, font)` titles therefore needs `ceil(N / 200)` deferring passes before the queue is empty.
 - When the budget is exhausted, the remaining math titles are measured as `DEGRADED` **with
   `deferredForBudget = true`**, which section 4.4 distinguishes from a genuine unrenderable verdict.
 - **Retention must not pin a deferred face.** `ScreenLabelPlacement.retained` (`:451-500`) keeps a remembered
@@ -394,14 +408,20 @@ Rules:
   therefore stay degraded forever. The design adds one rule to `retained`: **a remembered placement whose
   `TitleRow.deferredForBudget()` is true is not retained**, so the next pass recomputes it. Ordinary plain-label
   retention is untouched, which keeps `ScreenLabelLiveTitleRefreshShould` meaningful.
+- **Progress is tracked by a queue, not by the cache.** `ScreenLabelPlacement` keeps a deferred queue of keys
+  that belong to the current projection generation and still need measurement. A pass drains the queue in order,
+  measuring up to `MAX_NEW_ICONS_PER_PASS` keys and removing each measured key **whether or not its cache entry
+  later survives eviction**. Cache capacity therefore cannot stall the queue: an evicted key may be measured
+  again in a later pass, which costs work but never blocks the drain.
 - **Convergence and termination.** `ScreenLabelPlacementCache.place` reports `budgetExhaustedInLastPass()`. The
-  cache sets a one-shot `followUpPending` flag and calls `GraphCanvas.labelsFor`, which posts exactly one
-  `repaint()`. The follow-up is a cache miss because the cache's `Key` includes a `passEpoch` that the
-  exhaustion increments. A follow-up is scheduled only when a pass deferred work **and** that pass added at least
-  one measurement-cache entry; a pass that adds none stops the chain and is recorded as `FORMULA_MEASUREMENT_STALL`.
-  With a budget above zero and a monotone measurement cache this terminates: the pass after the last new entry
-  defers nothing.
-- Memory is bounded: 8192 measurement entries and 512 icons are both fixed, and neither grows with map size.
+  cache sets a one-shot `followUpPending` flag and `GraphCanvas.labelsFor` posts exactly one `repaint()`. The
+  follow-up is a cache miss because the cache's `Key` includes a `passEpoch` that the exhaustion increments. A
+  follow-up is scheduled only when a pass deferred work **and** drained at least one key from the queue; a pass
+  that drains none stops the chain and is recorded as `FORMULA_MEASUREMENT_STALL`. Because every deferring pass
+  removes at least `min(budget, queue length)` keys from a finite queue, the chain terminates in at most
+  `ceil(N / budget)` follow-ups for N outstanding keys, including when N exceeds the cache capacity.
+- Memory is bounded: 8192 measurement entries and 512 icons are both fixed, and the deferred queue is bounded by
+  the number of distinct titles in the current projection.
 
 ### 4.7 Bundle and licence
 
@@ -453,11 +473,12 @@ Stated once, because it is user-visible and section 3.3 removed the claim that b
    through `baseSlot`, and a retained face may remain over the cap after demotion, exactly as
    `keepsAnUnchangedForcedOverCapFace` and `keepsAnOverCapFaceAfterDemotionAndOnTheNextReplay` pin today
    (section 3.5). Formula rendering neither narrows nor widens those exceptions.
-6. The painter consumes the resolved `TitleRow`: it never re-measures, never re-decides availability, and never
-   chooses between rendered and degraded forms.
-7. Measurement progress is monotone and bounded: each `(source, px, style)` is measured at most once per
-   measurement-cache lifetime, at most `MAX_NEW_ICONS_PER_PASS` new entries are added per pass, and the follow-up
-   chain terminates with `FORMULA_MEASUREMENT_STALL` if a deferring pass makes no progress.
+6. The painter consumes the resolved `TitleRow`: it never re-measures, never re-decides availability, never
+   chooses between rendered and degraded forms, and never reads the icon cache.
+7. Measurement progress is bounded and terminates: at most `MAX_NEW_ICONS_PER_PASS` keys are measured per pass,
+   each deferring pass drains at least one key from a finite per-generation queue, and the follow-up chain ends
+   in at most `ceil(N / budget)` passes — or with `FORMULA_MEASUREMENT_STALL` when a pass drains nothing — even
+   when the outstanding key count exceeds the measurement-cache capacity.
 8. A budget-deferred label is never retained; the next pass recomputes it, and an unchanged follow-up request
    renders the icon it deferred.
 9. The bundle gate passes with the new jar: pinned checksums, exact `Bundle-ClassPath`, no
@@ -484,7 +505,7 @@ Production files:
 | `canvas/PlacedLabel.java` | carry the `TitleRow`; no accessor removed |
 | `canvas/GraphPainter.java` | capture `baseTransform`, pass it and `zoom` to `TitlePainter`, replace `drawCentered`; label colour and dimming unchanged |
 | `canvas/GraphCanvas.java` | post a single `repaint()` in `labelsFor` when `takeFollowUpRequest()` is true |
-| `freeplane_plugin_graph/build.gradle` | add the `lib` dependency; update `verifyGraphBundle`; no other target changes |
+| `freeplane_plugin_graph/build.gradle` | add the `lib` dependency; update `verifyGraphBundle`; keep the two existing `graphUiEvidence` output paths |
 | `src/main/resources/META-INF/NOTICE.jlatexmath.txt` | new licence provenance file |
 
 Test and evidence files (the inventory is exact, so section 8's files are listed here too):
@@ -503,9 +524,14 @@ Test and evidence files (the inventory is exact, so section 8's files are listed
 | `test/.../adapter/SafeNodeLabelExtractorShould.java` | extended |
 | `test/.../smoke/GraphWorkspaceUiEvidence.java` | extend the fixture with the four reference titles and emit first-pass timing |
 
-No file outside `freeplane_plugin_graph` changes, and no user-facing documentation file exists in the repository
-to update: `doc/` holds only the two edge-node-crossing study directories. The user-visible behaviour is
-recorded in section 4.8, and the wiki update is the out-of-scope follow-on recorded in section 10.
+**Production source** stays inside `freeplane_plugin_graph`. The complete deliverable does not, and the earlier
+claim is narrowed accordingly: the existing `graphUiEvidence` task writes two tracked PNGs under
+`docs/superpowers/specs/images/2026-08-10-graph-workspace-implemented.png` and
+`…-graph-group-marker-implemented.png` (`build.gradle:178-182`), so running the acceptance command updates those
+files, and any new formula-evidence PNG is added there deliberately rather than as a side effect. No user-facing
+documentation file exists in the repository to update: `doc/` holds only the two edge-node-crossing study
+directories. The user-visible behaviour is recorded in section 4.8, and the wiki update is the out-of-scope
+follow-on recorded in section 10.
 
 ## 7. Failure modes
 
@@ -518,8 +544,8 @@ recorded in section 4.8, and the wiki update is the out-of-scope follow-on recor
 | engine returns non-finite or non-positive metrics | `DEGRADED`; invariant 4 keeps the box contract |
 | budget exhausted mid-pass | remaining math runs are `DEGRADED` with `deferredForBudget`; never retained; one follow-up pass |
 | deferring pass adds no new measurement | `FORMULA_MEASUREMENT_STALL`, no further follow-up, degraded text stays visible |
-| icon evicted from the 512-entry cache | rebuilt on paint from the measurement cache key; correctness unaffected |
-| icon build throws inside painting | caught per run, the run's raw source is drawn instead (last-resort paint guard), never a blank label |
+| icon evicted from the 512-entry cache | a placed row still holds its own icon reference, so painting is unaffected; the next placement re-measures from the queue if needed |
+| icon build throws during measurement | that run is `DEGRADED`, so the row carries plain text and painting has nothing to build |
 
 ## 8. Test strategy
 
@@ -533,8 +559,8 @@ fails if the invariant is removed.
 | 3 | `GraphCanvasPaintShould.unrenderableFormulaDrawsItsCompleteRawSource` and `truncatingRungNeverPaintsAPartialIcon` |
 | 4 | `TitleMeasurerShould.rejectsNonFiniteAndNonPositiveIconMetrics` and `rejectsFormulaTallerThanTwiceTheLineHeight` |
 | 5 | `ScreenLabelPlacementShould.formulaCandidateRespectsItsSlotLimit` plus the two existing over-cap tests, unchanged |
-| 6 | `TitlePainterShould.painterConsumesTheResolvedRowWithoutMeasuring` (a measurer that throws if called during paint) |
-| 7 | `ScreenLabelPlacementCacheShould.convergesAcrossFollowUps` with more distinct keys than the icon cache holds, and `stallsOnlyWhenAPassMakesNoProgress` |
+| 6 | `TitlePainterShould.painterConsumesTheResolvedRowWithoutMeasuring` (a measurer and an icon service that both throw if touched during paint) |
+| 7 | `ScreenLabelPlacementCacheShould.convergesAcrossFollowUps`, `convergesWhenKeysExceedMeasurementCacheCapacity` with 20000 keys against the 8192 bound, and `stallsOnlyWhenAPassDrainsNothing` |
 | 8 | `ScreenLabelPlacementCacheShould.deferredFollowUpRendersTheIconItDeferred` and `ScreenLabelPlacementShould.doesNotRetainABudgetDeferredFace` |
 | 9 | `verifyGraphBundle`, plus `graphBundleGateFailsWhenTheFormulaJarIsDropped` as a deliberate mutation of the pinned set |
 
@@ -545,24 +571,27 @@ Additional new tests:
   `\text{$...}$` does not close early; empty-run dropping.
 - `canvas/title/TitleMeasurerShould` — a plain title measures exactly as
   `font.getStringBounds(displayText, SCREEN_FRC)`; a math title measures as the run sum; ascent and descent are
-  the maxima; height is `ascent + descent`; **`baselineMatchesAnIndependentPixelFixture`** asserts that a
+  the maxima; height is `ascent + descent`; `samePxDifferentFontDoesNotShareAMeasurement` changes the plain font
+  family and a fractional size that rounds to the same icon pixels and asserts the numbers differ;
+  **`baselineMatchesAnIndependentPixelFixture`** asserts that a
   single-letter icon's ascent, computed as `getBaseLine() * getIconHeight()`, lands within 1 px of the ascent
   implied by a reference `TeXIcon.paintIcon` render into a `BufferedImage` — the fixture that fails if the ratio
   is ever treated as a pixel distance again.
 - `canvas/title/TitleTruncationShould` — rendered form is chosen for a fitting title; degraded form for an
   overflowing one; `truncateTo` is applied to the degraded row; a plain-only title behaves exactly as today.
-- `canvas/title/TitlePainterShould` — a plain run draws at the world-space `drawString` coordinates; a math run
-  paints once at the component anchor with `B` preserved; a following plain label still draws in world space
-  after a math run; a non-identity incoming transform (`scale(1.25, 1.25)`) positions and sizes the icon
-  consistently with the measured box; painting twice at the same anchor is idempotent (catches a double-applied
-  transform).
+- `canvas/title/TitlePainterShould` — a plain run draws at the world-space `drawString` coordinates, including
+  the `Math.max(1.0f, …)` clamp at zoom 24 with a 12-point font; a math run paints at an **independently
+  calculated** absolute device position for a nonzero anchor, a translated-and-scaled `B` and a non-unit zoom, so
+  a double-applied `B` fails the assertion; a following plain label still receives the original transform.
 - `canvas/title/FormulaIconsShould` — one icon per `(source, px, style)`; a failing source is attempted once and
   then served from the failure cache; the LRU is bounded at 512.
 - `canvas/ScreenLabelPlacementShould` (extend) — a math label is measured by the icon, reaches `HOVER_ONLY`
-  through the same ladder a plain over-long title does, and never exceeds `slotMaxWidth` when not forced.
+  through the same ladder a plain over-long title does, and **every ladder candidate** stays within
+  `slotMaxWidth`; a retained face and a forced `baseSlot` face keep their documented exemptions.
 - `canvas/ScreenLabelPlacementCacheShould` (new) — `followUpPassIsACacheMissExactlyOnce`; `convergesAcrossFollowUps`
-  with 1000 distinct formula keys against a 200 budget and a 512 icon cache, asserting every key is finally
-  measured and no further follow-up is requested; `stallsOnlyWhenAPassMakesNoProgress`.
+  with 1000 distinct formula keys against a 200 budget and a 512 icon cache; `convergesWhenKeysExceedMeasurementCacheCapacity`
+  with 20000 keys against the 8192 measurement bound, asserting the queue drains and no further follow-up is
+  requested; `stallsOnlyWhenAPassDrainsNothing`.
 - `canvas/GraphCanvasPaintShould` (extend) — plain-title `drawString` capture is identical to the baseline; a
   math run paints at the shared baseline; the dimming composite applies to formula runs; a forced hover label
   paints its formula; an unrenderable formula paints its complete raw source.
@@ -634,16 +663,23 @@ Unchanged by construction, and asserted by invariant 2: the accessible name keep
 `displayText()`, and projection identity keeps comparing `fullText` and `displayText`. A screen reader therefore
 continues to read `$N$ is well-ordered by $\in$` verbatim, which is the same string it reads today.
 
-## 12. Questions for the reviewer
+## 12. Questions carried to the design-continuation gate
 
-1. Is the section 4.4 split — rendered form for non-truncating rungs, wholesale degraded form for truncating
-   rungs — the right reading of D3 and D4, given that the alternative either drops a formula or cuts a control
-   sequence?
-2. Is the two-cache split of section 4.6 (8192 measurement entries, 512 icons) the right way to make progress
-   monotone, or should the measurement cache simply be unbounded for the session?
-3. Section 4.6 excludes a budget-deferred face from retention. Is that narrow enough to leave
-   `ScreenLabelLiveTitleRefreshShould`'s plain-label contract intact?
-4. Is `MAX_NEW_ICONS_PER_PASS = 200` the right structural guard before measurement, or should the first
-   implementation ship without a budget and rely on the measurement cache alone?
-5. Section 3.6 records that no JDK or Gradle exists in this environment. Which machine runs the section 8
-   commands, and who confirms the first-pass timing and the acceptance screenshot?
+Review rounds 1–3 raised 12 blocking and 6 non-blocking findings; every one was verified against source before it
+was acted on. Round 3's answers settled three design choices, recorded here so they are not reopened: wholesale
+degradation in a truncating rung is consistent with D3 and D4; excluding only `deferredForBudget` rows from
+retention is narrow enough to preserve the plain-label retention contract; and the base transform belongs in a
+carrier captured before the world transform is concatenated.
+
+What remains genuinely open, and needs a person rather than a reviewer:
+
+1. **The budget number.** `MAX_NEW_ICONS_PER_PASS = 200` is a structural guard with a proven termination property,
+   not a measured threshold. The first implementation should confirm or replace it with the timing printed by the
+   acceptance run. Counting title measurements does not directly bound icon construction for a title with several
+   formula runs.
+2. **The acceptance host and owner.** CI covers `test` and `verifyGraphBundle`. The screenshot and first-pass
+   timing come from `graphUiEvidence`, which needs a machine that can render, and nobody is assigned to confirm
+   them.
+3. **Whether a fourth review round is worth it.** Round 3 changed the measurement key, the plain-font clamp, the
+   progress contract, the painter's icon ownership, the change-set boundary, and one test's assertion method.
+   Each change is small and verified, but together they touch every section a reviewer would read again.
