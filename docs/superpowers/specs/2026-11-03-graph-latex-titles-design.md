@@ -2,7 +2,7 @@
 
 Task identifier: `2026-11-03-graph-latex-titles`
 
-Status: **design draft, revision 9, for the design-continuation gate.** The user answered the collaborative design gate with
+Status: **design draft, revision 10, for the design-continuation gate.** The user answered the collaborative design gate with
 "as proposed", accepting the four decisions recorded in section 2. Section 12 lists the questions this revision
 puts to the reviewer.
 
@@ -54,13 +54,17 @@ Revision history:
   separately from the `N` used in the follow-up bound; the deferral and terminal-measurement promises are
   qualified by the two states that legitimately end a queue, the stall diagnostic and a projection generation
   change; and invariant 7 names the three cache tests that falsify it instead of miscounting them.
-- r9 (this revision) — authorises the paint-ready row. The specification showed that a screen-pixel row cannot
+- r9 — authorises the paint-ready row. The specification showed that a screen-pixel row cannot
   reproduce the existing plain drawing, because the plain paint font is clamped to one point
   (`GraphPainter.java:281-282`); a screen-pixel row scaled by zoom would have to reproduce a world-unit measurement
   that the clamp makes non-linear in zoom. `TitleRow` therefore carries paint-unit geometry and, for each plain
   run, the derived font it was measured with, and `TitlePainter` drops its `Font` parameter accordingly.
   `PlacedLabel`'s screen-pixel geometry, the slot caps, the ladder, the parser, the queue and the bundle gate are
   unchanged.
+- r10 (this revision) — completes r9. r9 changed the row type and the painter signature but left the painting prose
+  in this section still dividing offsets by `zoom` and deriving the font inside the painter, which contradicted the
+  new contract. The prose now matches the type: paint-unit offsets, the carried font, and an icon ascent scaled by
+  the base transform before the inverse mapping.
 
 ## 1. Reported need
 
@@ -409,22 +413,28 @@ cannot measure anything.
   paint time is therefore `T = B·W`.
 
 `GraphPainter.paint` captures `B = graphics.getTransform()` **before** applying `W` and passes it down. Row
-offsets and extents are in screen pixels, so they convert to world units by dividing by `zoom`; that is why the
-painter takes `zoom` explicitly instead of inferring it from a derived font size.
+offsets and extents are already in **paint units**, the space the painter draws in, so the painter never divides an
+offset by `zoom` and never derives a font. The painter still receives `zoom` for one purpose only: converting a
+formula's ascent from row units to device pixels (§5.6 step 5), because the base transform may scale it again.
 
-- `PlainRunRow` draws with `graphics.drawString` after
-  `graphics.setFont(logicalFont.deriveFont(Math.max(1.0f, size / (float) zoom)))`, at `worldX + run.x()/zoom`.
-  The `Math.max(1.0f, …)` clamp is part of today's behaviour (`GraphPainter.java:281-282`) and is preserved
-  verbatim, so plain labels are unchanged even at zoom values where `size / zoom` would fall below one point.
-- `MathRunRow` paints the icon exactly once through the base transform:
-  1. `deviceAnchor = T.transform(worldAnchor)` — screen position of the run;
-  2. `componentAnchor = B⁻¹.transform(deviceAnchor)` — the same point in component coordinates;
-  3. `copy = graphics.create(); copy.setTransform(B); copy.translate(componentAnchor.x, componentAnchor.y);
+- `PlainRunRow` draws with `graphics.setFont(run.worldFont())` and `graphics.drawString(run.text(), worldX +
+  run.x(), baseline)`. The run carries the font it was measured with, derived by the existing expression
+  `Math.max(1.0f, size / (float) zoom)` (`GraphPainter.java:281-282`), so plain labels are unchanged even at zoom
+  values where `size / zoom` would fall below one point. Its baseline offset uses that font's `LineMetrics`
+  ascent and descent in the existing float order, so leading never enters the baseline.
+- `MathRunRow` paints the icon exactly once through the base transform, with the icon's own ascent scaled by `B`:
+  1. `double sB = B.deltaTransform(new Point2D.Double(0.0, 1.0), null).getY();` — the base transform's vertical
+     scale;
+  2. `Point2D deviceBaseline = T.transform(new Point2D.Double(worldX + run.x(), baseline), null);`
+  3. `Point2D deviceTop = new Point2D.Double(deviceBaseline.getX(),
+     deviceBaseline.getY() - run.ascent() * zoom * sB);`
+  4. `Point2D componentTop = B⁻¹.transform(deviceTop, null);`
+  5. `copy = graphics.create(); copy.setTransform(B); copy.translate(componentTop.getX(), componentTop.getY());
      rowIcon.setForeground(color); rowIcon.paintIcon(null, copy, 0, 0); copy.dispose();`
 
-  Step 2 is the correction from review round 2: painting under `B` while translating by the *device* anchor
-  would have applied `B` twice. Translating by `componentAnchor` applies `B` exactly once, so a scaled display
-  keeps correct icon size and position.
+  Step 1 is the correction from review round 4: `paintIcon` draws the icon under `B`, so its own ascent is scaled
+  by `B` as well. Offsetting by the unscaled ascent left the formula baseline below the text baseline on a scaled
+  display. With step 1 the icon's baseline lands exactly on the shared baseline, and `B` is applied once.
 - Colour comes from `setForeground`, which section 3.4 shows is what `paintIcon` honours. Dimming is unaffected:
   the composite `paintLabels` sets is inherited by `graphics.create()`.
 
