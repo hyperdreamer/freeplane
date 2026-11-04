@@ -2,14 +2,14 @@
 
 Task identifier: `2026-11-03-graph-latex-titles`
 
-Specification date: 2026-11-03. Revision: draft 4. Status: ready for review; implementation and verification have
+Specification date: 2026-11-03. Revision: draft 5. Status: ready for review; implementation and verification have
 not been run by this authoring task.
 
 Design authority: [2026-11-03-graph-latex-titles-design.md](2026-11-03-graph-latex-titles-design.md), approved
-revision **r9**, design commit `8c729643bf4e54bbabbb260fa5cd72632ee5fd42`, blob
-`5903f6c00e9312fb2255429aae4cb3859a98b5df`, SHA-256
-`c9ef6da9495b355fe4a131ab5df64b80454b6515b38694aa9a8389ab9067bf85`. Design r8 was approved by the operator on
-2026-11-03; r9 is the narrow amendment that authorises this specification's paint-ready row.
+revision **r10**, design commit `02822c58435a18b4966b776f4309e5c474e90dcd`, blob
+`43282c4f5de79422d90f748100bd4b938440a2a5`, SHA-256
+`2ac7bb430e5b1d76db32b3ff35bcb6231562ed6adfe220390dae8da7632b4998`. Design r8 was approved by the operator on
+2026-11-03; r9 authorised the paint-ready row and r10 completed its painting prose.
 
 Application baseline: `fd7488d5ae7f92bcdb3f70fc76b09f6e881aacc0` (branch `plugin/graph-workspace`).
 
@@ -214,8 +214,12 @@ starts at `:526`.
 - `public MeasuredTitle measureDegraded(TitleText title, Font font)`:
   1. `DEGRADED` hit → return it.
   2. No math → return `measure(title, font)` (plain titles are free).
-  3. Budget exhausted → `defer(title, font)`.
-  4. Otherwise compute the degraded measurement (§5.3 step 7) and memoize under `DEGRADED`.
+  3. `if (!consumeBudgetSlot()) { return defer(title, font); }` — the method's only budget call (S7).
+  4. Otherwise compute the degraded measurement (§5.3 step 7), memoize under `DEGRADED`, and remove the key's
+     `DEFERRED` entry from `pending`.
+
+**The queue drains through exactly two operations**: this step and §5.3 step 7, both removing the key from
+`pending`. Nothing else mutates `pending`; `beginPass` clears it on a generation change (S1).
 - `public MeasuredTitle defer(TitleText title, Font font)` returns the degraded measurement with
   `deferredForBudget = true`, memoizes it under `DEFERRED`, and adds the key to `pending`. It never calls the engine.
 - `public boolean isKnown(TitleText, Font)`, `public boolean isPending(TitleText, Font)`,
@@ -256,8 +260,10 @@ starts at `:526`.
 ### 3.10 `RunRow`, `PlainRunRow`, `MathRunRow`
 
 - `public interface RunRow` → `double x()`, `double width()`.
-- `public final class PlainRunRow implements RunRow` — `public PlainRunRow(String paintText, double x, double
-  width, double ascent, double descent)`; accessors `paintText()`, `x()`, `width()`, `ascent()`, `descent()`.
+- `public final class PlainRunRow implements RunRow` — `public PlainRunRow(String paintText, Font worldFont,
+  double x, double width, double ascent, double descent)`; accessors `paintText()`, `worldFont()`, `x()`,
+  `width()`, `ascent()`, `descent()`. `worldFont` is the derived paint font the run was measured with and is never
+  null, so the painter needs no font of its own (Z2).
 - `public final class MathRunRow implements RunRow` — `public MathRunRow(String body, TeXIcon icon, double x,
   double width, double ascent, double descent)`; accessors `body()`, `icon()`, `x()`, `width()`, `ascent()`,
   `descent()`. Null icon → `NullPointerException("icon")`.
@@ -426,7 +432,7 @@ T10 asserts both the combined fixture and the unchanged `displayText`.
 6. Compose: cumulative `x`; `ascent = max(plain ascent, icon.getBaseLine() * icon.getIconHeight())`;
    `descent = max(plain descent, icon.getIconHeight() - thatAscent)`; `height = ascent + descent`;
    `width` = sum. `getBaseLine()` is a ratio and is never used as a distance.
-7. Memoize under `RENDERED` and return.
+7. Memoize under `RENDERED`, remove the key from `pending`, and return.
 
 `measureDegradedInBudget(title, font)` (private): builds `TitleTruncation.degradedPlainText(title)`, measures it
 with `getStringBounds`, returns a `DEGRADED` `MeasuredTitle` with one plain run.
@@ -460,14 +466,20 @@ Given `row`, `anchorX`, `anchorY`, `zoom`, `colour`, `baseTransform`:
 
 1. Validate (§3.12).
 2. `double left = anchorX - row.width() * 0.5;` and
-   `double baseline = anchorY + (row.ascent() - row.descent()) * 0.5;` — both already world units, so a plain-only
-   row lands exactly where `drawCentered` puts it today, including at the font clamp.
+   `final float baselineOffset = ((float) row.ascent() - (float) row.descent()) * 0.5f;`
+   `double baseline = anchorY + baselineOffset;`. The offset is computed in **float** and only then added to the
+   double anchor, reproducing `GraphPainter.java:321-324` operation for operation; a double computation changes
+   the last bits for some metrics (Z3). Rows containing formulas use the same expression, so text and formula share
+   one baseline.
 3. `PlainRunRow`: `graphics.setColor(colour)`, `graphics.setFont(run.worldFont())`, then
    `graphics.drawString(run.paintText(), (float) (left + run.x()), (float) baseline)`. The run carries the derived
    `worldFont` from `TitleRow.resolve`, so the painter derives nothing.
 4. `MathRunRow`:
    1. `Point2D deviceAnchor = graphics.getTransform().transform(new Point2D.Double(left + run.x(), baseline), null);`
-   2. `Point2D deviceTop = new Point2D.Double(deviceAnchor.getX(), deviceAnchor.getY() - run.ascent() * zoom);`
+   2. `double sB = baseTransform.deltaTransform(new Point2D.Double(0.0, 1.0), null).getY();` then
+      `Point2D deviceTop = new Point2D.Double(deviceAnchor.getX(),
+      deviceAnchor.getY() - run.ascent() * zoom * sB);` — the icon is painted under `B`, so its ascent is scaled
+      by `B` too; omitting `sB` leaves the formula baseline below the text baseline (S4).
    3. `Point2D component = baseTransform.inverseTransform(deviceTop, null);`
    4. `Graphics2D copy = (Graphics2D) graphics.create(); try { copy.setTransform(baseTransform);
       copy.translate(component.getX(), component.getY()); run.icon().setForeground(colour);
@@ -488,10 +500,9 @@ Given `row`, `anchorX`, `anchorY`, `zoom`, `colour`, `baseTransform`:
    stall    = deferredThisPass > 0 && measuredThisPass == 0
    ```
 6. On stall the measurer records `FORMULA_MEASUREMENT_STALL: <n> formula titles unmeasured after <p> passes`,
-   requests no further follow-up, and keeps deferred titles degraded until the generation changes. Because the
-   constructor rejects a non-positive budget and no key re-enters `pending`, this state is **unreachable under the
-   declared contract**: it exists as a guard against a broken engine, and T7c pins the constructor rejection that
-   makes it unreachable.
+   requests no further follow-up, and keeps deferred titles degraded until the generation changes. Production code
+   cannot reach it — the public constructor rejects a non-positive budget and no key re-enters `pending` — so the
+   branch is exercised through the package-private test constructor of T7d.
 7. No key can re-enter `pending` within a generation, so a stable generation with `T` distinct keys completes in
    `ceil(T / budget)` measurement passes; `T = 0` completes in one pass with no deferral.
 
@@ -546,9 +557,10 @@ always resolve, so no pinned font bytes are needed (S15).
 | T6b | `canvas.title.TitlePainterShould` | `nonIdentityBaseTransformPositionsTheIconOnce` | `B = translate(37,11)·scale(1.25)`, zoom 1.6; icon origin equals independently computed `B·W·p` within 0.5 px; a following plain run keeps world coordinates | a double-applied `B` lands at `B²Wp` |
 | T7 | `canvas.ScreenLabelPlacementCacheShould` | `measuresAtMostTheBudgetAndDefersTheRest` | budget 2, five unknown titles; after one pass `newMeasurementsInLastPass() == 2`, `pendingCount() == 3`, follow-up requested | removing the budget measures all five |
 | T7b | `canvas.ScreenLabelPlacementCacheShould` | `completesInTheQueueBound` | budget 200, **20000** titles; follow-ups continue until `pendingCount() == 0`, the pass count is `ceil(20000/200)`, `stalled()` false, `takeFollowUpRequest()` false afterwards, and a further identical request returns the same instances without new measurements | a reintroduced fixed memo capacity stalls or re-measures and fails the counts (Q5) |
-| T7c | `canvas.title.TitleMeasurerShould` | `rejectsANonPositiveBudget` | `new TitleMeasurer(icons, 0)` | the constructor throws `IllegalArgumentException`, which is what makes the stall state unreachable under the declared contract (S16) |
+| T7c | `canvas.title.TitleMeasurerShould` | `rejectsANonPositivePublicBudget` | `new TitleMeasurer(icons, 0)` through the public constructor | throws `IllegalArgumentException` (S16) |
+| T7d | `canvas.ScreenLabelPlacementCacheShould` | `stalledWhenAPassDefersAndMeasuresNothing` | the package-private `TitleMeasurer(FormulaIcons, int budget, boolean testOnly)` constructor, which admits a zero budget for tests; one formula title | pass 1 defers 1 and measures 0: `stalled()` true, `stallDiagnostic()` starts `FORMULA_MEASUREMENT_STALL`, `takeFollowUpRequest()` false, deferred row not retained | removing the stall branch requests another follow-up or reports no diagnostic (Z7) |
 | T8 | `canvas.ScreenLabelPlacementCacheShould` | `deferredTitleIsMeasuredWithinTheQueueBound` | budget 1, three unknown titles; first pass defers two, subsequent passes measure them, all `RENDERED` at the end | removing `passEpoch` returns the first degraded list forever |
-| T8c | `canvas.ScreenLabelPlacementCacheShould` | `deferredUnrenderableFormulaFinishesTerminallyDegraded` | budget 1, a `\leslant` title plus a plain title; the deferred formula is measured in the next pass and ends `DEGRADED` with `deferredForBudget()` false | a deferred entry served as terminal leaves the flag set |
+| T8c | `canvas.ScreenLabelPlacementCacheShould` | `deferredUnrenderableFormulaFinishesTerminallyDegraded` | budget 1, two **math** titles in projection order: `$\alpha$` then `$\leslant$`. Pass 1 measures `$\alpha$` and defers `$\leslant$` (asserted first); pass 2 measures `$\leslant$`, which ends `DEGRADED` with `deferredForBudget()` false | without the first math title nothing is deferred, and a terminal-served deferred entry keeps the flag set (Z5) |
 | T8b | `canvas.ScreenLabelPlacementShould` | `doesNotRetainABudgetDeferredFace` | remembered, non-`HOVER_ONLY`, `TRUNCATED_NEAR` deferred row; `retained` returns null | retaining it returns the degraded row |
 | T9 | `canvas.ScreenLabelPlacementShould` | `enclosureLabelWithMathTitleKeepsPlainGeometry` | enclosure built via `SafeNodeLabel.of(raw, display, TitleText.of(Math))`; one `PlainRunRow`, frozen geometry constants | engine-facing enclosure measurement changes the width |
 | T10 | `adapter.SafeNodeLabelExtractorShould` | `combinedPatternFormatAndLatexPrefixIsParsedAsOneFormula` | `latexPatternFormat` node whose source starts with `\latex`; `displayText` unchanged, `title()` one `Math` run, `rawSource` keeps the prefix | dropping the prefix rule yields a plain title (R4) |
@@ -587,11 +599,14 @@ bundledChecksums.put('jlatexmath-1.0.7.jar',
 
 def expectedNames = bundledChecksums.keySet().toList().sort()
 def sameNameSet = { List<String> names -> names.collect { it }.sort() == expectedNames }
-assert [true, false] == [sameNameSet(dependencyFiles*.name),
+final boolean namesMatch = sameNameSet(dependencyFiles*.name)
+assert [true, false] == [namesMatch,
                          sameNameSet(expectedNames.findAll { it != 'jlatexmath-1.0.7.jar' })]
 // The control above cannot detect deletion of the whole assertion, so the gate also
-// asserts that the production comparison is present in its own source text.
-assert buildFile.text.contains('sameNameSet(dependencyFiles*.name)')
+// asserts that the production comparison is present in its own source text. The needle is
+// assembled at run time so this assertion cannot satisfy itself.
+def productionMarker = 'final boolean ' + 'namesMatch = sameNameSet(dependencyFiles*.name)'
+assert buildFile.text.contains(productionMarker)
 
 bundledChecksums.each { fileName, expectedChecksum ->
     final File dependency = dependencyFiles.find { it.name == fileName }
@@ -610,15 +625,16 @@ final String latexNoticeText = bundle.getInputStream(latexNotice).getText('UTF-8
 assert latexNoticeText.contains('6d04c3843fc98d2eea9ba4cff0be7b80540ca75c5a4e0b3463fd1219c48cc65d')
 assert latexNoticeText.contains('org.scilab.forge:jlatexmath:1.0.7')
 assert latexNoticeText.contains('GNU GENERAL PUBLIC LICENSE')
-assert latexNoticeText.contains('either version 2 of the License, or (at your option) any later version')
+assert latexNoticeText.contains('either version 2 of the License, or')
+assert latexNoticeText.contains('(at your option) any later version')
 assert latexNoticeText.contains('As a special exception')
 ```
 
 `latexNotice` is a distinct name because the existing GraphStream block already declares `final String notice`
-inside its own scope (`build.gradle:96`); the GraphStream assertions stay unchanged (R5). The three asserted
-phrases are literal text of the jar's own `META-INF/LICENSE` and `META-INF/COPYING`; the notice describes the
-GPL-with-classpath-exception arrangement in its own words rather than asserting a phrase the jar does not contain
-(R6).
+inside its own scope (`build.gradle:96`); the GraphStream assertions stay unchanged (R5). Every asserted phrase is
+literal text of the jar's own `META-INF/COPYING` or `META-INF/LICENSE`. The version wording is split into two
+assertions because the archive wraps it across lines 15 and 16, so no contiguous sentence exists (Z6); the notice
+describes the GPL-with-classpath-exception arrangement in its own words.
 
 `src/main/resources/META-INF/NOTICE.jlatexmath.txt` records: the coordinate and SHA-256 above; that the archive is
 GPL version 2 or later with a special linking exception, quoting the jar; and one line per bundled font family
@@ -637,7 +653,6 @@ public domain for `stmary10`/`rsfs10`, GPL version 2 for the Greek fonts), point
 | budget exhausted | deferred `DEGRADED`, queued, never retained, one follow-up request |
 | pass deferred work and measured nothing | `FORMULA_MEASUREMENT_STALL`, no further request, degraded for that generation |
 | non-invertible or non-finite base transform | `IllegalArgumentException("base transform must be invertible")` before drawing |
-| row geometry disagrees with the label box | `IllegalArgumentException("title row geometry must match the label")` |
 | rendered measurement loses its icon at resolution | `IllegalStateException("rendered measurement lost its icon")` |
 
 Existing tests that must pass unmodified (only the three `PlacedLabel` call sites gain the row argument):
