@@ -2,7 +2,7 @@
 
 Task identifier: `2026-11-03-graph-latex-titles`
 
-Status: **design draft, revision 8, for the design-continuation gate.** The user answered the collaborative design gate with
+Status: **design draft, revision 9, for the design-continuation gate.** The user answered the collaborative design gate with
 "as proposed", accepting the four decisions recorded in section 2. Section 12 lists the questions this revision
 puts to the reviewer.
 
@@ -49,11 +49,18 @@ Revision history:
   discovering pass"; invariant 8 states that a terminal measurement is not a promise of typeset rendering, since
   an over-width formula still degrades; the invariant's test references name the section 8 rows instead of the
   retired T-identifiers; and the risk section no longer claims an idempotence test.
-- r8 (this revision) — closes the three residual contradictions the verification pass found in r7: the budget rule
+- r8 — closes the three residual contradictions the verification pass found in r7: the budget rule
   no longer excludes the discovering pass from being a deferring pass and defines `T` (all keys in the generation)
   separately from the `N` used in the follow-up bound; the deferral and terminal-measurement promises are
   qualified by the two states that legitimately end a queue, the stall diagnostic and a projection generation
   change; and invariant 7 names the three cache tests that falsify it instead of miscounting them.
+- r9 (this revision) — authorises the paint-ready row. The specification showed that a screen-pixel row cannot
+  reproduce the existing plain drawing, because the plain paint font is clamped to one point
+  (`GraphPainter.java:281-282`); a screen-pixel row scaled by zoom would have to reproduce a world-unit measurement
+  that the clamp makes non-linear in zoom. `TitleRow` therefore carries paint-unit geometry and, for each plain
+  run, the derived font it was measured with, and `TitlePainter` drops its `Font` parameter accordingly.
+  `PlacedLabel`'s screen-pixel geometry, the slot caps, the ladder, the parser, the queue and the bundle gate are
+  unchanged.
 
 ## 1. Reported need
 
@@ -367,14 +374,22 @@ The placer produces a `TitleRow` — the resolved, measured row that the painter
 public final class TitleRow {
     public enum Form { RENDERED, DEGRADED }
     Form form();
-    List<RunRow> runs();            // left-to-right, offsets in screen px
-    double width(), height(), ascent(), descent();
+    List<RunRow> runs();            // left-to-right, offsets in paint units
+    double width(), height(), ascent(), descent();   // paint units
     boolean deferredForBudget();
 }
 public interface RunRow { double x(), width(); }
-public final class PlainRunRow implements RunRow { String text; ... }
+public final class PlainRunRow implements RunRow { String text; Font worldFont; double ascent, descent; ... }
 public final class MathRunRow implements RunRow { String source; TeXIcon icon; double ascent, descent; ... }
 ```
+
+**Paint units, not screen pixels.** `PlacedLabel` keeps its existing screen-pixel `width`/`height`, which the
+placement maths and the slot caps use unchanged. `TitleRow` is a separate *paint-ready* structure whose numbers are
+in the coordinate space the painter draws in, because the plain paint font is
+`deriveFont(Math.max(1.0f, size / zoom))` (`GraphPainter.java:281-282`) and that clamp means no screen-pixel row can
+reproduce today's plain drawing at high zoom. `PlainRunRow` therefore carries the derived font it was measured with,
+and a plain run's ascent, descent and baseline offset come from that font's `LineMetrics` — including its leading —
+so a plain-only row lands exactly where `drawCentered` puts it today.
 
 `PlacedLabel` carries the `TitleRow` alongside its existing fields. A `MathRunRow` holds a **strong reference to
 its `TeXIcon`**, so the row stays complete for as long as it is placed and icon-cache eviction cannot affect it.
@@ -382,8 +397,9 @@ its `TeXIcon`**, so the row stays complete for as long as it is placed and icon-
 never consults `FormulaIcons`.** That makes invariant 6 structural rather than a promise.
 
 `GraphPainter.drawCentered` is replaced by
-`TitlePainter.paint(Graphics2D g, TitleRow row, Font logicalFont, double worldX, double worldY, double zoom,
-Color color, AffineTransform baseTransform)`.
+`TitlePainter.paint(Graphics2D g, TitleRow row, double worldX, double worldY, double zoom, Color color,
+AffineTransform baseTransform)`. The painter takes no `Font`: every font it needs is carried by the row, so it
+cannot measure anything.
 
 **Coordinate contract.** Two transforms exist and the design names both:
 
