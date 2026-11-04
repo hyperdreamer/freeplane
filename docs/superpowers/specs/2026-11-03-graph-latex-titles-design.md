@@ -2,7 +2,7 @@
 
 Task identifier: `2026-11-03-graph-latex-titles`
 
-Status: **design draft, revision 6, for frontier review.** The user answered the collaborative design gate with
+Status: **design draft, revision 7, for frontier review.** The user answered the collaborative design gate with
 "as proposed", accepting the four decisions recorded in section 2. Section 12 lists the questions this revision
 puts to the reviewer.
 
@@ -35,7 +35,7 @@ Revision history:
   bound holds as written, and `FORMULA_MEASUREMENT_STALL` becomes a defensive diagnostic rather than a reachable
   steady state. Nothing else changes: the icon cache stays fixed at 512 because icons are rebuildable, and the
   budget, retention rule, ladder and painting contract are untouched.
-- r6 (this revision) — applies the focused review of r5. The follow-up condition is now "the pass deferred at
+- r6 — applies the focused review of r5. The follow-up condition is now "the pass deferred at
   least one key" instead of "the queue was non-empty when the pass began", which fixes the reachable case where a
   first pass discovers more work than its budget and nothing follows it up; the stall condition is correspondingly
   "a pass that deferred work measured nothing". Deferral is specified as an eventual promise bounded by the queue,
@@ -43,6 +43,12 @@ Revision history:
   eviction now rebuilds the icon from the cached measurement instead of re-enqueueing the key, which r5's
   no-reentry rule forbids. The memory paragraph names the form flag in the key, counts icons retained by live
   rows, and states plainly that a pathological projection can exhaust the heap rather than implying a bound.
+- r7 (this revision) — applies the second focused review's consistency findings: the follow-up and stall
+  predicates are written as one formula with stall precedence and invariant 7 now mirrors it; the pass-count
+  terminology distinguishes measurement passes from deferring passes and defines N as "unmeasured after the
+  discovering pass"; invariant 8 states that a terminal measurement is not a promise of typeset rendering, since
+  an over-width formula still degrades; the invariant's test references name the section 8 rows instead of the
+  retired T-identifiers; and the risk section no longer claims an idempotence test.
 
 ## 1. Reported need
 
@@ -416,8 +422,10 @@ Two caches with different jobs, because one cannot do both:
 Rules:
 
 - The **build budget** `MAX_NEW_ICONS_PER_PASS = 200` counts *keys measured* per placement pass — not paints,
-  not cache hits, and not queue entries that are already served from the measurement cache. A map with N distinct
-  `(source, font)` titles therefore needs `ceil(N / 200)` deferring passes before the queue is empty.
+  not cache hits, and not queue entries that are already served from the measurement cache. A generation with N
+  distinct `(title, font)` keys therefore needs `ceil(N / 200)` measurement passes: one discovering pass plus
+  `ceil(N / 200) - 1` follow-ups. Only the follow-ups can be deferring passes, and a batch smaller than the budget
+  produces none.
 - When the budget is exhausted, the remaining math titles are measured as `DEGRADED` **with
   `deferredForBudget = true`**, which section 4.4 distinguishes from a genuine unrenderable verdict.
 - **Retention must not pin a deferred face.** `ScreenLabelPlacement.retained` (`:451-500`) keeps a remembered
@@ -434,13 +442,19 @@ Rules:
 - **Convergence and termination.** `ScreenLabelPlacementCache.place` reports `budgetExhaustedInLastPass()`. The
   cache sets a one-shot `followUpPending` flag and `GraphCanvas.labelsFor` posts exactly one `repaint()`. The
   follow-up is a cache miss because the cache's `Key` includes a `passEpoch` that the exhaustion increments.
-- **Scheduling and stall.** A follow-up is scheduled whenever a pass **deferred at least one key**, whether or not
-  the queue held work when the pass began, so a first pass that discovers more work than its budget can be
-  followed up. The chain stops when a pass defers nothing, or when a pass that deferred work measured **zero**
-  keys — the latter is `FORMULA_MEASUREMENT_STALL`, a defensive diagnostic reachable only with a zero budget or a
-  broken engine, because a positive budget with no eviction inside a generation always measures at least
-  `min(budget, deferred count)` keys. With no re-entry within a generation, a stable generation with N outstanding
-  keys completes in `ceil(N / budget)` measurement passes after the discovering pass.
+- **Scheduling and stall.** The chain is driven by one predicate with stall precedence:
+
+  ```text
+  followUp = deferredThisPass > 0 && measuredThisPass > 0
+  stall    = deferredThisPass > 0 && measuredThisPass == 0
+  ```
+
+  A follow-up is therefore scheduled whether or not the queue held work when the pass began, so a first pass
+  that discovers more work than its budget is followed up. `stall` is `FORMULA_MEASUREMENT_STALL`: a defensive
+  diagnostic reachable only with a zero budget or a broken engine, because a positive budget with no eviction
+  inside a generation always measures at least `min(budget, deferred count)` keys. With no re-entry within a
+  generation, a stable generation with N keys still unmeasured **after** the discovering pass completes in
+  `ceil(N / budget)` further passes.
 - Memory is projection-dependent rather than constant: the measurement cache holds one entry per distinct
   `(title, font, form)` key in the generation, the queue holds at most that many pending keys, and each live
   `PlacedLabel` row additionally retains the icons of its formula runs, so the 512-entry icon cache bounds
@@ -501,13 +515,15 @@ Stated once, because it is user-visible and section 3.3 removed the claim that b
 6. The painter consumes the resolved `TitleRow`: it never re-measures, never re-decides availability, never
    chooses between rendered and degraded forms, and never reads the icon cache.
 7. Measurement progress is bounded and terminates without a capacity cliff: at most `MAX_NEW_ICONS_PER_PASS` keys
-   are measured per pass, no measured key re-enters the queue within a generation, every deferring pass is
-   followed up, and a stable generation with N outstanding keys completes in `ceil(N / budget)` passes after the
-   discovering pass. `FORMULA_MEASUREMENT_STALL` is reserved for the defensive case where a pass that deferred work
-   measured nothing. Falsified by T7, T7b and T7c.
-8. A budget-deferred label is never retained, and it reaches a terminal measurement within the queue's remaining
-   batches — not necessarily on the next pass. When the engine accepts the formula that terminal measurement
-   renders the icon; when it rejects it, the terminal result is degraded.
+   are measured per pass, no measured key re-enters the queue within a generation, and the follow-up predicate of
+   section 4.6 holds exactly — `followUp = deferred > 0 && measured > 0`, with `stall` taking precedence when
+   `deferred > 0 && measured == 0`. A stable generation with N keys still unmeasured after the discovering pass
+   completes in `ceil(N / budget)` further passes. Falsified by the two cache tests named in section 8, rows 7
+   and 8.
+8. A budget-deferred label is never retained, and it reaches a **terminal measurement** within the queue's
+   remaining batches — not necessarily on the next pass. Terminal measurement is not a promise that the label is
+   drawn typeset: an engine rejection makes the terminal result degraded, and an accepted formula whose width
+   exceeds the slot is still degraded by section 4.4 rule 2. The promise is that the label is no longer deferred.
 9. The bundle gate passes with the new jar: pinned checksums, exact `Bundle-ClassPath`, no
    `Import-Package`/`Export-Package`, class major `<= 52`.
 
@@ -647,7 +663,7 @@ command as it stands can pass with formula rendering disabled — that gap is cl
    set.
 2. **Two coordinate spaces in one painter.** The base/world contract of section 4.5 is the part most likely to
    regress silently, because a wrong choice only shows on a scaled display or as a double-applied offset.
-   `TitlePainterShould` covers the non-identity transform and the idempotence case.
+   `TitlePainterShould` covers the non-identity transform and asserts an absolute expected paint position.
 3. **Wholesale degradation in a truncating rung.** A slightly over-wide label loses all of its icons at once
    rather than keeping the leading ones. This is deliberate (section 4.4) and the alternative is cutting a
    control sequence. It is listed because users will notice the visual discontinuity between the `FULL` and
