@@ -2,7 +2,7 @@
 
 Task identifier: `2026-11-03-graph-latex-titles`
 
-Status: **design draft, revision 3, for frontier review.** The user answered the collaborative design gate with
+Status: **design draft, revision 5, for frontier review.** The user answered the collaborative design gate with
 "as proposed", accepting the four decisions recorded in section 2. Section 12 lists the questions this revision
 puts to the reviewer.
 
@@ -13,7 +13,7 @@ Revision history:
 
 - r1 — first complete design.
 - r2 — applied review round 1 (F1–F8).
-- r3 (this revision) — applies review round 2. F2 and F4 were judged not resolved and are corrected here:
+- r3 — applies review round 2. F2 and F4 were judged not resolved and are corrected here:
   invariant 5 is now scoped to ladder candidates (the retained face after demotion legitimately exceeds the cap),
   and the math-run transform now applies the base transform exactly once. Four new blocking findings are
   answered: N1 gives budget deferral its own recorded state so a retained truncated face cannot pin a deferred
@@ -21,12 +21,20 @@ Revision history:
   contract; N3 makes the placer produce a resolved row that the painter consumes without re-deciding anything;
   N4 corrects the baseline unit error (`getBaseLine()` is a ratio, not pixels). N5 adds the test and evidence
   files to the change set; N6 swaps the two font-pack sizes.
-- r4 (this revision) — applies review round 3. F2's remaining test wording is corrected; N2 (round 2) is answered
-  with a deferred queue so cache capacity can never block progress; N3 (round 2) removes the paint-time icon
-  lookup that contradicted the resolved-row contract; and the four round-3 findings are applied: the measurement
-  key now includes the logical font, the plain-run font derivation keeps the existing `Math.max(1.0f, …)` clamp,
-  the "no file outside the module changes" claim is narrowed to production source, and the transform test asserts
-  an absolute expected position instead of repaint idempotence.
+- r4 — applies review round 3: F2's remaining test wording is corrected; N2 (round 2) is answered with a deferred
+  queue so cache capacity can never block progress; N3 (round 2) removes the paint-time icon lookup that
+  contradicted the resolved-row contract; and the four round-3 findings are applied — the measurement key now
+  includes the logical font, the plain-run font derivation keeps the existing `Math.max(1.0f, …)` clamp, the "no
+  file outside the module changes" claim is narrowed to production source, and the transform test asserts an
+  absolute expected position instead of repaint idempotence.
+- r5 (this revision) — removes the fixed 8192-entry capacity from the measurement memo and scopes it to the
+  projection generation instead. Review of the derived specification showed that a fixed capacity reintroduces a
+  regime where a drained key can be evicted and return to the queue, which makes the termination bound in section
+  4.6 false; that section's claim that "cache capacity therefore cannot stall the queue" was therefore not true of
+  the r4 mechanism. With no eviction inside a generation the queue drains monotonically, the `ceil(N / budget)`
+  bound holds as written, and `FORMULA_MEASUREMENT_STALL` becomes a defensive diagnostic rather than a reachable
+  steady state. Nothing else changes: the icon cache stays fixed at 512 because icons are rebuildable, and the
+  budget, retention rule, ladder and painting contract are untouched.
 
 ## 1. Reported need
 
@@ -281,12 +289,13 @@ Rules:
   engine throws, when the icon's metrics are non-finite or not strictly positive, or when the icon height exceeds
   `2.0 ×` the plain line height of the font. `MeasuredTitle` never carries a non-finite number, and
   `availability()` is the only channel for the unrenderable verdict.
-- **Memoization.** `MeasuredTitle` is memoized by `(source-key, logical font, form flag)` in a compact bounded
-  map with capacity 8192, where `logical font` is the full `Font` identity — family, style and `getSize2D()` — not
-  the rounded icon pixel size. The plain runs' widths and the `2.0 ×` line-height threshold both depend on that
-  font, and `LabelFonts.of(Font, Font, Font)` accepts arbitrary faces, so a key without it would return one
-  face's numbers for another. No icon is retained in the measurement cache. The *icon* key stays narrower,
-  `(source, px, style)`, because an icon depends only on the formula and its pixel size (section 4.6).
+- **Memoization.** `MeasuredTitle` is memoized by `(source-key, logical font, form flag)` in a map scoped to the
+  current projection generation and cleared when that generation changes. `logical font` is the full `Font`
+  identity — family, style and `getSize2D()` — not the rounded icon pixel size. The plain runs' widths and the
+  `2.0 ×` line-height threshold both depend on that font, and `LabelFonts.of(Font, Font, Font)` accepts arbitrary
+  faces, so a key without it would return one face's numbers for another. No icon is retained in the measurement
+  cache. The *icon* key stays narrower, `(source, px, style)`, because an icon depends only on the formula and its
+  pixel size (section 4.6).
 
 `ScreenLabelPlacement` keeps its package-visible `screenBounds` for plain-only paths and gains the injected
 measurement service for the title-measuring call sites. `screenBounds(String, Font)` and `textWidth(String, Font)`
@@ -392,7 +401,7 @@ Two caches with different jobs, because one cannot do both:
 
 | Cache | Contents | Capacity | Purpose |
 | --- | --- | --- | --- |
-| measurement cache | `MeasuredTitle` numbers + availability, no icons | 8192 | supplies cached numbers; progress is tracked separately by the deferred queue |
+| measurement cache | `MeasuredTitle` numbers + availability, no icons | none fixed; cleared when the projection generation changes | supplies cached numbers; progress is tracked separately by the deferred queue |
 | icon cache | `TeXIcon` per `(source, px, style)`, plus cached failures | 512, LRU | supplies icons during measurement; a placed row keeps its own reference afterwards |
 
 Rules:
@@ -410,18 +419,21 @@ Rules:
   retention is untouched, which keeps `ScreenLabelLiveTitleRefreshShould` meaningful.
 - **Progress is tracked by a queue, not by the cache.** `ScreenLabelPlacement` keeps a deferred queue of keys
   that belong to the current projection generation and still need measurement. A pass drains the queue in order,
-  measuring up to `MAX_NEW_ICONS_PER_PASS` keys and removing each measured key **whether or not its cache entry
-  later survives eviction**. Cache capacity therefore cannot stall the queue: an evicted key may be measured
-  again in a later pass, which costs work but never blocks the drain.
+  measuring up to `MAX_NEW_ICONS_PER_PASS` keys and removing each measured key. The measurement cache has no
+  fixed capacity and no eviction within a generation, so a drained key can never return to the queue, and cache
+  size can never stall the drain.
 - **Convergence and termination.** `ScreenLabelPlacementCache.place` reports `budgetExhaustedInLastPass()`. The
   cache sets a one-shot `followUpPending` flag and `GraphCanvas.labelsFor` posts exactly one `repaint()`. The
   follow-up is a cache miss because the cache's `Key` includes a `passEpoch` that the exhaustion increments. A
-  follow-up is scheduled only when a pass deferred work **and** drained at least one key from the queue; a pass
-  that drains none stops the chain and is recorded as `FORMULA_MEASUREMENT_STALL`. Because every deferring pass
-  removes at least `min(budget, queue length)` keys from a finite queue, the chain terminates in at most
-  `ceil(N / budget)` follow-ups for N outstanding keys, including when N exceeds the cache capacity.
-- Memory is bounded: 8192 measurement entries and 512 icons are both fixed, and the deferred queue is bounded by
-  the number of distinct titles in the current projection.
+  follow-up is scheduled only when a pass deferred work **and** drained at least one key from a queue that was
+  non-empty when the pass began; a pass that began with outstanding keys and drained none stops the chain and is
+  recorded as `FORMULA_MEASUREMENT_STALL`. Because no key can re-enter the queue within a generation and every
+  deferring pass removes at least `min(budget, queue length)` keys, the chain terminates in at most
+  `ceil(N / budget)` follow-ups for N outstanding keys, and the stall state is a defensive diagnostic that a
+  correct run does not reach.
+- Memory is bounded by the current projection rather than by a constant: the measurement cache holds one entry
+  per distinct `(title, font)` in the generation, the icon cache is fixed at 512 rebuildable entries, and the
+  queue is bounded by the same distinct-title count.
 
 ### 4.7 Bundle and licence
 
@@ -475,10 +487,10 @@ Stated once, because it is user-visible and section 3.3 removed the claim that b
    (section 3.5). Formula rendering neither narrows nor widens those exceptions.
 6. The painter consumes the resolved `TitleRow`: it never re-measures, never re-decides availability, never
    chooses between rendered and degraded forms, and never reads the icon cache.
-7. Measurement progress is bounded and terminates: at most `MAX_NEW_ICONS_PER_PASS` keys are measured per pass,
-   each deferring pass drains at least one key from a finite per-generation queue, and the follow-up chain ends
-   in at most `ceil(N / budget)` passes — or with `FORMULA_MEASUREMENT_STALL` when a pass drains nothing — even
-   when the outstanding key count exceeds the measurement-cache capacity.
+7. Measurement progress is bounded and terminates without a capacity cliff: at most `MAX_NEW_ICONS_PER_PASS` keys
+   are measured per pass, no measured key re-enters the queue within a generation, and the follow-up chain ends in
+   at most `ceil(N / budget)` passes with `FORMULA_MEASUREMENT_STALL` reserved for the defensive case where a pass
+   that began with outstanding keys drains none. Falsified by T7, T7b and T7c.
 8. A budget-deferred label is never retained; the next pass recomputes it, and an unchanged follow-up request
    renders the icon it deferred.
 9. The bundle gate passes with the new jar: pinned checksums, exact `Bundle-ClassPath`, no
@@ -495,7 +507,7 @@ Production files:
 | `projection/input/SafeNodeLabel.java` | add derived `title()`; existing constructor and equality unchanged |
 | `adapter/SafeNodeLabelExtractor.java` | compute the math-signal flag from `NodeStyleModel.getNodeFormat` and the `\latex`/`\unparsedlatex` prefix, then pass it to the parser |
 | `canvas/title/MeasuredTitle.java`, `MeasuredRun.java` | new measurement result: numbers and availability only, no icons |
-| `canvas/title/TitleMeasurer.java` | new measurement service with the compact 8192-entry memo (section 4.3) |
+| `canvas/title/TitleMeasurer.java` | new measurement service with a generation-scoped memo, budget and queue (section 4.3) |
 | `canvas/title/FormulaIcons.java` | new 512-entry LRU icon cache with failure memoization |
 | `canvas/title/TitleRow.java`, `RunRow.java`, `PlainRunRow.java`, `MathRunRow.java` | new resolved row the painter consumes |
 | `canvas/title/TitleTruncation.java` | rendered/degraded form selection and degraded-row truncation (section 4.4) |
@@ -560,7 +572,7 @@ fails if the invariant is removed.
 | 4 | `TitleMeasurerShould.rejectsNonFiniteAndNonPositiveIconMetrics` and `rejectsFormulaTallerThanTwiceTheLineHeight` |
 | 5 | `ScreenLabelPlacementShould.formulaCandidateRespectsItsSlotLimit` plus the two existing over-cap tests, unchanged |
 | 6 | `TitlePainterShould.painterConsumesTheResolvedRowWithoutMeasuring` (a measurer and an icon service that both throw if touched during paint) |
-| 7 | `ScreenLabelPlacementCacheShould.convergesAcrossFollowUps`, `convergesWhenKeysExceedMeasurementCacheCapacity` with 20000 keys against the 8192 bound, and `stallsOnlyWhenAPassDrainsNothing` |
+| 7 | `ScreenLabelPlacementCacheShould.convergesAcrossFollowUps`, `convergesBeyondAnyFixedCacheSize` with 20000 keys, and `stallsOnlyWhenAPassThatBeganWithOutstandingKeysDrainsNothing` |
 | 8 | `ScreenLabelPlacementCacheShould.deferredFollowUpRendersTheIconItDeferred` and `ScreenLabelPlacementShould.doesNotRetainABudgetDeferredFace` |
 | 9 | `verifyGraphBundle`, plus `graphBundleGateFailsWhenTheFormulaJarIsDropped` as a deliberate mutation of the pinned set |
 
@@ -589,8 +601,8 @@ Additional new tests:
   through the same ladder a plain over-long title does, and **every ladder candidate** stays within
   `slotMaxWidth`; a retained face and a forced `baseSlot` face keep their documented exemptions.
 - `canvas/ScreenLabelPlacementCacheShould` (new) — `followUpPassIsACacheMissExactlyOnce`; `convergesAcrossFollowUps`
-  with 1000 distinct formula keys against a 200 budget and a 512 icon cache; `convergesWhenKeysExceedMeasurementCacheCapacity`
-  with 20000 keys against the 8192 measurement bound, asserting the queue drains and no further follow-up is
+  with 1000 distinct formula keys against a 200 budget and a 512 icon cache; `convergesBeyondAnyFixedCacheSize`
+  with 20000 keys, asserting every key is measured, the queue drains, and no further follow-up is requested;
   requested; `stallsOnlyWhenAPassDrainsNothing`.
 - `canvas/GraphCanvasPaintShould` (extend) — plain-title `drawString` capture is identical to the baseline; a
   math run paints at the shared baseline; the dimming composite applies to formula runs; a forced hover label
@@ -665,8 +677,10 @@ continues to read `$N$ is well-ordered by $\in$` verbatim, which is the same str
 
 ## 12. Questions carried to the design-continuation gate
 
-Review rounds 1–3 raised 12 blocking and 6 non-blocking findings; every one was verified against source before it
-was acted on. Round 3's answers settled three design choices, recorded here so they are not reopened: wholesale
+Design review rounds 1–3 raised 12 blocking and 6 non-blocking findings; every one was verified against source
+before it was acted on. Revision r5 is a self-amendment raised while specifying r4: the specification review showed
+that r4's fixed measurement-cache capacity reintroduced the eviction regime that r4's own termination argument
+depends on, so the memo is now scoped to the projection generation and the bound holds without a capacity cliff. Round 3's answers settled three design choices, recorded here so they are not reopened: wholesale
 degradation in a truncating rung is consistent with D3 and D4; excluding only `deferredForBudget` rows from
 retention is narrow enough to preserve the plain-label retention contract; and the base transform belongs in a
 carrier captured before the world transform is concatenated.
