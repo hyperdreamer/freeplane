@@ -31,6 +31,7 @@ import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.workspace.model.MapReferenceId;
 import org.freeplane.plugin.graph.workspace.model.NodeReference;
 import org.freeplane.plugin.graph.workspace.model.PersistedNodeId;
+import org.freeplane.plugin.graph.canvas.title.TitleRow;
 import org.junit.Test;
 
 public class ScreenLabelLiveTitleRefreshShould {
@@ -107,7 +108,7 @@ public class ScreenLabelLiveTitleRefreshShould {
         return new PlacedLabel(endpoint, text, font, PlacedLabel.Mode.INTERIOR, rung,
             anchor[0], anchor[1], size.getWidth(), size.getHeight(), !text.equals(source), source,
             request.forced().contains(endpoint), false, forcedAtBaseSlot, false,
-            Optional.<LeaderLine>empty(), slot);
+            Optional.<LeaderLine>empty(), slot, TitleRow.plain(text, font, request.zoom()));
     }
 
     private static void assertSamePlacement(final PlacedLabel actual, final PlacedLabel expected) {

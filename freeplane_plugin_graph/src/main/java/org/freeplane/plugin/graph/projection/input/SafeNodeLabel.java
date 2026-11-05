@@ -5,14 +5,24 @@ import java.util.Objects;
 public final class SafeNodeLabel {
     private final String fullText;
     private final String displayText;
+    private final TitleText title;
 
-    private SafeNodeLabel(final String fullText, final String displayText) {
+    private SafeNodeLabel(final String fullText, final String displayText, final TitleText title) {
         this.fullText = requireText(fullText, "full");
         this.displayText = requireText(displayText, "display");
+        this.title = Objects.requireNonNull(title, "title");
     }
 
     public static SafeNodeLabel of(final String full, final String display) {
-        return new SafeNodeLabel(full, display);
+        return new SafeNodeLabel(full, display, TitleText.plain(display));
+    }
+
+    public static SafeNodeLabel of(final String full, final String display, final TitleText title) {
+        return new SafeNodeLabel(full, display, title);
+    }
+
+    public TitleText title() {
+        return title;
     }
 
     public String fullText() {

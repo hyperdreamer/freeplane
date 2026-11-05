@@ -96,6 +96,7 @@ import org.freeplane.plugin.graph.workspace.model.UnknownXml;
 import org.freeplane.plugin.graph.workspace.model.DisplaySettings.CanvasTheme;
 import org.junit.After;
 import org.junit.Before;
+import org.freeplane.plugin.graph.canvas.title.TitleRow;
 import org.junit.Test;
 import org.mockito.MockedStatic;
 import org.mockito.invocation.InvocationOnMock;
@@ -1919,7 +1920,8 @@ public class GraphCanvasPaintShould {
         PlacedLabel hidden = new PlacedLabel(above.endpoint(), above.text(), above.font(),
             PlacedLabel.Mode.HOVER_ONLY, PlacedLabel.Rung.HOVER_ONLY, above.anchorX(), above.anchorY(),
             above.width(), above.height(), false, above.text(), false, false, false, false,
-            Optional.<LeaderLine>empty(), ScreenLabelPlacement.Slot.ABOVE);
+            Optional.<LeaderLine>empty(), ScreenLabelPlacement.Slot.ABOVE,
+            TitleRow.plain(above.text(), above.font(), 1.0));
         BufferedImage base = paintPlaced(state, Collections.<PlacedLabel>emptyList(), lightTheme(), 1.0,
             new Dimension(1128, 364), GraphPaintState.empty());
         BufferedImage image = paintPlaced(state, Collections.singletonList(hidden), lightTheme(), 1.0,
@@ -1976,7 +1978,8 @@ public class GraphCanvasPaintShould {
         PlacedLabel previous = new PlacedLabel(ProjectedEndpointKey.ofNode(node.key()),
             node.label().displayText(), font, PlacedLabel.Mode.INTERIOR, PlacedLabel.Rung.FULL_DISPLACED,
             0, 0, bounds.getWidth(), bounds.getHeight(), false, node.label().displayText(),
-            false, false, false, false, Optional.<LeaderLine>empty(), slot);
+            false, false, false, false, Optional.<LeaderLine>empty(), slot,
+            TitleRow.plain(node.label().displayText(), font, zoom));
         LabelPlacementRequest request = LabelPlacementRequest.of(state.projection(), state.geometry(),
             state.layout().positions(), zoom, 0, 0, new Rectangle2D.Double(0, 0, 1128, 364),
             Collections.<ProjectedEndpointKey>emptySet(), RenderingLevel.FULL);

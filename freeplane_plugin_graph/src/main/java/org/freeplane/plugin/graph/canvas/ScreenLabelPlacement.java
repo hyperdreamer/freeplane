@@ -23,6 +23,7 @@ import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
+import org.freeplane.plugin.graph.canvas.title.TitleRow;
 
 public final class ScreenLabelPlacement {
     static final double SLOT_GAP = 6.0;
@@ -217,7 +218,7 @@ public final class ScreenLabelPlacement {
         }
         context.obstacles.add(candidate);
         return enclosureLabel(endpoint, text, font, PlacedLabel.Mode.INTERIOR, PlacedLabel.Rung.FULL_NEAR,
-            anchorX, anchorY, size, forced, false, Optional.<LeaderLine>empty());
+            anchorX, anchorY, size, forced, false, Optional.<LeaderLine>empty(), context.request.zoom());
     }
 
     private static PlacedLabel arcEnclosureLabel(final Context context,
@@ -266,7 +267,8 @@ public final class ScreenLabelPlacement {
                     && !intersectsAny(context.obstacles, candidate)) {
                 context.obstacles.add(candidate);
                 return enclosureLabel(endpoint, text, font, PlacedLabel.Mode.ARC, PlacedLabel.Rung.FULL_NEAR,
-                    anchorX, anchorY, size, forced, false, Optional.<LeaderLine>empty());
+                    anchorX, anchorY, size, forced, false, Optional.<LeaderLine>empty(),
+                    context.request.zoom());
             }
         }
         return null;
@@ -305,7 +307,8 @@ public final class ScreenLabelPlacement {
                     context.obstacles.add(candidate);
                     return enclosureLabel(endpoint, text, font, PlacedLabel.Mode.EXTERNAL,
                         PlacedLabel.Rung.FULL_NEAR, anchorX, anchorY, size, forced, false,
-                        leader(boundaryStart, anchorX, anchorY, size.getWidth(), size.getHeight()));
+                        leader(boundaryStart, anchorX, anchorY, size.getWidth(), size.getHeight()),
+                        context.request.zoom());
                 }
                 if (!emphatic && total >= SUBTLE_EXTERNAL_CANDIDATE_BUDGET) {
                     return null;
@@ -327,19 +330,24 @@ public final class ScreenLabelPlacement {
         if (emphatic) {
             return enclosureLabel(endpoint, text, font, PlacedLabel.Mode.INTERIOR,
                 PlacedLabel.Rung.FULL_NEAR, anchorX, anchorY, size, forced, true,
-                Optional.<LeaderLine>empty());
+                Optional.<LeaderLine>empty(), context.request.zoom());
         }
         return enclosureLabel(endpoint, text, font, PlacedLabel.Mode.HOVER_ONLY,
             PlacedLabel.Rung.HOVER_ONLY, anchorX, anchorY, size, forced, false,
-            Optional.<LeaderLine>empty());
+            Optional.<LeaderLine>empty(), context.request.zoom());
     }
 
     private static PlacedLabel enclosureLabel(final ProjectedEndpointKey endpoint, final String text,
             final Font font, final PlacedLabel.Mode mode, final PlacedLabel.Rung rung, final double anchorX,
             final double anchorY, final Rectangle2D size, final boolean forced,
-            final boolean emphaticAtAnchor, final Optional<LeaderLine> leader) {
+            final boolean emphaticAtAnchor, final Optional<LeaderLine> leader, final double zoom) {
         return new PlacedLabel(endpoint, text, font, mode, rung, anchorX, anchorY, size.getWidth(),
-            size.getHeight(), false, text, forced, emphaticAtAnchor, false, false, leader, Slot.ABOVE);
+            size.getHeight(), false, text, forced, emphaticAtAnchor, false, false, leader, Slot.ABOVE,
+            plainRow(text, font, zoom));
+    }
+
+    private static TitleRow plainRow(final String text, final Font font, final double zoom) {
+        return TitleRow.plain(text, font, zoom);
     }
 
     private static List<LayoutPoint> screenPolygon(final Context context, final HullGeometry hull) {
@@ -491,7 +499,8 @@ public final class ScreenLabelPlacement {
             context.obstacles.add(box);
             return new PlacedLabel(previous.endpoint(), text, font, previous.mode(), rememberedRow.rung,
                 anchor[0], anchor[1], size.getWidth(), size.getHeight(), truncated, source, forced,
-                previous.emphaticAtAnchor(), false, false, leader, slot);
+                previous.emphaticAtAnchor(), false, false, leader, slot,
+                plainRow(text, font, context.request.zoom()));
         }
         for (final LadderRung row : LADDER) {
             if (row.far != far || (forced && row.rung != PlacedLabel.Rung.FULL_NEAR
@@ -518,7 +527,8 @@ public final class ScreenLabelPlacement {
             context.obstacles.add(box);
             return new PlacedLabel(previous.endpoint(), text, font, previous.mode(), row.rung,
                 anchor[0], anchor[1], size.getWidth(), size.getHeight(), truncated, source, forced,
-                previous.emphaticAtAnchor(), false, false, leader, slot);
+                previous.emphaticAtAnchor(), false, false, leader, slot,
+                plainRow(text, font, context.request.zoom()));
         }
         return null;
     }
@@ -565,7 +575,8 @@ public final class ScreenLabelPlacement {
                     rung.rung, anchor[0], anchor[1], size.getWidth(), size.getHeight(),
                     truncated, fullText, forced, false, false,
                     fullTextWasFree, nodeLeader(slot, centerX, centerY, radius, anchor[0], anchor[1],
-                        size.getWidth(), size.getHeight()), slot);
+                        size.getWidth(), size.getHeight()), slot,
+                    plainRow(candidateText, font, context.request.zoom()));
             }
         }
         return null;
@@ -665,7 +676,8 @@ public final class ScreenLabelPlacement {
         context.obstacles.add(candidate);
         return new PlacedLabel(endpoint, fullText, font, PlacedLabel.Mode.INTERIOR,
             PlacedLabel.Rung.FULL_NEAR, anchor[0], anchor[1], size.getWidth(), size.getHeight(),
-            false, fullText, forced, false, true, false, Optional.<LeaderLine>empty(), Slot.ABOVE);
+            false, fullText, forced, false, true, false, Optional.<LeaderLine>empty(), Slot.ABOVE,
+            plainRow(fullText, font, context.request.zoom()));
     }
 
     private static PlacedLabel hoverOnly(final Context context, final ProjectedNodeKey key,
@@ -676,7 +688,8 @@ public final class ScreenLabelPlacement {
             context.radius(key), size.getWidth(), size.getHeight());
         return new PlacedLabel(endpoint, fullText, font, PlacedLabel.Mode.HOVER_ONLY,
             PlacedLabel.Rung.HOVER_ONLY, anchor[0], anchor[1], size.getWidth(), size.getHeight(),
-            false, fullText, false, false, false, false, Optional.<LeaderLine>empty(), Slot.ABOVE);
+            false, fullText, false, false, false, false, Optional.<LeaderLine>empty(), Slot.ABOVE,
+            plainRow(fullText, font, context.request.zoom()));
     }
 
     private static List<PlacedLabel> filterByLevel(final LabelPlacementRequest request,

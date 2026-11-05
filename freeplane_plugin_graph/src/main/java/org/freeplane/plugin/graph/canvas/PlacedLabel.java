@@ -34,13 +34,15 @@ public final class PlacedLabel {
     private final boolean fullTextSlotWasFree;
     private final Optional<LeaderLine> leader;
     private final ScreenLabelPlacement.Slot slot;
+    private final org.freeplane.plugin.graph.canvas.title.TitleRow titleRow;
 
     PlacedLabel(final ProjectedEndpointKey endpoint, final String text, final Font font,
             final Mode mode, final Rung rung, final double anchorX, final double anchorY,
             final double width, final double height, final boolean truncated,
             final String sourceText, final boolean forced, final boolean emphaticAtAnchor,
             final boolean forcedAtBaseSlot, final boolean fullTextSlotWasFree,
-            final Optional<LeaderLine> leader, final ScreenLabelPlacement.Slot slot) {
+            final Optional<LeaderLine> leader, final ScreenLabelPlacement.Slot slot,
+            final org.freeplane.plugin.graph.canvas.title.TitleRow titleRow) {
         this.endpoint = Objects.requireNonNull(endpoint, "endpoint");
         this.text = Objects.requireNonNull(text, "text");
         this.font = Objects.requireNonNull(font, "font");
@@ -62,6 +64,7 @@ public final class PlacedLabel {
         this.fullTextSlotWasFree = fullTextSlotWasFree;
         this.leader = Objects.requireNonNull(leader, "leader");
         this.slot = slot;
+        this.titleRow = Objects.requireNonNull(titleRow, "titleRow");
     }
 
     public ProjectedEndpointKey endpoint() {
