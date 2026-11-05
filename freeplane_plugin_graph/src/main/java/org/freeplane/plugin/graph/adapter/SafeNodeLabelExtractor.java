@@ -13,7 +13,11 @@ import org.freeplane.features.icon.NamedIcon;
 import org.freeplane.features.link.NodeLinks;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.nodestyle.NodeStyleModel;
+import java.util.Collections;
+
 import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
+import org.freeplane.plugin.graph.projection.input.TitleText;
+import org.freeplane.plugin.graph.projection.input.TitleTextParser;
 
 public final class SafeNodeLabelExtractor {
     public static final int MAX_DISPLAY_CODE_POINTS = 80;
@@ -25,7 +29,21 @@ public final class SafeNodeLabelExtractor {
             normalizedDirectLink(reachableNode),
             normalizedDirectIcon(reachableNode),
             "Node");
-        return SafeNodeLabel.of(full, displayText(full));
+        return labelFor(reachableNode, full);
+    }
+
+    private SafeNodeLabel labelFor(final NodeModel node, final String full) {
+        final String display = displayText(full);
+        final String format = NodeStyleModel.getNodeFormat(node);
+        final boolean patternLatex = "latexPatternFormat".equals(format) || "unparsedLatexPatternFormat".equals(format);
+        final boolean prefixed = full.startsWith("\\latex") || full.startsWith("\\unparsedlatex");
+        if (patternLatex || prefixed) {
+            final String body = patternLatex ? full : removeLatexPrefix(full, format);
+            final TitleText title = TitleText.of(
+                Collections.<TitleText.Run>singletonList(new TitleText.Math(body, full)));
+            return SafeNodeLabel.of(full, display, title);
+        }
+        return SafeNodeLabel.of(full, display, TitleTextParser.parse(display, false));
     }
 
     private String normalizedRawContent(final NodeModel node) {

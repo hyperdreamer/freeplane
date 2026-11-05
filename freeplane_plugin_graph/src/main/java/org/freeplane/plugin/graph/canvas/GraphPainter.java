@@ -29,6 +29,7 @@ import org.freeplane.plugin.graph.projection.EnclosureHullKey;
 import org.freeplane.plugin.graph.projection.EnclosureKey;
 import org.freeplane.plugin.graph.projection.PinProjection;
 import org.freeplane.plugin.graph.projection.ProjectedEdge;
+import org.freeplane.plugin.graph.canvas.title.TitlePainter;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointVisibility;
 import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
@@ -60,6 +61,7 @@ final class GraphPainter {
         if (componentSize.width < 0 || componentSize.height < 0) {
             throw new IllegalArgumentException("Component dimensions must not be negative");
         }
+        final AffineTransform baseTransform = graphics.getTransform();
         final Graphics2D copy = (Graphics2D) graphics.create();
         try {
             copy.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -79,7 +81,8 @@ final class GraphPainter {
                 showArrowheads, visibleEndpoints);
             paintNodes(copy, state, paintState, currentTheme, dimUnrelated);
             paintPins(copy, state, paintState, currentTheme, dimUnrelated, visibleEndpoints);
-            paintLabels(copy, labels, paintState, currentTheme, currentViewport, componentSize, dimUnrelated);
+            paintLabels(copy, labels, paintState, currentTheme, currentViewport, componentSize, dimUnrelated,
+                baseTransform);
             paintHighlights(copy, state, paintState, currentTheme);
             paintConnectionPreview(copy, state, paintState, currentTheme, visibleEndpoints);
         }
@@ -269,7 +272,7 @@ final class GraphPainter {
 
     private static void paintLabels(final Graphics2D graphics, final List<PlacedLabel> labels,
             final GraphPaintState paintState, final GraphTheme theme, final GraphViewport viewport,
-            final java.awt.Dimension size, final boolean dimUnrelated) {
+            final java.awt.Dimension size, final boolean dimUnrelated, final AffineTransform baseTransform) {
         final BasicStroke leaderStroke = leaderStroke(viewport.zoom());
         for (final PlacedLabel label : labels) {
             if (label.mode() == PlacedLabel.Mode.HOVER_ONLY && !label.forced()) {
@@ -278,9 +281,6 @@ final class GraphPainter {
             final boolean forced = label.forced() || isRelated(label.endpoint(), paintState);
             final boolean dim = dimUnrelated && !forced;
             final AlphaComposite oldComposite = setOpacity(graphics, dim);
-            final Font font = label.font().deriveFont(Math.max(1.0f,
-                label.font().getSize2D() / (float) viewport.zoom()));
-            graphics.setFont(font);
             graphics.setColor(theme.labelColor());
             final double anchorX = worldX(label.anchorX(), viewport, size);
             final double anchorY = worldY(label.anchorY(), viewport, size);
@@ -293,7 +293,8 @@ final class GraphPainter {
                     worldX(line.end().x(), viewport, size), worldY(line.end().y(), viewport, size)));
             }
             graphics.setColor(theme.labelColor());
-            drawCentered(graphics, font, label.text(), anchorX, anchorY);
+            TitlePainter.paint(graphics, label.titleRow(), anchorX, anchorY, viewport.zoom(),
+                theme.labelColor(), baseTransform);
             graphics.setComposite(oldComposite);
         }
     }

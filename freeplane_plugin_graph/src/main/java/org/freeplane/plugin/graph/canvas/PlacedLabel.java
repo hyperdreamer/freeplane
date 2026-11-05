@@ -131,6 +131,10 @@ public final class PlacedLabel {
         return fullTextSlotWasFree;
     }
 
+    org.freeplane.plugin.graph.canvas.title.TitleRow titleRow() {
+        return titleRow;
+    }
+
     public Optional<LeaderLine> leader() {
         return leader;
     }

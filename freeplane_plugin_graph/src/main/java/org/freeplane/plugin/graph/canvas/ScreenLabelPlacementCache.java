@@ -10,19 +10,49 @@ import org.freeplane.plugin.graph.geometry.LayoutPositions;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 
 public final class ScreenLabelPlacementCache {
-    private final ScreenLabelPlacement placement = new ScreenLabelPlacement();
+    private final ScreenLabelPlacement placement;
     private Key lastKey;
     private List<PlacedLabel> lastPlacements = Collections.emptyList();
+    private long passEpoch;
+    private boolean followUpPending;
+
+    public ScreenLabelPlacementCache() {
+        this(new ScreenLabelPlacement());
+    }
+
+    ScreenLabelPlacementCache(final ScreenLabelPlacement placement) {
+        this.placement = java.util.Objects.requireNonNull(placement, "placement");
+    }
 
     public List<PlacedLabel> place(final LabelPlacementRequest request, final LabelFonts fonts) {
-        final Key key = Key.of(request, fonts);
+        final Key key = Key.of(request, fonts, passEpoch);
         if (key.equals(lastKey)) {
             return lastPlacements;
         }
         final List<PlacedLabel> next = placement.place(request, lastPlacements, fonts);
         lastKey = key;
         lastPlacements = next;
+        if (placement.budgetExhaustedInLastPass()) {
+            followUpPending = true;
+            passEpoch++;
+        }
         return next;
+    }
+
+    public boolean takeFollowUpRequest() {
+        if (!followUpPending) {
+            return false;
+        }
+        followUpPending = false;
+        return true;
+    }
+
+    public boolean budgetExhaustedInLastPass() {
+        return placement.budgetExhaustedInLastPass();
+    }
+
+    public boolean measurementStalled() {
+        return placement.measurementStalled();
     }
 
     private static final class Key {
@@ -38,8 +68,10 @@ public final class ScreenLabelPlacementCache {
         private final Font full;
         private final Font dense;
         private final Font emphatic;
+        private final long passEpoch;
 
-        private Key(final LabelPlacementRequest request, final LabelFonts fonts) {
+        private Key(final LabelPlacementRequest request, final LabelFonts fonts, final long passEpoch) {
+            this.passEpoch = passEpoch;
             this.generation = request.projection().generation();
             this.positions = request.positions();
             this.zoom = request.zoom();
@@ -54,8 +86,9 @@ public final class ScreenLabelPlacementCache {
             this.emphatic = fonts.emphatic();
         }
 
-        static Key of(final LabelPlacementRequest request, final LabelFonts fonts) {
-            return new Key(Objects.requireNonNull(request, "request"), Objects.requireNonNull(fonts, "fonts"));
+        static Key of(final LabelPlacementRequest request, final LabelFonts fonts, final long passEpoch) {
+            return new Key(Objects.requireNonNull(request, "request"), Objects.requireNonNull(fonts, "fonts"),
+                passEpoch);
         }
 
         @Override
@@ -67,7 +100,8 @@ public final class ScreenLabelPlacementCache {
                 return false;
             }
             final Key that = (Key) other;
-            return generation == that.generation
+            return passEpoch == that.passEpoch
+                && generation == that.generation
                 && positions == that.positions
                 && Double.compare(zoom, that.zoom) == 0
                 && Double.compare(centerX, that.centerX) == 0
@@ -83,7 +117,8 @@ public final class ScreenLabelPlacementCache {
 
         @Override
         public int hashCode() {
-            int result = Long.valueOf(generation).hashCode();
+            int result = Long.valueOf(passEpoch).hashCode();
+            result = 31 * result + Long.valueOf(generation).hashCode();
             result = 31 * result + System.identityHashCode(positions);
             result = 31 * result + Double.valueOf(zoom).hashCode();
             result = 31 * result + Double.valueOf(centerX).hashCode();

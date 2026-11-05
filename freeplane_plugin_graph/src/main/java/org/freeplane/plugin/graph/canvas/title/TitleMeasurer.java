@@ -162,6 +162,10 @@ public final class TitleMeasurer {
         return pending.contains(new Key(title, font, Form.DEFERRED));
     }
 
+    public IconSource iconSource() {
+        return icons;
+    }
+
     public boolean consumeBudgetSlot() {
         if (newMeasurementsInPass >= budget) {
             return false;

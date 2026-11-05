@@ -441,7 +441,11 @@ public final class GraphCanvas extends JComponent implements Accessible {
         final LabelPlacementRequest request = LabelPlacementRequest.of(state.projection(), state.geometry(),
             state.layout().positions(), viewport.zoom(), viewport.centerX(), viewport.centerY(),
             new Rectangle2D.Double(0.0, 0.0, size.width, size.height), forced, level);
-        return labelPlacementCache.place(request, LabelFonts.from(theme));
+        final List<PlacedLabel> placed = labelPlacementCache.place(request, LabelFonts.from(theme));
+        if (labelPlacementCache.takeFollowUpRequest()) {
+            repaint();
+        }
+        return placed;
     }
 
     private Bounds visibleBounds(final CanvasState state) {

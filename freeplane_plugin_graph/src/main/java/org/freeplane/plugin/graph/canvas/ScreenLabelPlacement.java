@@ -23,9 +23,39 @@ import org.freeplane.plugin.graph.projection.ProjectedEnclosure;
 import org.freeplane.plugin.graph.projection.ProjectedEndpointKey;
 import org.freeplane.plugin.graph.projection.ProjectedNode;
 import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
+import org.freeplane.plugin.graph.projection.input.TitleText;
+import org.freeplane.plugin.graph.canvas.title.MeasuredTitle;
+import org.freeplane.plugin.graph.canvas.title.TitleMeasurer;
+import org.freeplane.plugin.graph.canvas.title.TitleTruncation;
 import org.freeplane.plugin.graph.canvas.title.TitleRow;
 
 public final class ScreenLabelPlacement {
+    private final TitleMeasurer measurer;
+
+    public ScreenLabelPlacement() {
+        this(new TitleMeasurer());
+    }
+
+    ScreenLabelPlacement(final TitleMeasurer measurer) {
+        this.measurer = java.util.Objects.requireNonNull(measurer, "measurer");
+    }
+
+    TitleMeasurer measurer() {
+        return measurer;
+    }
+
+    boolean budgetExhaustedInLastPass() {
+        return measurer.budgetExhaustedInLastPass();
+    }
+
+    boolean measurementStalled() {
+        return measurer.stalled();
+    }
+
+    String measurementDiagnostic() {
+        return measurer.stallDiagnostic();
+    }
+
     static final double SLOT_GAP = 6.0;
     static final double DISPLACED_OFFSET = 30.0;
     static final double ARC_GAP = 1.0;
@@ -56,18 +86,21 @@ public final class ScreenLabelPlacement {
 
     List<PlacedLabel> place(final LabelPlacementRequest request, final List<PlacedLabel> previous,
             final LabelFonts fonts, final List<Rectangle2D> seedObstacles) {
-        final Context context = new Context(request, fonts, seedObstacles);
+        measurer.beginPass(request.projection().generation());
+        final Context context = new Context(request, fonts, seedObstacles, measurer);
         final Map<ProjectedNodeKey, PlacedLabel> previousByNode = indexPrevious(previous);
         final List<PlacedLabel> placed = new ArrayList<PlacedLabel>();
         placeForced(context, previousByNode, placed);
         placeEnclosures(context, placed);
         placeNodes(context, previousByNode, placed);
+        measurer.endPass();
         return filterByLevel(request, placed);
     }
 
     private static final class Context {
         final LabelPlacementRequest request;
         final LabelFonts fonts;
+        final TitleMeasurer measurer;
         final Map<ProjectedNodeKey, ProjectedNode> nodes =
             new LinkedHashMap<ProjectedNodeKey, ProjectedNode>();
         final Map<ProjectedNodeKey, Double> radii = new LinkedHashMap<ProjectedNodeKey, Double>();
@@ -75,9 +108,10 @@ public final class ScreenLabelPlacement {
         final List<ProjectedNodeKey> order = new ArrayList<ProjectedNodeKey>();
 
         Context(final LabelPlacementRequest request, final LabelFonts fonts,
-                final List<Rectangle2D> seedObstacles) {
+                final List<Rectangle2D> seedObstacles, final TitleMeasurer measurer) {
             this.request = request;
             this.fonts = fonts;
+            this.measurer = measurer;
             for (final ProjectedNode node : request.projection().nodes()) {
                 nodes.put(node.key(), node);
             }
@@ -442,6 +476,10 @@ public final class ScreenLabelPlacement {
             final boolean forced, final PlacedLabel previous) {
         final ProjectedNode node = context.nodes.get(key);
         final String fullText = node.label().displayText();
+        final TitleText title = node.label().title();
+        if (title.hasMath()) {
+            return placeMathNode(context, key, forced, title);
+        }
         final PlacedLabel retained = retained(context, key, previous);
         if (retained != null) {
             return retained;
@@ -454,6 +492,69 @@ public final class ScreenLabelPlacement {
             return baseSlot(context, key, ProjectedEndpointKey.ofNode(key), fullText, true);
         }
         return hoverOnly(context, key, ProjectedEndpointKey.ofNode(key), fullText);
+    }
+
+    private static PlacedLabel placeMathNode(final Context context, final ProjectedNodeKey key, final boolean forced,
+            final TitleText title) {
+        final ProjectedEndpointKey endpoint = ProjectedEndpointKey.ofNode(key);
+        final Font font = context.fonts.full();
+        final double centerX = context.screenX(key);
+        final double centerY = context.screenY(key);
+        final double radius = context.radius(key);
+        final double zoom = context.request.zoom();
+        final MeasuredTitle rendered = context.measurer.measure(title, font);
+        final boolean renderedUsable = rendered.availability() == MeasuredTitle.Availability.RENDERED;
+        final Slot[] slots = forced ? new Slot[] { Slot.ABOVE } : NEAR_SLOTS;
+        for (final Slot slot : slots) {
+            final double limit = slotMaxWidth(slot);
+            final boolean useRendered = renderedUsable && rendered.width() <= limit;
+            double width;
+            double height;
+            final String text;
+            boolean truncated = false;
+            final MeasuredTitle rowSource;
+            if (useRendered) {
+                width = rendered.width();
+                height = rendered.height();
+                text = title.plainSource();
+                rowSource = rendered;
+            }
+            else {
+                final MeasuredTitle degraded = context.measurer.measureDegraded(title, font);
+                String degradedText = TitleTruncation.degradedPlainText(title);
+                Rectangle2D size = screenBounds(degradedText, font);
+                if (size.getWidth() > limit) {
+                    degradedText = TitleTruncation.truncated(degradedText, font, limit);
+                    truncated = true;
+                    size = screenBounds(degradedText, font);
+                }
+                width = size.getWidth();
+                height = size.getHeight();
+                text = degradedText;
+                rowSource = truncated ? context.measurer.measureDegraded(title, font) : degraded;
+            }
+            final double[] anchor = slotAnchor(slot, centerX, centerY, radius, width, height);
+            final Rectangle2D box = rectangle(anchor[0], anchor[1], width, height);
+            if (!context.request.placementArea().contains(box) || intersectsAny(context.obstacles, box)) {
+                continue;
+            }
+            context.obstacles.add(box);
+            final TitleRow row = TitleRow.resolve(rowSource, context.measurer.iconSource(), font, zoom);
+            final PlacedLabel.Rung rung = useRendered ? PlacedLabel.Rung.FULL_NEAR
+                : PlacedLabel.Rung.TRUNCATED_NEAR;
+            return new PlacedLabel(endpoint, text, font, PlacedLabel.Mode.INTERIOR, rung, anchor[0], anchor[1],
+                width, height, truncated, title.plainSource(), forced, false, false, false,
+                Optional.<LeaderLine>empty(), slot, row);
+        }
+        final MeasuredTitle degraded = context.measurer.measureDegraded(title, font);
+        final String fallbackText = TitleTruncation.degradedPlainText(title);
+        final Rectangle2D size = screenBounds(fallbackText, font);
+        final double[] anchor = slotAnchor(Slot.ABOVE, centerX, centerY, radius, size.getWidth(),
+            size.getHeight());
+        final TitleRow row = TitleRow.resolve(degraded, context.measurer.iconSource(), font, zoom);
+        return new PlacedLabel(endpoint, fallbackText, font, PlacedLabel.Mode.HOVER_ONLY,
+            PlacedLabel.Rung.HOVER_ONLY, anchor[0], anchor[1], size.getWidth(), size.getHeight(), false,
+            title.plainSource(), false, false, false, false, Optional.<LeaderLine>empty(), Slot.ABOVE, row);
     }
 
     private static PlacedLabel retained(final Context context, final ProjectedNodeKey key,
