@@ -78,6 +78,7 @@ import org.freeplane.plugin.graph.projection.ProjectedNodeKey;
 import org.freeplane.plugin.graph.projection.RelationshipResolution;
 import org.freeplane.plugin.graph.projection.input.MapAvailability;
 import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
+import org.freeplane.plugin.graph.projection.input.TitleTextParser;
 import org.freeplane.plugin.graph.projection.input.SourceNodeKey;
 import org.freeplane.plugin.graph.workspace.ListenerRegistration;
 import org.freeplane.plugin.graph.workspace.model.DisplaySettings;
@@ -243,7 +244,9 @@ public final class GraphWorkspaceUiEvidence {
     private static List<ProjectedNode> twoMapNodes() {
         final ProjectedNode first = ProjectedNode.of(FIRST_KEY, SafeNodeLabel.of("Alpha", "Alpha"),
             "Alpha map", false);
-        final ProjectedNode second = ProjectedNode.of(SECOND_KEY, SafeNodeLabel.of("Beta", "Beta"),
+        final String formulaTitle = "Theorem: $\\bigcup\\alpha\\leqslant\\alpha$";
+        final ProjectedNode second = ProjectedNode.of(SECOND_KEY,
+            SafeNodeLabel.of(formulaTitle, formulaTitle, TitleTextParser.parse(formulaTitle, false)),
             "Beta map", false);
         return Arrays.asList(first, second);
     }
