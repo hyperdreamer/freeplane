@@ -1,0 +1,29 @@
+JLaTeXMath 1.0.7
+================
+
+Coordinate: org.scilab.forge:jlatexmath:1.0.7
+SHA-256:    6d04c3843fc98d2eea9ba4cff0be7b80540ca75c5a4e0b3463fd1219c48cc65d
+
+This archive is distributed under the GNU GENERAL PUBLIC LICENSE, version 2 or, at
+the recipient's option, any later version: "either version 2 of the License, or
+(at your option) any later version". The archive states the same terms in its own
+META-INF/COPYING entry.
+
+The archive grants a linking exception in its META-INF/LICENSE:
+
+  "As a special exception, the copyright holders of this library give you permission
+   to link this library with independent modules to produce an executable,
+   regardless of the license terms of these independent modules"
+
+Bundled font families, each under its own licence recorded in
+org/scilab/forge/jlatexmath/fonts/licences/ inside the archive:
+
+  eufb10, eufm10, msam10, msbm10   SIL Open Font License 1.1 (OFL.txt)
+  stmary10, rsfs10                 public domain
+  dsrom10                          free licence (License_for_dsrom.txt)
+  cm* (Computer Modern)            Knuth licence (Knuth_License.txt)
+  wn* (Cyrillic)                   Knuth licence (Knuth_License.txt)
+  Greek text fonts                 GNU GPL version 2
+
+The archive also carries META-INF/COPYING and META-INF/LICENSE verbatim; this notice
+does not replace them.
