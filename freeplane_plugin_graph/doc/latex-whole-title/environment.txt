@@ -1,0 +1,10 @@
+generated: 2026-11-05T22:02:43+08:00
+uname: Linux Arch-HDD0 6.18.60-1-lts #1 SMP PREEMPT_DYNAMIC Fri, 30 Oct 2026 12:43:14 +0000 x86_64 GNU/Linux
+java (probe runner): openjdk version "1.8.0_504"
+jjs runner: /usr/lib/jvm/default/bin/jjs (java.awt.headless=true)
+host java for the app: openjdk version "1.8.0_504"
+fontconfig sans-serif resolution: NotoSans-Regular.ttf: "Noto Sans" "Regular"
+map: /home/henry/Documents/999.notebooks/01.math/00.foundation.of.math/02.set_theory/mindmap/Axiomatic_Set_Theory.mm
+map sha256: 840358a03666d02f445e3aeb5ba84d9852e913318a3bf6c1776f50593aaff08c
+label font: new Font(Font.SANS_SERIF, PLAIN, 12)  (GraphTheme.java:66)
+slot caps: vertical 200 / horizontal 130 / diagonal 150 (ScreenLabelPlacement.java:67-69)

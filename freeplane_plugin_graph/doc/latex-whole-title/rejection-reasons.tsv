@@ -1,0 +1,251 @@
+body	construction	icon_width	icon_height
+Remark: $\mathscr{F}$ is well-orderable, since it is a subset of an ordinal	OK	323	16
+$f:A\to B$	OK	59	16
+Choose $\phi\in(\kappa\times\lambda)^\lambda$ 	OK	109	18
+$\gamma\in\beta$	OK	32	16
+$\alpha,\gamma\in ON$	OK	59	16
+$Z:=\Big\{\eta\in X: \forall\sigma\in X\cap\eta\Big(h(\sigma)<h(\eta)\Big)\Big\}$	OK	224	26
+$\xi:=\gamma_2-\gamma_1>0$	OK	87	16
+$y\in R(\xi+1)=\mathcal{P}(R(\xi))$	OK	127	16
+choose $z\in x$	OK	67	14
+$\forall x\in X\exists y\in X\big(x<y\big)$	OK	122	20
+$F^\ast:=\{\{x\}\times x:x\in F\}$	OK	131	16
+Remark: $\#(\omega\times\omega)=\aleph_0$	OK	135	16
+the minimality of $k$	OK	102	16
+$\alpha\cdot\beta$	OK	28	16
+$X:=\{\xi\in\alpha:f(\xi)\neq\xi\}$	OK	127	16
+$\forall\alpha\in J\big(Y_\alpha\neq\emptyset\big)$	OK	87	20
+$\beta=\mathrm{type}(\{1\}\times\beta)=\mathrm{type}(\{1\}\times\gamma)=\gamma$	OK	209	16
+Choose $n\in\omega$ s.t.	OK	90	14
+$\gamma:=0$	OK	36	15
+$A:=\{\aleph_\xi:\xi<\alpha\}$	OK	95	17
+$A\cup B=Y$	OK	62	13
+$\gamma=\max\beta$	OK	58	16
+$\theta:=\fbox{\kappa^\lambda}$	OK	58	32
+$S_1:=\{\alpha^\nu:\nu<\beta\cdot\mu\}$	OK	114	16
+$\beta=\max(\alpha,\beta)\geqslant\omega$	OK	102	16
+$\mu=0$	OK	34	15
+$R(\mu)=\bigcup_{\nu<\mu}R(\nu)$	OK	101	19
+choose $y\in t\setminus WF$	OK	98	16
+$\xi: = \sup\Bigg\{\fbox{\lambda^\theta}: \theta\in K\Bigg\}$	OK	138	40
+$\mathrm{type}(A;R)$	OK	61	16
+$\gamma\geqslant\omega$	OK	34	15
+$f:G\to ON$	OK	70	16
+$\forall S\in\mathscr{F}\big(\#S<\theta\big)$	OK	95	20
+Choose $\gamma\in\alpha$	OK	72	16
+$\lambda\geqslant\aleph_0$	OK	39	15
+$S:=\prod_{\alpha\in J}S_\alpha$	OK	77	17
+$\subseteq$	OK	14	14
+$\zeta:=f(\xi)\in A$	OK	74	16
+$\alpha^\mu<\theta$	OK	39	14
+$\kappa,\lambda$	OK	24	16
+$\kappa:=\#\gamma$	OK	47	16
+Remark: strict $<$	OK	101	14
+$B$	OK	14	13
+$\zeta:=\alpha\cdot(\beta\cdot2)$	OK	76	16
+$z\in\mathcal{P}(x)$	OK	50	16
+$\max(\kappa,\lambda)\geqslant\aleph_0$	OK	83	16
+$f(\alpha)=\sup\{f(\beta): \beta<\alpha\}$	OK	138	16
+choose $n\in\omega$	OK	69	14
+$\beta=\alpha\cdot\mu+\nu$	OK	71	16
+$\alpha\leqslant\beta$	OK	35	16
+$A:\{0\}\times\{\xi\in\alpha, \xi<\mu\}$	OK	130	16
+$\Phi:\mathcal{P}(\kappa)\to H_{\kappa\times2}$	OK	92	16
+$\beta\times\alpha$	OK	34	16
+$\forall\alpha\in\gamma\big(\aleph_\alpha<\gamma\big)$	OK	86	20
+$\mathrm{type}(\kappa\times\kappa;\lhd)=\kappa$	OK	104	16
+$X:=\{f(\beta):\beta\in Y\}$	OK	111	16
+Let $\alpha\in ON$ be given.	OK	109	16
+$\beta:=\sup\{g(\xi)+1:\xi<\eta\}$	OK	139	16
+$G(s):=y$	OK	55	16
+$\beta=\mathrm{type}(\{1\}\times\beta)=\mathrm{type}(\{1\}\times\gamma)=\gamma$	OK	209	16
+$x\in WF$	OK	48	14
+$X':=\mathrm{ran}\,F$	OK	66	17
+$\mathscr{F}\subseteq\mathcal{P}(A)$	OK	58	16
+$B$	OK	14	13
+$R:=\{(\gamma,\beta)\in\omega\times\omega: g(\gamma)<g(\beta)\}$	OK	187	16
+$S_2:=\{\alpha+(\beta+\mu):\mu<\gamma\}$	OK	147	16
+Remark: by K\"onig's Theorem	OK	162	17
+$Z:=\Big\{\eta\in X: \forall\sigma\in X\cap\eta\Big(h(\sigma)<h(\eta)\Big)\Big\}$	OK	224	26
+$\exists x_1,x_2\big(x_1\neq x_2\land x_1,x_2\in X\cap z\big)$	OK	173	20
+$\aleph_\beta<\kappa\leqslant\aleph_\alpha$	OK	68	17
+Choose $\mathbf{v}\in B$	OK	75	14
+$h(0,\mu)=(0,\zeta)$	OK	81	16
+$\#(\omega^\omega)=\aleph_0$	OK	65	16
+$\gamma\geqslant\omega$	OK	34	15
+$\xi=\gamma\cdot\theta+\varphi\geqslant\gamma\cdot\theta>\gamma\cdot\alpha^\mu$	OK	149	16
+$n>0$	OK	34	13
+$m<n\land m\approx n$	OK	85	12
+$A$	OK	13	13
+$f:A\to\mathcal{P}(A)$	OK	76	16
+$\xi_{\beta+1}:=f(\xi_\beta)$	OK	71	17
+$f: X\to Y$	OK	61	16
+$\zeta\in A$	OK	33	16
+$\theta<\alpha+0$	OK	54	14
+$\#\mathrm{type}(X)=\#X<\theta$	OK	116	16
+$A:=\mathrm{ran}\,f$	OK	59	16
+$\alpha:=\sup\{g(\xi):\xi<\eta\}$	OK	120	16
+$B_1, B_2$	OK	36	16
+$\mathfrak{F}:=\{\mathscr{A}\in\mathcal{P}(\mathcal{P}(X)):\mathscr{A}\text{ is of finite intersection property}\}$	OK	303	16
+$x\in\mathcal{P}(S)$	OK	52	16
+$X:=\{\gamma\in ON: \gamma\text{ is an infinite cardinal}\land\mathrm{type}(\gamma\times\gamma;\lhd)\neq\gamma\}$	OK	331	16
+$y\subseteq R(\beta)$	OK	52	16
+$(\xi,\zeta)<(\sigma,\delta)$	OK	72	16
+$(0,\mu)<(0,\zeta)$	OK	74	16
+$g:S_1\to S_2$	OK	62	16
+$\mathscr{F}=\emptyset$	OK	37	14
+$f\in B^A$	OK	43	18
+Choose $\xi\in\beta$ s.t.	OK	87	16
+$g:\theta\to\{0\}\times\alpha\cup\{1\}\times\gamma$	OK	138	16
+$g:\kappa\to Y$	OK	56	16
+$R(\xi)=\mathcal{P}(R(\mu))$	OK	88	16
+$\mu>0$	OK	34	15
+$i\in I$	OK	30	14
+$\alpha>\omega$	OK	36	12
+$\mathscr{F}\subseteq\mathscr{C}$	OK	39	15
+$Y:=\alpha\cap X$	OK	65	13
+$n\in Y$	OK	36	14
+Remark: $B\prec D\land A\preccurlyeq C$ is not enough	OK	208	16
+$\forall n\in\omega\big(f(n)=S(n)\big)$	OK	116	20
+$S(\theta)>\alpha^\mu$	OK	57	16
+$\aleph_0\leqslant\kappa$	OK	39	15
+$\xi:=f(\gamma)$	OK	52	16
+$\{0\}\times\alpha\cup\{1\}\times\beta\subseteq\gamma\times\gamma$	OK	141	16
+$S'\approx S$	OK	39	17
+$\alpha+0<\omega$	OK	56	13
+$\#B<\aleph_0$	OK	52	16
+$\alpha\in\kappa$	OK	34	12
+$S\in H(\kappa)$	OK	54	16
+$\gamma$ is a limit	OK	54	16
+$\exists i<m\big(f(i)=n\big)$	OK	97	20
+$\mu<\zeta$	OK	33	16
+$\kappa$	OK	11	10
+Remark: $\alpha=0\lor\alpha$ is a successor ordinal	OK	216	13
+$\lambda'>0$	OK	36	17
+$\xi:=\min X$	OK	62	16
+Choose $\gamma\in X$	OK	75	16
+$\alpha=S(\beta)$	OK	52	16
+$\fbox{\kappa^\lambda}\leqslant 1\leqslant\fbox{(\kappa')^{\lambda'}}$	OK	115	36
+$S_2=\{1\}$	OK	50	16
+$x\in R(\mu)$	OK	52	16
+choose $n<\omega$	OK	70	14
+$\beta=\gamma$	OK	33	16
+$\mathbb{D}:=\{x\in A: x\notin f(x)\}$	OK	130	16
+$\zeta:=\alpha+(\beta+1)$	OK	88	16
+$f:A\to B$	OK	59	16
+choose $a\in A$	OK	69	14
+$\kappa\in ON$	OK	47	14
+$\#B=n$	OK	47	16
+$y$ is transitive.	OK	78	15
+$\kappa:=\#\beta$	OK	48	16
+choose $v\in t$	OK	65	14
+$B$	OK	14	13
+$g:\kappa\to A$	OK	55	16
+$\{\kappa_i: i\in I$\}	OK	61	16
+$ZFC^-$	OK	39	14
+$\in$ and directed graph	OK	110	16
+Remark: $\mathrm{ran}\,h\neq\emptyset$	OK	107	16
+$z\subseteq y$	OK	33	15
+$\mathrm{cf}(\theta)=\lambda<\theta$	OK	74	16
+$\mathscr{F}$	OK	15	13
+choose $\delta<\beta\cdot\mu$	OK	83	16
+$A\setminus\{f(\xi):\xi<\alpha\}\neq\emptyset$	OK	120	16
+$f:X\to A$	OK	60	16
+$(\xi,\zeta)>(\sigma,\delta)$	OK	72	16
+$\kappa\geqslant\aleph_0$	OK	39	15
+$S:=H(\theta^+)\cap R(\beta)$	OK	104	17
+$S\in\mathcal{P}(\alpha)$	OK	53	16
+$x\in H(\kappa)$	OK	53	16
+$\lambda$	OK	11	13
+$\nu>\beta$	OK	33	16
+$f:\sup A\to\xi$	OK	75	16
+$\kappa$	OK	11	10
+$h^{-1}(0,0)>(0,0)$	OK	92	17
+$\sup (C\cap \lambda)=\lambda$	OK	85	16
+$A\cup B\cup C=\{0\}\times\alpha+\{1\}\times\beta=\alpha+\beta$	OK	215	16
+$X:=\{\gamma\in\kappa+1:\kappa\leqslant\aleph_\gamma\}$	OK	140	17
+$g:\delta\to X$	OK	56	16
+$A\approx S$	OK	38	13
+$\gamma>\beta\geqslant0$	OK	55	16
+$V$	OK	11	13
+Choose the unique $\lambda\in ON$	OK	139	16
+$\xi\in\delta$	OK	30	16
+$\xi\in S_1$	OK	36	16
+$=$	OK	14	8
+list $\mathscr{F}$ as	OK	45	13
+$\eta=\min X$	OK	59	16
+Let $\mu<\gamma$ be given	OK	92	16
+$\mu\subseteq R(\mu)$	OK	53	16
+Claim: $X$ is well-ordered by $\in$	OK	170	16
+$\alpha+\xi=\beta$	OK	55	16
+$n\in\omega$	OK	34	12
+choose $y\in t\setminus WF$	OK	98	16
+$f\in B^A$	OK	43	18
+$\kappa:=\aleph(A)$	OK	56	16
+$\mathscr{E}:=\mathscr{F}\setminus\{B\}$	OK	74	16
+Remark: If $\alpha>2$, $\subsetneq$ holds	OK	149	16
+Expand the codomain $B$ to $A$	OK	144	16
+$\alpha^{\beta\cdot\mu}=1=(\alpha^\beta)^\mu$	OK	91	18
+$\forall\beta<\mu\big(\gamma\cdot\alpha^\beta<\gamma\cdot\alpha^\mu\big)$	OK	124	20
+$\kappa\in ON$	OK	47	14
+$V:=\{x: x\notin x\}$	OK	91	16
+$g(i)=j$	OK	46	16
+$Y:=f(\alpha)$	OK	58	16
+$g(\theta)<\gamma$	OK	48	16
+$\mu$ is a limit	OK	55	16
+$S_2:=\{\alpha\cdot(\beta\cdot\mu):\mu<\gamma\}$	OK	135	16
+$B\neq\emptyset$	OK	36	16
+$\alpha_k:=\min\{\alpha\in\beta: x_k\in f(\alpha)\}$	OK	157	16
+$n$ is not a cardinal	OK	90	13
+$\mathcal{P}(\omega)$	OK	30	16
+$f(1)=g(A\setminus\{f(0)\})$	OK	113	16
+Choose $\gamma\in X$	OK	75	16
+$\exists n\in\omega\big(\delta_n=\gamma\big)	OK	84	20
+$$S:=\bigcup_{i\in I} Z_i$$	OK	70	17
+$\mathcal{P}(x)$	OK	29	16
+$\alpha\in\gamma$	OK	33	14
+$\gamma\in\beta$	OK	32	16
+$h: X\to A$	OK	60	13
+$\delta:=0$	OK	35	13
+$\alpha:=\min\{\beta<\kappa:f(\beta)=S\}$	OK	151	16
+$f\upharpoonright\alpha:\alpha\to A$	OK	76	16
+$y\in S$	OK	34	16
+$g(x)=f(x)$, $\forall x\neq i$	OK	105	16
+$A,B$	OK	29	16
+$\alpha^\beta\leqslant\alpha^\alpha$	OK	47	17
+$\xi<\alpha$	OK	33	16
+$\kappa:=\#\gamma$	OK	47	16
+Remark: $A$ has a countably infinite subset	OK	221	16
+$\sigma:=\mathrm{cf}(\theta)$	OK	56	16
+$\beta>\alpha$	OK	35	16
+$\xi_\lambda:=\sup\{\xi_\beta: \beta<\lambda\}$	OK	114	17
+$g(0)\notin\mathrm{ran}\,f$	OK	67	16
+$\kappa=\mathrm{cf}(\kappa)$	OK	54	16
+$\gamma$ is a limit ordinal.	OK	96	16
+$\aleph_\xi$, $\omega_\xi$, where $\xi\in ON$	OK	110	17
+$\xi<\alpha$	OK	33	16
+Let $\alpha,\beta\in ON$	OK	77	16
+$\bigcup\alpha\subseteq\alpha$	OK	48	16
+Theorem: $\bigcup\alpha\leqslant\alpha$	OK	107	16
+$S_1:=\big(\{0\}\times\kappa\cup\{1\}\times\lambda\big)\times\theta$	OK	159	20
+$h:=H(\delta)$	OK	56	16
+$f(1)=g(A\setminus\{f(0)\})$	OK	113	16
+$LON:=\{\lambda\in ON:\lambda\text{ is a limit ordinal}\}$	OK	215	16
+$\mathfrak{F}:=\{\mathscr{A}\in\mathcal{P}(\mathcal{P}(X)):\mathscr{A}\text{ is of finite property }\Psi\}$	OK	252	16
+$A\cup B\cup C=\{0\}\times\alpha+\{1\}\times\beta=\alpha+\beta$	OK	215	16
+$(X_\alpha,\mathcal{T}_\alpha)$	OK	46	16
+$\neq$	OK	14	16
+$RHS=\alpha+(\beta+\nu)$	OK	108	16
+$\#(\alpha^\gamma)=\max\big(\#(\alpha^\mu),\#\alpha\big)=\#\alpha$	OK	177	20
+$\alpha^\gamma\leqslant\gamma^\gamma$	OK	45	15
+Let $x$ be given	OK	69	16
+Choose $\xi\in\lambda$	OK	71	16
+$\kappa\leqslant\lambda$	OK	34	15
+$\gamma$ is a infinite cardinal	OK	116	16
+$g:=f\upharpoonright\alpha$	OK	56	16
+$S(\emptyset)=\emptyset\cup\{\emptyset\}=\{\emptyset\}$	OK	115	16
+$f:\{0\}\to n\cup\{n\}	OK	98	16
+$\Psi(\mathscr{X})$, where $\mathscr{X}\subseteq\mathcal{P}(X)\land\#\mathscr{X}<\aleph_0$	OK	191	16
+$X:=\{\gamma\in ON: (\alpha+\beta)+\gamma\neq\alpha+(\beta+\gamma)\}$	OK	233	16
+$\alpha^{\beta+\mu}=\alpha^\beta=\alpha^\beta\cdot\alpha^\mu$	OK	109	15
+Generalization of $HF$	OK	120	16
