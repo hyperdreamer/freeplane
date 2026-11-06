@@ -2,7 +2,7 @@
 
 Task identifier: `2026-11-05-graph-latex-whole-title-prefix`
 
-Specification date: 2026-11-05. Revision: 3. Status: implementation contract. The three gaps the drafter returned are resolved in §9, and the design's round-5 review records zero blockers.
+Specification date: 2026-11-05. Revision: 4. Status: implementation contract. The three gaps the drafter returned are resolved in §9, and the design's round-5 review records zero blockers.
 
 Design authority: [2026-11-05-graph-latex-whole-title-prefix-design.md](2026-11-05-graph-latex-whole-title-prefix-design.md), revision 5. The design records zero blockers at its round-5 review. This specification does not revise that design.
 
@@ -44,7 +44,7 @@ The only new named helper required by this specification is `private String trim
 
 8. If `declaresWholeFormula` is false, construct the title with the existing `TitleTextParser.parse(displayText, false)`. If it is true, start `body` as `displayText`. Then, only when `strippedByLegacy` is false **and `declaration != null`** and `displayText` starts at offset zero with `declaration` followed by whitespace, set `body = trimLeadingWhitespace(displayText.substring(declaration.length()))`; otherwise remove nothing. The `declaration != null` guard is required: a non-prefixed `latexPatternFormat` or `unparsedLatexPatternFormat` title declares a whole formula with no declaration at all, and its body is `displayText` unchanged. When `strippedByLegacy` is true, remove nothing from `displayText`. This removes at most one declaration from the display string. The 80-code-point cap therefore applies before body selection.
 
-9. For a whole-title declaration, set the formula source to `"\\text{" + body + "}"` when `body.indexOf('$') < 0`, and to `body` when `body.indexOf('$') >= 0`. Dollar detection is the literal presence of U+0024 anywhere in `body`; it does not parse pairing, escaping, or nesting. A `latexPatternFormat` or `unparsedLatexPatternFormat` body is never wrapped. A `markdownPatternFormat` body is **not** exempt: when its whole-title signal comes from a declaration, it follows the same rule as every other body, so a Markdown node whose text is `\\latex K` yields source `\\text{K}` while `rawSource()` keeps `\\latex K`. Return a singleton `TitleText.Math(formulaSource, displayText)` in `SafeNodeLabel.of(fullText, displayText, title)`. Thus `TitleText.Math.source()` is the computed formula source and `TitleText.Math.rawSource()` is exactly today's `displayText`.
+9. For a whole-title declaration, set the formula source to `"\\text{" + body + "}"` when `body.indexOf('$') < 0`, and to `body` when `body.indexOf('$') >= 0`. Dollar detection is the literal presence of U+0024 anywhere in `body`; it does not parse pairing, escaping, or nesting. A body from any pattern format — `latexPatternFormat`, `unparsedLatexPatternFormat` or `markdownPatternFormat` — is never wrapped, exactly as the approved design's §4.3 step 7 states. A Markdown node whose text is `\\latex K` therefore yields the bare source `K` while `rawSource()` keeps `\\latex K`. Giving Markdown declarations the plain-node wrap would add behaviour the approved design does not authorise; it is recorded as deferred item D6 in §5, not decided here. Return a singleton `TitleText.Math(formulaSource, displayText)` in `SafeNodeLabel.of(fullText, displayText, title)`. Thus `TitleText.Math.source()` is the computed formula source and `TitleText.Math.rawSource()` is exactly today's `displayText`.
 
 ### 2.3 Intermediate Field Traces
 
@@ -58,7 +58,7 @@ The following traces pin the exact string carried by every named extraction valu
 - `FormattedFormula` HTML-looking value: `content = converted = trimmed = declaredBody = "<html><body>literal formula source</body></html>"`; `declaration = null`; `strippedByLegacy = false`; `fullText = displayText` is that exact string; the title is one Plain run, not a Math run.
 - `latexPatternFormat` with no prefix and text body: `content = converted = trimmed = declaredBody = "K\\\"onig's Theorem I"`; `declaration = null`; `strippedByLegacy = false`; `fullText = displayText = "K\\\"onig's Theorem I"`; the single Math source is the body verbatim, without `\\text{...}`.
 - `latexPatternFormat` with prefix: `content = converted = trimmed = "\\latex $x_2=3$"`; `declaration = "\\latex"`; `declaredBody = "$x_2=3$"`; `strippedByLegacy = false`; `fullText = displayText = rawSource = "\\latex $x_2=3$"`; `source() = "$x_2=3$"`.
-- `markdownPatternFormat` with a no-dollar declaration: `content = converted = trimmed = "\\latex K"`; `declaration = "\\latex"`; `declaredBody = "K"`; `strippedByLegacy = false` (markdown is excluded from legacy removal); `fullText = displayText = rawSource = "\\latex K"`; `source() = "\\text{K}"`.
+- `markdownPatternFormat` with a no-dollar declaration: `content = converted = trimmed = "\\latex K"`; `declaration = "\\latex"`; `declaredBody = "K"`; `strippedByLegacy = false` (markdown is excluded from legacy removal); `fullText = displayText = rawSource = "\\latex K"`; `source() = "K"` (pattern formats are never wrapped; see D6).
 - `unparsedLatexPatternFormat` with prefix: `content = converted = trimmed = "\\unparsedlatex $x$"`; `declaration = "\\unparsedlatex"`; `declaredBody = "$x$"`; `strippedByLegacy = false`; `fullText = displayText = rawSource = "\\unparsedlatex $x$"`; `source() = "$x$"`.
 - `markdownPatternFormat` without prefix: `content = converted = trimmed = declaredBody = "$a$ and $b$"`; `declaration = null`; `strippedByLegacy = false`; `fullText = displayText = "$a$ and $b$"`; the format alone does not declare whole-title math, so inline parsing is retained.
 - `markdownPatternFormat` with a dollar-bearing prefix: `content = converted = trimmed = "\\latex $a$"`; `declaration = "\\latex"`; `declaredBody = "$a$"`; `strippedByLegacy = false`; `fullText = displayText = rawSource = "\\latex $a$"`; `source() = "$a$"`.
@@ -129,6 +129,7 @@ No other statement in `ScreenLabelPlacement.java` changes. In particular, caps, 
 | D3 | Terminal `HOVER_ONLY` math fallback clears `forced`, so a forced label can be invisible. | Keep the current fallback flag, slot, and obstacle behavior. Making it visible without base-slot and obstacle semantics is a separate design. |
 | D4 | Truncation can ellipsize inside a LaTeX control sequence. | Keep the existing character-based `truncateTo`; token-boundary truncation is not authorized. |
 | D5 | Mixed bodies containing text and `$...$` render their text in TeX math style. | Bodies containing any dollar are passed bare. Do not add a `\\text{...}` wrapper or delimiter parser in this change; safe mixed-body wrapping needs separate design and evidence. |
+| D6 | A `markdownPatternFormat` node that declares a formula and has a no-dollar body renders it bare, while an ordinary node with the same declaration wraps it in `\\text{...}`. | Keep the approved design's rule that no pattern-format body is ever wrapped. Harmonising Markdown presentation with ordinary nodes needs a design clarification and its own evidence; do not decide it in implementation. |
 
 ## 6. What Must Not Change
 
@@ -179,20 +180,34 @@ Baseline status is against the design's pre-change production baseline. “Fails
 | T11 | `GraphTitleFormulaShould.reportedTitleFitsTheVerticalSlot` | The T10 marked-child fixture placed with `placeExtracted(node, false)`, one node, no obstacles, 12-point Sans Serif plain label font; the near slots are requested so the selected slot is `ABOVE`. | Measured/placement width is within `0.51 px` of `194.00 px`, i.e. `[194.00 - 0.51, 194.00 + 0.51] == [193.49, 194.51]`; `slot() == ABOVE`; `rung() == FULL_NEAR`; `truncated() == false`; width is at most the `200 px` vertical cap and not `TRUNCATED_NEAR`. | Fails today. |
 | T12 | `org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould.truncateToMirrorsTitleTruncation` | Java 8 fixture `new String(new char[96]).replace('\0', 'W')`; logical font `new Font(Font.SANS_SERIF, Font.PLAIN, 12)`; derive test fonts with `TitleMetrics.worldFont(logicalFont, zoom)` for zooms `1.0` and `2.0`; compare limits `130.0`, `150.0`, and `200.0`. | For each of the six `(zoom, limit)` pairs, `TitleTruncation.truncated(text, font, limit).equals(ScreenLabelPlacement.truncateTo(text, font, limit))`. No numeric tolerance is used. | Passes today; new green control. |
 | T13 | `org.freeplane.plugin.graph.canvas.title.LatexWholeTitleSampleShould.productionTotalsMatchTheRecordedSample` | Read the module-relative sample `doc/latex-whole-title/titles-sample.json` (the test JVM's working directory is `freeplane_plugin_graph`, as existing tests' `src/main/...` paths assume). For each of the 250 bodies build `new NodeModel("\\latex " + body, null)` and extract with `SafeNodeLabelExtractor`. Measure with `new TitleMeasurer(new FormulaIcons(), 1000)` — the public two-argument constructor — and one `beginPass(1L)`, so the 250 titles cannot be deferred by the default 200-measurement budget. | Every one of the 250 extracted titles has exactly one `Math` run; `deferredInLastPass() == 0`; and for each row the run's `source()` is `\text{...}` exactly when the body contains no `$`. When `LATEX_PROBE_DUMP` is set to an absolute path, one TSV row per body is written there with body, availability, width and run count. No width total is asserted, because glyph metrics are host-specific; the dump is evidence, not a gate. | Fails today: through today's production path (whitespace normalization, the 80-code-point cap, then the inline parser) 196 of the 250 bodies yield a single Math run, 45 yield several runs and 9 yield a single Plain run, so the one-Math-run assertion fails for 54 rows. The parser-only probe figures (201 single-Math, 46 multi-run, 3 single-Plain) are recorded as probe evidence in `probe-baseline-runs.js`, not as this test's baseline. |
-| T14 | `SafeNodeLabelExtractorShould.markdownPatternFormatWithNoDollarBodyIsWrapped` | `NodeStyleModel.setNodeFormat(node, "markdownPatternFormat")` on `new NodeModel("\\latex K", null)`. | `displayText() == fullText() == "\\latex K"`; one Math run; `source() == "\\text{K}"`; `rawSource() == "\\latex K"`. | Fails today; pins the G1 resolution. |
+| T14 | `SafeNodeLabelExtractorShould.markdownPatternFormatWithNoDollarBodyIsWrapped` | `NodeStyleModel.setNodeFormat(node, "markdownPatternFormat")` on `new NodeModel("\\latex K", null)`. | `displayText() == fullText() == "\\latex K"`; one Math run; `source() == "K"` (a pattern format is never wrapped); `rawSource() == "\\latex K"`. | Fails today; pins the §9 G1 resolution. |
 
 The 0.51 px tolerance in T11 is the design's host-calibrated tolerance. Its exact asserted interval is shown above; no alternate tolerance is permitted by this specification.
 
 ### 7.2 Red Phase and Verification Commands
 
-Run from the integration repository root with Java 21 from `~/.sdkman/candidates/java/21.0.8-zulu` and Gradle available:
+Run from the integration repository root with Java 21 and Gradle available (see stage 0):
 
 ```sh
-export JAVA_HOME="$HOME/.sdkman/candidates/java/21.0.8-zulu"
+export JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-21-openjdk}"
 export PATH="$JAVA_HOME/bin:$PATH"
 ```
 
 If the host matches the design's recorded state with no JDK or Gradle on `PATH`, inform the user before installing `jdk21-openjdk 21.0.13` and `gradle 9.8.2`; do not install packages as part of this specification task.
+
+0. **Prerequisite: a JDK 21 and Gradle.** This host has neither `gradle` on `PATH` nor
+   `~/.sdkman/candidates/java/21.0.8-zulu`; only a JRE 8, a JRE 27 and a cached 7.3.3 distribution exist. No stage
+   below is runnable until the user approves installing them:
+
+   ```sh
+   sudo pacman -S --needed jdk21-openjdk gradle
+   export JAVA_HOME=/usr/lib/jvm/java-21-openjdk
+   export PATH="$JAVA_HOME/bin:$PATH"
+   ```
+
+   Expected verdict: `java -version` reports 21.x and `gradle --version` reports the installed Gradle with JVM 21.
+   Record both in the evidence directory. Nothing in this specification is considered runnable or verified on this
+   host until this stage has been executed with the user's approval.
 
 1. **API red.** Add T8 to `TitleMeasurerShould` without adding `measureDegradedText`. Run:
 
@@ -213,7 +228,7 @@ If the host matches the design's recorded state with no JDK or Gradle on `PATH`,
    ```
 
    Expected verdicts: the first command passes, including T8. The second `BUILD FAILED` on T1, T2, T3, T5, T6, T7, T9,
-   T10 and T11, with T4 green. T12 is not in this selection.
+   T10, T11 and T14, with T4 green. T12 and T13 are not in this selection.
 
 3. **Green module gates.** After the complete change, run these commands in order:
 
@@ -310,12 +325,11 @@ The four-label capture is an application acceptance check, not a substitute for 
 The drafter returned three gaps. All three are resolved here; none returns to the design, because none changes an
 approved decision.
 
-- **G1 — Markdown prefix with a no-dollar body. Resolved: it is wrapped.** A `markdownPatternFormat` node whose
-  whole-title signal comes from a `\\latex` or `\\unparsedlatex` declaration is treated as a declared formula, so the
-  no-dollar wrap rule applies and `TitleText.Math.source()` is `\\text{` + body + `}`. The pattern-format exception
-  exists only for the two formats that declare a formula (`latexPatternFormat`, `unparsedLatexPatternFormat`); a
-  markdown format declares text, so the declaration governs the presentation. A dollar-containing
-  Markdown-prefixed body stays bare, exactly as §2.2 states for every dollar-bearing body.
+- **G1 — Markdown prefix with a no-dollar body. Resolved: it stays bare.** The approved design says a body from
+  any pattern format is never wrapped (§4.3 step 7), so a `markdownPatternFormat` node whose text is `\\latex K`
+  yields the bare source `K` with `rawSource()` keeping `\\latex K`. The earlier draft wrapped it to match ordinary
+  nodes; that would have added behaviour the approved design does not authorise, so the specification now follows the
+  design and the presentation difference is recorded as deferred item D6 in §5. T14 pins the bare result.
 - **G2 — Behavior-red compile scaffold. Resolved: there is no scaffold.** Stage 1 records the compilation failure with
   T8 present and `measureDegradedText` absent. Stage 2 adds that method in its final form; because it is additive and
   no production path calls it, the stage-1 failure disappears with no temporary code and nothing to remove. T8 is
