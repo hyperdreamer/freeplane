@@ -20,7 +20,7 @@ public final class TitleMeasurer {
     public static final int DEFAULT_MAX_NEW_MEASUREMENTS_PER_PASS = 200;
 
     enum Form {
-        RENDERED, DEGRADED, DEFERRED
+        RENDERED, DEGRADED, DEGRADED_TEXT, DEFERRED
     }
 
     private static final class Key {
@@ -142,6 +142,25 @@ public final class TitleMeasurer {
         cache.put(new Key(title, font, Form.DEGRADED), degraded);
         pending.remove(new Key(title, font, Form.DEFERRED));
         return degraded;
+    }
+
+    public MeasuredTitle measureDegradedText(final String text, final Font font, final boolean deferredForBudget) {
+        Objects.requireNonNull(text, "text");
+        Objects.requireNonNull(font, "font");
+        final Key key = new Key(TitleText.plain(text), font, Form.DEGRADED_TEXT);
+        MeasuredTitle measured = cache.get(key);
+        if (measured == null) {
+            final Rectangle2D bounds = font.getStringBounds(text, TitleMetrics.SCREEN_FRC);
+            final double width = bounds.getWidth();
+            final double ascent = -bounds.getY();
+            final double descent = bounds.getHeight() + bounds.getY();
+            final double height = Math.max(ascent + descent, 1.0e-6);
+            final List<MeasuredRun> runs = new ArrayList<MeasuredRun>();
+            runs.add(MeasuredRun.plain(text, 0.0, width, ascent, descent));
+            measured = MeasuredTitle.degraded(runs, width, height, ascent, descent);
+            cache.put(key, measured);
+        }
+        return deferredForBudget ? measured.deferred() : measured;
     }
 
     public MeasuredTitle defer(final TitleText title, final Font font) {

@@ -37,6 +37,43 @@ public class TitleMeasurerShould {
     }
 
     @Test
+    public void degradedTextIsMeasuredFromItsOwnString() {
+        final String text = "literal $a$";
+        final Rectangle2D bounds = FONT.getStringBounds(text, TitleMetrics.SCREEN_FRC);
+        final TitleMeasurer measurer = new TitleMeasurer(new StubIcons(), 10);
+        measurer.beginPass(1L);
+
+        final MeasuredTitle deferred = measurer.measureDegradedText(text, FONT, true);
+        final MeasuredTitle immediate = measurer.measureDegradedText(text, FONT, false);
+
+        assertLiteralMeasurement(deferred, text, bounds);
+        assertLiteralMeasurement(immediate, text, bounds);
+        assertThat(deferred.deferredForBudget()).isTrue();
+        assertThat(immediate.deferredForBudget()).isFalse();
+        assertThat(measurer.newMeasurementsInLastPass()).isZero();
+        assertThat(measurer.deferredInLastPass()).isZero();
+        assertThat(measurer.pendingCount()).isZero();
+        assertThat(measurer.budgetExhaustedInLastPass()).isFalse();
+
+        final MeasuredTitle plainTitle = measurer.measure(TitleText.plain(text), FONT);
+        assertThat(plainTitle.availability()).isEqualTo(MeasuredTitle.Availability.RENDERED);
+    }
+
+    private static void assertLiteralMeasurement(final MeasuredTitle measured, final String text,
+            final Rectangle2D bounds) {
+        assertThat(measured.availability()).isEqualTo(MeasuredTitle.Availability.DEGRADED);
+        assertThat(measured.runs()).hasSize(1);
+        final MeasuredRun run = measured.runs().get(0);
+        assertThat(run.kind()).isEqualTo(MeasuredRun.Kind.PLAIN);
+        assertThat(run.source()).isEqualTo(text);
+        assertThat(run.width()).isEqualTo(bounds.getWidth());
+        assertThat(run.ascent()).isEqualTo(-bounds.getY());
+        assertThat(run.descent()).isEqualTo(bounds.getHeight() + bounds.getY());
+        assertThat(measured.width()).isEqualTo(bounds.getWidth());
+        assertThat(measured.height()).isEqualTo(Math.max(measured.ascent() + measured.descent(), 1.0e-6));
+    }
+
+    @Test
     public void plainTitlesMeasureAsThePlacementBaseline() {
         final TitleMeasurer measurer = new TitleMeasurer(new StubIcons(), 10);
         measurer.beginPass(1L);
