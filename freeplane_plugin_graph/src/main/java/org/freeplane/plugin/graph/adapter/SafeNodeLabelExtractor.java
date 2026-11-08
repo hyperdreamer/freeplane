@@ -34,16 +34,66 @@ public final class SafeNodeLabelExtractor {
 
     private SafeNodeLabel labelFor(final NodeModel node, final String full) {
         final String display = displayText(full);
-        final String format = NodeStyleModel.getNodeFormat(node);
-        final boolean patternLatex = "latexPatternFormat".equals(format) || "unparsedLatexPatternFormat".equals(format);
-        final boolean prefixed = full.startsWith("\\latex") || full.startsWith("\\unparsedlatex");
-        if (patternLatex || prefixed) {
-            final String body = patternLatex ? full : removeLatexPrefix(full, format);
-            final TitleText title = TitleText.of(
-                Collections.<TitleText.Run>singletonList(new TitleText.Math(body, full)));
-            return SafeNodeLabel.of(full, display, title);
+        final Object rawContent = node.getUserObject();
+        final boolean directText = rawContent instanceof CharSequence;
+        final String content = sourceText(rawContent);
+        String converted;
+        String trimmed;
+        String declaration = null;
+        String declaredBody;
+        if (content == null) {
+            converted = null;
+            trimmed = null;
+            declaredBody = null;
         }
-        return SafeNodeLabel.of(full, display, TitleTextParser.parse(display, false));
+        else if (content.isEmpty()) {
+            converted = "";
+            trimmed = "";
+            declaredBody = "";
+        }
+        else {
+            converted = directText ? convertHtml(content) : content;
+            trimmed = trimLeadingWhitespace(converted);
+            if (trimmed.startsWith("\\latex") && hasWhitespaceAfter(trimmed, "\\latex".length())) {
+                declaration = "\\latex";
+            }
+            else if (trimmed.startsWith("\\unparsedlatex")
+                    && hasWhitespaceAfter(trimmed, "\\unparsedlatex".length())) {
+                declaration = "\\unparsedlatex";
+            }
+            declaredBody = declaration == null ? trimmed
+                : trimLeadingWhitespace(trimmed.substring(declaration.length()));
+        }
+        final String format = NodeStyleModel.getNodeFormat(node);
+        final boolean latexPattern = "latexPatternFormat".equals(format);
+        final boolean unparsedLatexPattern = "unparsedLatexPatternFormat".equals(format);
+        final boolean patternFormat = latexPattern || unparsedLatexPattern || "markdownPatternFormat".equals(format);
+        final boolean declaresWholeFormula = content != null && !content.isEmpty()
+            && declaredBody != null && !declaredBody.isEmpty()
+            && (declaration != null || latexPattern || unparsedLatexPattern);
+        final boolean strippedByLegacy = declaration != null && !patternFormat
+            && converted.startsWith(declaration) && hasWhitespaceAfter(converted, declaration.length());
+        if (!declaresWholeFormula) {
+            return SafeNodeLabel.of(full, display, TitleTextParser.parse(display, false));
+        }
+        String body = display;
+        if (!strippedByLegacy && declaration != null && display.startsWith(declaration)
+                && hasWhitespaceAfter(display, declaration.length())) {
+            body = trimLeadingWhitespace(display.substring(declaration.length()));
+        }
+        final String formulaSource;
+        if (body.indexOf('$') >= 0) {
+            formulaSource = body;
+        }
+        else if (!patternFormat) {
+            formulaSource = "\\text{" + body + "}";
+        }
+        else {
+            formulaSource = body;
+        }
+        final TitleText title = TitleText.of(Collections.<TitleText.Run>singletonList(
+            new TitleText.Math(formulaSource, display)));
+        return SafeNodeLabel.of(full, display, title);
     }
 
     private String normalizedRawContent(final NodeModel node) {
@@ -164,6 +214,21 @@ public final class SafeNodeLabelExtractor {
 
     private boolean isWhitespace(final int codePoint) {
         return Character.isWhitespace(codePoint) || Character.isSpaceChar(codePoint);
+    }
+
+    private String trimLeadingWhitespace(final String value) {
+        if (value == null) {
+            return null;
+        }
+        int index = 0;
+        while (index < value.length()) {
+            final int codePoint = value.codePointAt(index);
+            if (!isWhitespace(codePoint)) {
+                break;
+            }
+            index += Character.charCount(codePoint);
+        }
+        return value.substring(index);
     }
 
     private String displayText(final String fullText) {
