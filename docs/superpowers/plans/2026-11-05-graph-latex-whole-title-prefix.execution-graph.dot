@@ -1,0 +1,13 @@
+digraph execution {
+    rankdir=LR;
+    node [shape=box, style=rounded];
+    T-001 [label="T-001\nAdd Literal Degraded-Text Measurement\nlatex-title · Standard"];
+    T-002 [label="T-002\nDerive Whole-Title Formula Sources\nlatex-title · Standard"];
+    T-003 [label="T-003\nBuild Placement Rows From Placed Text\nlatex-title · Advanced"];
+    T-004 [label="T-004\nAdd the Production Sample Harness\nlatex-title · Standard"];
+    T-005 [label="T-005\nCapture Production-Path Acceptance Evidence\nacceptance · Capable"];
+    T-001 -> T-002;
+    T-002 -> T-003;
+    T-003 -> T-004;
+    T-004 -> T-005;
+}
