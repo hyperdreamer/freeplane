@@ -19,6 +19,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import org.freeplane.plugin.graph.canvas.title.TitleMetrics;
+import org.freeplane.plugin.graph.canvas.title.TitleTruncation;
 import org.freeplane.plugin.graph.geometry.GraphGeometry;
 import org.freeplane.plugin.graph.geometry.HullGeometry;
 import org.freeplane.plugin.graph.geometry.LayoutPoint;
@@ -1861,6 +1863,19 @@ public class ScreenLabelPlacementShould {
         List<PlacedLabel> placed = new ScreenLabelPlacement().place(request, null, fonts(),
             Collections.singletonList(seed));
         return findEnclosure(placed);
+    }
+
+    @Test
+    public void truncateToMirrorsTitleTruncation() {
+        final String text = new String(new char[96]).replace('\0', 'W');
+        final Font logicalFont = new Font(Font.SANS_SERIF, Font.PLAIN, 12);
+        for (final double zoom : new double[] { 1.0, 2.0 }) {
+            final Font worldFont = TitleMetrics.worldFont(logicalFont, zoom);
+            for (final double limit : new double[] { 130.0, 150.0, 200.0 }) {
+                assertThat(TitleTruncation.truncated(text, worldFont, limit))
+                    .isEqualTo(ScreenLabelPlacement.truncateTo(text, worldFont, limit));
+            }
+        }
     }
 
     static final class SceneNode {

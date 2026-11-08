@@ -531,7 +531,8 @@ public final class ScreenLabelPlacement {
                 width = size.getWidth();
                 height = size.getHeight();
                 text = degradedText;
-                rowSource = truncated ? context.measurer.measureDegraded(title, font) : degraded;
+                rowSource = truncated ? context.measurer.measureDegradedText(degradedText, font,
+                    degraded.deferredForBudget()) : degraded;
             }
             final double[] anchor = slotAnchor(slot, centerX, centerY, radius, width, height);
             final Rectangle2D box = rectangle(anchor[0], anchor[1], width, height);
@@ -551,7 +552,8 @@ public final class ScreenLabelPlacement {
         final Rectangle2D size = screenBounds(fallbackText, font);
         final double[] anchor = slotAnchor(Slot.ABOVE, centerX, centerY, radius, size.getWidth(),
             size.getHeight());
-        final TitleRow row = TitleRow.resolve(degraded, context.measurer.iconSource(), font, zoom);
+        final TitleRow row = TitleRow.resolve(context.measurer.measureDegradedText(fallbackText, font,
+            degraded.deferredForBudget()), context.measurer.iconSource(), font, zoom);
         return new PlacedLabel(endpoint, fallbackText, font, PlacedLabel.Mode.HOVER_ONLY,
             PlacedLabel.Rung.HOVER_ONLY, anchor[0], anchor[1], size.getWidth(), size.getHeight(), false,
             title.plainSource(), false, false, false, false, Optional.<LeaderLine>empty(), Slot.ABOVE, row);
