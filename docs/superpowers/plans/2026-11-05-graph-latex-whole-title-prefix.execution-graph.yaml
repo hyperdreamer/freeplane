@@ -58,6 +58,7 @@ tasks:
     ownership:
       - freeplane_plugin_graph/src/main/java/org/freeplane/plugin/graph/**
       - freeplane_plugin_graph/src/test/java/org/freeplane/plugin/graph/**
+      - freeplane_plugin_graph/doc/latex-whole-title/**
     resources: [gradle-build]
     produces: []
     consumes:
