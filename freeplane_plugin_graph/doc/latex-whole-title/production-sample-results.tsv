@@ -1,0 +1,250 @@
+Remark: $\mathscr{F}$ is well-orderable, since it is a subset of an ordinal	RENDERED	323.0	1
+$f:A\to B$	RENDERED	59.0	1
+Choose $\phi\in(\kappa\times\lambda)^\lambda$	RENDERED	109.0	1
+$\gamma\in\beta$	RENDERED	32.0	1
+$\alpha,\gamma\in ON$	RENDERED	59.0	1
+$Z:=\Big\{\eta\in X: \forall\sigma\in X\cap\eta\Big(h(\sigma)<h(\eta)\Big)\Bi...	DEGRADED	428.18707275390625	1
+$\xi:=\gamma_2-\gamma_1>0$	RENDERED	87.0	1
+$y\in R(\xi+1)=\mathcal{P}(R(\xi))$	RENDERED	127.0	1
+choose $z\in x$	RENDERED	67.0	1
+$\forall x\in X\exists y\in X\big(x<y\big)$	RENDERED	122.0	1
+$F^\ast:=\{\{x\}\times x:x\in F\}$	RENDERED	131.0	1
+Remark: $\#(\omega\times\omega)=\aleph_0$	RENDERED	135.0	1
+the minimality of $k$	RENDERED	102.0	1
+$\alpha\cdot\beta$	RENDERED	28.0	1
+$X:=\{\xi\in\alpha:f(\xi)\neq\xi\}$	RENDERED	127.0	1
+$\forall\alpha\in J\big(Y_\alpha\neq\emptyset\big)$	RENDERED	87.0	1
+$\beta=\mathrm{type}(\{1\}\times\beta)=\mathrm{type}(\{1\}\times\gamma)=\gamma$	RENDERED	209.0	1
+Choose $n\in\omega$ s.t.	RENDERED	90.0	1
+$\gamma:=0$	RENDERED	36.0	1
+$A:=\{\aleph_\xi:\xi<\alpha\}$	RENDERED	95.0	1
+$A\cup B=Y$	RENDERED	62.0	1
+$\gamma=\max\beta$	RENDERED	58.0	1
+$\theta:=\fbox{\kappa^\lambda}$	RENDERED	58.0	1
+$S_1:=\{\alpha^\nu:\nu<\beta\cdot\mu\}$	RENDERED	114.0	1
+$\beta=\max(\alpha,\beta)\geqslant\omega$	RENDERED	102.0	1
+$\mu=0$	RENDERED	34.0	1
+$R(\mu)=\bigcup_{\nu<\mu}R(\nu)$	RENDERED	101.0	1
+choose $y\in t\setminus WF$	RENDERED	98.0	1
+$\xi: = \sup\Bigg\{\fbox{\lambda^\theta}: \theta\in K\Bigg\}$	DEGRADED	339.7703857421875	1
+$\mathrm{type}(A;R)$	RENDERED	61.0	1
+$\gamma\geqslant\omega$	RENDERED	34.0	1
+$f:G\to ON$	RENDERED	70.0	1
+$\forall S\in\mathscr{F}\big(\#S<\theta\big)$	RENDERED	95.0	1
+Choose $\gamma\in\alpha$	RENDERED	72.0	1
+$\lambda\geqslant\aleph_0$	RENDERED	39.0	1
+$S:=\prod_{\alpha\in J}S_\alpha$	RENDERED	77.0	1
+$\subseteq$	RENDERED	14.0	1
+$\zeta:=f(\xi)\in A$	RENDERED	74.0	1
+$\alpha^\mu<\theta$	RENDERED	39.0	1
+$\kappa,\lambda$	RENDERED	24.0	1
+$\kappa:=\#\gamma$	RENDERED	47.0	1
+Remark: strict $<$	RENDERED	101.0	1
+$B$	RENDERED	14.0	1
+$\zeta:=\alpha\cdot(\beta\cdot2)$	RENDERED	76.0	1
+$z\in\mathcal{P}(x)$	RENDERED	50.0	1
+$\max(\kappa,\lambda)\geqslant\aleph_0$	RENDERED	83.0	1
+$f(\alpha)=\sup\{f(\beta): \beta<\alpha\}$	RENDERED	138.0	1
+choose $n\in\omega$	RENDERED	69.0	1
+$\beta=\alpha\cdot\mu+\nu$	RENDERED	71.0	1
+$\alpha\leqslant\beta$	RENDERED	35.0	1
+$A:\{0\}\times\{\xi\in\alpha, \xi<\mu\}$	RENDERED	130.0	1
+$\Phi:\mathcal{P}(\kappa)\to H_{\kappa\times2}$	RENDERED	92.0	1
+$\beta\times\alpha$	RENDERED	34.0	1
+$\forall\alpha\in\gamma\big(\aleph_\alpha<\gamma\big)$	RENDERED	86.0	1
+$\mathrm{type}(\kappa\times\kappa;\lhd)=\kappa$	RENDERED	104.0	1
+$X:=\{f(\beta):\beta\in Y\}$	RENDERED	111.0	1
+Let $\alpha\in ON$ be given.	RENDERED	109.0	1
+$\beta:=\sup\{g(\xi)+1:\xi<\eta\}$	RENDERED	139.0	1
+$G(s):=y$	RENDERED	55.0	1
+$\beta=\mathrm{type}(\{1\}\times\beta)=\mathrm{type}(\{1\}\times\gamma)=\gamma$	RENDERED	209.0	1
+$x\in WF$	RENDERED	48.0	1
+$X':=\mathrm{ran}\,F$	RENDERED	66.0	1
+$\mathscr{F}\subseteq\mathcal{P}(A)$	RENDERED	58.0	1
+$B$	RENDERED	14.0	1
+$R:=\{(\gamma,\beta)\in\omega\times\omega: g(\gamma)<g(\beta)\}$	RENDERED	187.0	1
+$S_2:=\{\alpha+(\beta+\mu):\mu<\gamma\}$	RENDERED	147.0	1
+Remark: by K\"onig's Theorem	RENDERED	166.0	1
+$Z:=\Big\{\eta\in X: \forall\sigma\in X\cap\eta\Big(h(\sigma)<h(\eta)\Big)\Bi...	DEGRADED	428.18707275390625	1
+$\exists x_1,x_2\big(x_1\neq x_2\land x_1,x_2\in X\cap z\big)$	RENDERED	173.0	1
+$\aleph_\beta<\kappa\leqslant\aleph_\alpha$	RENDERED	68.0	1
+Choose $\mathbf{v}\in B$	RENDERED	75.0	1
+$h(0,\mu)=(0,\zeta)$	RENDERED	81.0	1
+$\#(\omega^\omega)=\aleph_0$	RENDERED	65.0	1
+$\gamma\geqslant\omega$	RENDERED	34.0	1
+$\xi=\gamma\cdot\theta+\varphi\geqslant\gamma\cdot\theta>\gamma\cdot\alpha^\mu$	RENDERED	149.0	1
+$n>0$	RENDERED	34.0	1
+$m<n\land m\approx n$	RENDERED	85.0	1
+$A$	RENDERED	13.0	1
+$f:A\to\mathcal{P}(A)$	RENDERED	76.0	1
+$\xi_{\beta+1}:=f(\xi_\beta)$	RENDERED	71.0	1
+$f: X\to Y$	RENDERED	61.0	1
+$\zeta\in A$	RENDERED	33.0	1
+$\theta<\alpha+0$	RENDERED	54.0	1
+$\#\mathrm{type}(X)=\#X<\theta$	RENDERED	116.0	1
+$A:=\mathrm{ran}\,f$	RENDERED	59.0	1
+$\alpha:=\sup\{g(\xi):\xi<\eta\}$	RENDERED	120.0	1
+$B_1, B_2$	RENDERED	36.0	1
+$\mathfrak{F}:=\{\mathscr{A}\in\mathcal{P}(\mathcal{P}(X)):\mathscr{A}\text{ ...	RENDERED	147.0	1
+$x\in\mathcal{P}(S)$	RENDERED	52.0	1
+$X:=\{\gamma\in ON: \gamma\text{ is an infinite cardinal}\land\mathrm{type}(\...	RENDERED	262.0	1
+$y\subseteq R(\beta)$	RENDERED	52.0	1
+$(\xi,\zeta)<(\sigma,\delta)$	RENDERED	72.0	1
+$(0,\mu)<(0,\zeta)$	RENDERED	74.0	1
+$g:S_1\to S_2$	RENDERED	62.0	1
+$\mathscr{F}=\emptyset$	RENDERED	37.0	1
+$f\in B^A$	RENDERED	43.0	1
+Choose $\xi\in\beta$ s.t.	RENDERED	87.0	1
+$g:\theta\to\{0\}\times\alpha\cup\{1\}\times\gamma$	RENDERED	138.0	1
+$g:\kappa\to Y$	RENDERED	56.0	1
+$R(\xi)=\mathcal{P}(R(\mu))$	RENDERED	88.0	1
+$\mu>0$	RENDERED	34.0	1
+$i\in I$	RENDERED	30.0	1
+$\alpha>\omega$	RENDERED	36.0	1
+$\mathscr{F}\subseteq\mathscr{C}$	RENDERED	39.0	1
+$Y:=\alpha\cap X$	RENDERED	65.0	1
+$n\in Y$	RENDERED	36.0	1
+Remark: $B\prec D\land A\preccurlyeq C$ is not enough	RENDERED	208.0	1
+$\forall n\in\omega\big(f(n)=S(n)\big)$	RENDERED	116.0	1
+$S(\theta)>\alpha^\mu$	RENDERED	57.0	1
+$\aleph_0\leqslant\kappa$	RENDERED	39.0	1
+$\xi:=f(\gamma)$	RENDERED	52.0	1
+$\{0\}\times\alpha\cup\{1\}\times\beta\subseteq\gamma\times\gamma$	RENDERED	141.0	1
+$S'\approx S$	RENDERED	39.0	1
+$\alpha+0<\omega$	RENDERED	56.0	1
+$\#B<\aleph_0$	RENDERED	52.0	1
+$\alpha\in\kappa$	RENDERED	34.0	1
+$S\in H(\kappa)$	RENDERED	54.0	1
+$\gamma$ is a limit	RENDERED	54.0	1
+$\exists i<m\big(f(i)=n\big)$	RENDERED	97.0	1
+$\mu<\zeta$	RENDERED	33.0	1
+$\kappa$	RENDERED	11.0	1
+Remark: $\alpha=0\lor\alpha$ is a successor ordinal	RENDERED	216.0	1
+$\lambda'>0$	RENDERED	36.0	1
+$\xi:=\min X$	RENDERED	62.0	1
+Choose $\gamma\in X$	RENDERED	75.0	1
+$\alpha=S(\beta)$	RENDERED	52.0	1
+$\fbox{\kappa^\lambda}\leqslant 1\leqslant\fbox{(\kappa')^{\lambda'}}$	DEGRADED	406.8268737792969	1
+$S_2=\{1\}$	RENDERED	50.0	1
+$x\in R(\mu)$	RENDERED	52.0	1
+choose $n<\omega$	RENDERED	70.0	1
+$\beta=\gamma$	RENDERED	33.0	1
+$\mathbb{D}:=\{x\in A: x\notin f(x)\}$	RENDERED	130.0	1
+$\zeta:=\alpha+(\beta+1)$	RENDERED	88.0	1
+$f:A\to B$	RENDERED	59.0	1
+choose $a\in A$	RENDERED	69.0	1
+$\kappa\in ON$	RENDERED	47.0	1
+$\#B=n$	RENDERED	47.0	1
+$y$ is transitive.	RENDERED	78.0	1
+$\kappa:=\#\beta$	RENDERED	48.0	1
+choose $v\in t$	RENDERED	65.0	1
+$B$	RENDERED	14.0	1
+$g:\kappa\to A$	RENDERED	55.0	1
+$\{\kappa_i: i\in I$\}	RENDERED	61.0	1
+$ZFC^-$	RENDERED	39.0	1
+$\in$ and directed graph	RENDERED	110.0	1
+Remark: $\mathrm{ran}\,h\neq\emptyset$	RENDERED	107.0	1
+$z\subseteq y$	RENDERED	33.0	1
+$\mathrm{cf}(\theta)=\lambda<\theta$	RENDERED	74.0	1
+$\mathscr{F}$	RENDERED	15.0	1
+choose $\delta<\beta\cdot\mu$	RENDERED	83.0	1
+$A\setminus\{f(\xi):\xi<\alpha\}\neq\emptyset$	RENDERED	120.0	1
+$f:X\to A$	RENDERED	60.0	1
+$(\xi,\zeta)>(\sigma,\delta)$	RENDERED	72.0	1
+$\kappa\geqslant\aleph_0$	RENDERED	39.0	1
+$S:=H(\theta^+)\cap R(\beta)$	RENDERED	104.0	1
+$S\in\mathcal{P}(\alpha)$	RENDERED	53.0	1
+$x\in H(\kappa)$	RENDERED	53.0	1
+$\lambda$	RENDERED	11.0	1
+$\nu>\beta$	RENDERED	33.0	1
+$f:\sup A\to\xi$	RENDERED	75.0	1
+$\kappa$	RENDERED	11.0	1
+$h^{-1}(0,0)>(0,0)$	RENDERED	92.0	1
+$\sup (C\cap \lambda)=\lambda$	RENDERED	85.0	1
+$A\cup B\cup C=\{0\}\times\alpha+\{1\}\times\beta=\alpha+\beta$	RENDERED	215.0	1
+$X:=\{\gamma\in\kappa+1:\kappa\leqslant\aleph_\gamma\}$	RENDERED	140.0	1
+$g:\delta\to X$	RENDERED	56.0	1
+$A\approx S$	RENDERED	38.0	1
+$\gamma>\beta\geqslant0$	RENDERED	55.0	1
+$V$	RENDERED	11.0	1
+Choose the unique $\lambda\in ON$	RENDERED	139.0	1
+$\xi\in\delta$	RENDERED	30.0	1
+$\xi\in S_1$	RENDERED	36.0	1
+$=$	RENDERED	14.0	1
+list $\mathscr{F}$ as	RENDERED	45.0	1
+$\eta=\min X$	RENDERED	59.0	1
+Let $\mu<\gamma$ be given	RENDERED	92.0	1
+$\mu\subseteq R(\mu)$	RENDERED	53.0	1
+Claim: $X$ is well-ordered by $\in$	RENDERED	170.0	1
+$\alpha+\xi=\beta$	RENDERED	55.0	1
+$n\in\omega$	RENDERED	34.0	1
+choose $y\in t\setminus WF$	RENDERED	98.0	1
+$f\in B^A$	RENDERED	43.0	1
+$\kappa:=\aleph(A)$	RENDERED	56.0	1
+$\mathscr{E}:=\mathscr{F}\setminus\{B\}$	RENDERED	74.0	1
+Remark: If $\alpha>2$, $\subsetneq$ holds	RENDERED	149.0	1
+Expand the codomain $B$ to $A$	RENDERED	144.0	1
+$\alpha^{\beta\cdot\mu}=1=(\alpha^\beta)^\mu$	RENDERED	91.0	1
+$\forall\beta<\mu\big(\gamma\cdot\alpha^\beta<\gamma\cdot\alpha^\mu\big)$	RENDERED	124.0	1
+$\kappa\in ON$	RENDERED	47.0	1
+$V:=\{x: x\notin x\}$	RENDERED	91.0	1
+$g(i)=j$	RENDERED	46.0	1
+$Y:=f(\alpha)$	RENDERED	58.0	1
+$g(\theta)<\gamma$	RENDERED	48.0	1
+$\mu$ is a limit	RENDERED	55.0	1
+$S_2:=\{\alpha\cdot(\beta\cdot\mu):\mu<\gamma\}$	RENDERED	135.0	1
+$B\neq\emptyset$	RENDERED	36.0	1
+$\alpha_k:=\min\{\alpha\in\beta: x_k\in f(\alpha)\}$	RENDERED	157.0	1
+$n$ is not a cardinal	RENDERED	90.0	1
+$\mathcal{P}(\omega)$	RENDERED	30.0	1
+$f(1)=g(A\setminus\{f(0)\})$	RENDERED	113.0	1
+Choose $\gamma\in X$	RENDERED	75.0	1
+$\exists n\in\omega\big(\delta_n=\gamma\big)	RENDERED	84.0	1
+$$S:=\bigcup_{i\in I} Z_i$$	RENDERED	70.0	1
+$\mathcal{P}(x)$	RENDERED	29.0	1
+$\alpha\in\gamma$	RENDERED	33.0	1
+$\gamma\in\beta$	RENDERED	32.0	1
+$h: X\to A$	RENDERED	60.0	1
+$\delta:=0$	RENDERED	35.0	1
+$\alpha:=\min\{\beta<\kappa:f(\beta)=S\}$	RENDERED	151.0	1
+$f\upharpoonright\alpha:\alpha\to A$	RENDERED	76.0	1
+$y\in S$	RENDERED	34.0	1
+$g(x)=f(x)$, $\forall x\neq i$	RENDERED	105.0	1
+$A,B$	RENDERED	29.0	1
+$\alpha^\beta\leqslant\alpha^\alpha$	RENDERED	47.0	1
+$\xi<\alpha$	RENDERED	33.0	1
+$\kappa:=\#\gamma$	RENDERED	47.0	1
+Remark: $A$ has a countably infinite subset	RENDERED	221.0	1
+$\sigma:=\mathrm{cf}(\theta)$	RENDERED	56.0	1
+$\beta>\alpha$	RENDERED	35.0	1
+$\xi_\lambda:=\sup\{\xi_\beta: \beta<\lambda\}$	RENDERED	114.0	1
+$g(0)\notin\mathrm{ran}\,f$	RENDERED	67.0	1
+$\kappa=\mathrm{cf}(\kappa)$	RENDERED	54.0	1
+$\gamma$ is a limit ordinal.	RENDERED	96.0	1
+$\aleph_\xi$, $\omega_\xi$, where $\xi\in ON$	RENDERED	110.0	1
+$\xi<\alpha$	RENDERED	33.0	1
+Let $\alpha,\beta\in ON$	RENDERED	77.0	1
+$\bigcup\alpha\subseteq\alpha$	RENDERED	48.0	1
+Theorem: $\bigcup\alpha\leqslant\alpha$	RENDERED	107.0	1
+$S_1:=\big(\{0\}\times\kappa\cup\{1\}\times\lambda\big)\times\theta$	RENDERED	159.0	1
+$h:=H(\delta)$	RENDERED	56.0	1
+$f(1)=g(A\setminus\{f(0)\})$	RENDERED	113.0	1
+$LON:=\{\lambda\in ON:\lambda\text{ is a limit ordinal}\}$	RENDERED	215.0	1
+$\mathfrak{F}:=\{\mathscr{A}\in\mathcal{P}(\mathcal{P}(X)):\mathscr{A}\text{ ...	RENDERED	147.0	1
+$A\cup B\cup C=\{0\}\times\alpha+\{1\}\times\beta=\alpha+\beta$	RENDERED	215.0	1
+$(X_\alpha,\mathcal{T}_\alpha)$	RENDERED	46.0	1
+$\neq$	RENDERED	14.0	1
+$RHS=\alpha+(\beta+\nu)$	RENDERED	108.0	1
+$\#(\alpha^\gamma)=\max\big(\#(\alpha^\mu),\#\alpha\big)=\#\alpha$	RENDERED	177.0	1
+$\alpha^\gamma\leqslant\gamma^\gamma$	RENDERED	45.0	1
+Let $x$ be given	RENDERED	69.0	1
+Choose $\xi\in\lambda$	RENDERED	71.0	1
+$\kappa\leqslant\lambda$	RENDERED	34.0	1
+$\gamma$ is a infinite cardinal	RENDERED	116.0	1
+$g:=f\upharpoonright\alpha$	RENDERED	56.0	1
+$S(\emptyset)=\emptyset\cup\{\emptyset\}=\{\emptyset\}$	RENDERED	115.0	1
+$f:\{0\}\to n\cup\{n\}	RENDERED	98.0	1
+$\Psi(\mathscr{X})$, where $\mathscr{X}\subseteq\mathcal{P}(X)\land\#\mathscr...	RENDERED	162.0	1
+$X:=\{\gamma\in ON: (\alpha+\beta)+\gamma\neq\alpha+(\beta+\gamma)\}$	RENDERED	233.0	1
+$\alpha^{\beta+\mu}=\alpha^\beta=\alpha^\beta\cdot\alpha^\mu$	RENDERED	109.0	1
+Generalization of $HF$	RENDERED	120.0	1
