@@ -195,7 +195,7 @@ Baseline status is against the design's pre-change production baseline. “Fails
 | T11 | `GraphTitleFormulaShould.reportedTitleFitsTheVerticalSlot` | The T10 marked-child fixture placed with `placeExtracted(node, false)`, one node, no obstacles, 12-point Sans Serif plain label font; the near slots are requested so the selected slot is `ABOVE`. | Measured/placement width is within `0.51 px` of `194.00 px`, i.e. `[194.00 - 0.51, 194.00 + 0.51] == [193.49, 194.51]`; `slot() == ABOVE`; `rung() == FULL_NEAR`; `truncated() == false`; width is at most the `200 px` vertical cap and not `TRUNCATED_NEAR`. | Fails today. |
 | T12 | `org.freeplane.plugin.graph.canvas.ScreenLabelPlacementShould.truncateToMirrorsTitleTruncation` | Java 8 fixture `new String(new char[96]).replace('\0', 'W')`; logical font `new Font(Font.SANS_SERIF, Font.PLAIN, 12)`; derive test fonts with `TitleMetrics.worldFont(logicalFont, zoom)` for zooms `1.0` and `2.0`; compare limits `130.0`, `150.0`, and `200.0`. | For each of the six `(zoom, limit)` pairs, `TitleTruncation.truncated(text, font, limit).equals(ScreenLabelPlacement.truncateTo(text, font, limit))`. No numeric tolerance is used. | Passes today; new green control. |
 | T13 | `org.freeplane.plugin.graph.canvas.title.LatexWholeTitleSampleShould.productionTotalsMatchTheRecordedSample` | Read the module-relative sample `doc/latex-whole-title/titles-sample.json` (the test JVM's working directory is `freeplane_plugin_graph`, as existing tests' `src/main/...` paths assume). For each of the 250 bodies build `new NodeModel("\\latex " + body, null)` and extract with `SafeNodeLabelExtractor`. Measure with `new TitleMeasurer(new FormulaIcons(), 1000)` — the public two-argument constructor — and one `beginPass(1L)`, so the 250 titles cannot be deferred by the default 200-measurement budget. | Every one of the 250 extracted titles has exactly one `Math` run; `deferredInLastPass() == 0`. For each row let `expectedBody = label.displayText()`, computed by the extractor itself: assert `expectedBody` equals the whitespace-normalized raw sample entry **after the existing 80-code-point display rule** (keep the first 77 code points and append the literal three-character `...` when the normalized entry exceeds 80); six of the 250 entries exceed the cap and assert the run's `source()` equals `expectedBody` when it contains `$`, and `\text{` + expectedBody + `}` when it does not. A raw sample entry may carry leading or trailing whitespace, which extraction normalizes; no assertion may compare the formula source to the raw entry. When `LATEX_PROBE_DUMP` is set to an absolute path, one TSV row per body is written there with body, availability, width and run count. No width total is asserted, because glyph metrics are host-specific; the dump is evidence, not a gate. | Fails today: through today's production path (whitespace normalization, the 80-code-point cap, then the inline parser) 196 of the 250 bodies yield a single Math run, 45 yield several runs and 9 yield a single Plain run, so the one-Math-run assertion fails for 54 rows. The parser-only probe figures (201 single-Math, 46 multi-run, 3 single-Plain) are recorded as probe evidence in `probe-baseline-runs.js`, not as this test's baseline. |
-| T14 | `SafeNodeLabelExtractorShould.markdownPatternFormatWithNoDollarBodyIsWrapped` | `NodeStyleModel.setNodeFormat(node, "markdownPatternFormat")` on `new NodeModel("\\latex K", null)`. | `displayText() == fullText() == "\\latex K"`; one Math run; `source() == "K"` (a pattern format is never wrapped); `rawSource() == "\\latex K"`. | Fails today; pins the §9 G1 resolution. |
+| T14 | `SafeNodeLabelExtractorShould.markdownPatternFormatWithNoDollarBodyStaysBare` | `NodeStyleModel.setNodeFormat(node, "markdownPatternFormat")` on `new NodeModel("\\latex K", null)`. | `displayText() == fullText() == "\\latex K"`; one Math run; the no-dollar body stays bare with `source() == "K"` (a pattern format is never wrapped); `rawSource() == "\\latex K"`. | Fails today; pins the §9 G1 resolution that the no-dollar body stays bare. |
 
 > **Amendment A2 (2026-11-05, implementation phase).** T13 applies the existing display cap to its expected
 > value. Six archived entries normalize to more than 80 code points (81, 81, 115, 113, 107 and 90), so an
@@ -204,7 +204,9 @@ Baseline status is against the design's pre-change production baseline. “Fails
 > **Amendment A1 (2026-11-05, implementation phase).** T13's expected value is derived from the extractor's own
 > `displayText()`, not from the raw sample string. Two of the 250 archived entries carry a trailing space, which
 > extraction normalizes by the approved rule that keeps `displayText` byte-identical; the earlier wording could be
-> read as requiring the formula source to reproduce that whitespace. No production rule changes.
+> read as requiring the formula source to reproduce that whitespace. No production rule changes. Amendment A3
+> (2026-11-05, audit fix) renames T14 to `markdownPatternFormatWithNoDollarBodyStaysBare` and states that its
+> no-dollar body stays bare; the assertion remains `source() == "K"`.
 
 The 0.51 px tolerance in T11 is the design's host-calibrated tolerance. Its exact asserted interval is shown above; no alternate tolerance is permitted by this specification.
 
@@ -303,18 +305,26 @@ If the host matches the design's recorded state with no JDK or Gradle on `PATH`,
    ```
 
    Record both values before launch; the jar digest is what distinguishes this build from any existing installation.
-2. Create isolated runtime directories and an evidence directory:
+2. Create unique isolated runtime directories and an evidence directory. Use a fresh `mktemp -d` root for every
+   invocation; keep `HOME`, `XDG_CONFIG_HOME`, and the workspace file beneath it. Retain the PNG under
+   `freeplane_plugin_graph/doc/latex-whole-title` so it survives a `BIN` rebuild:
 
    ```sh
-   mkdir -p /tmp/graph-latex-whole-title-acceptance/home
-   mkdir -p /tmp/graph-latex-whole-title-acceptance/config
-   mkdir -p freeplane_plugin_graph/build/evidence
+   RUN=$(mktemp -d /tmp/fp-latex-whole-title-acceptance.XXXXXX)
+   APP_HOME="$RUN/home"
+   CONFIG_HOME="$RUN/config"
+   WORKSPACE="$RUN/acceptance-empty.fpg"
+   EVIDENCE_DIR="$PWD/freeplane_plugin_graph/doc/latex-whole-title"
+   mkdir -p "$APP_HOME" "$CONFIG_HOME" "$EVIDENCE_DIR"
    ```
 
-3. Start a dedicated virtual X server on the unused display `:99`:
+3. Start a dedicated virtual X server on any free display. The capture script defaults to `:98`, checks its X
+   lock, and accepts another free display number through `DISPLAY_NUM`:
 
    ```sh
-   Xvfb :99 -screen 0 1600x1000x24 -nolisten tcp > /tmp/graph-latex-whole-title-acceptance/xvfb.log 2>&1 &
+   DISPLAY_NUM=98 # or another free display number
+   DISPLAY=":$DISPLAY_NUM"
+   Xvfb "$DISPLAY" -screen 0 1600x1000x24 -nolisten tcp > "$RUN/xvfb.log" 2>&1 &
    xvfb_pid=$!
    ```
 
@@ -322,25 +332,27 @@ If the host matches the design's recorded state with no JDK or Gradle on `PATH`,
 4. From the repository root, launch the just-built app from `BIN` with the isolated home/config and JDK:
 
    ```sh
-   cd BIN && DISPLAY=:99 HOME=/tmp/graph-latex-whole-title-acceptance/home XDG_CONFIG_HOME=/tmp/graph-latex-whole-title-acceptance/config JAVA_HOME="$JAVA_HOME" JAVA_OPTS="-Dorg.freeplane.nosplash=true" ./freeplane.sh
+   cd BIN && env FP_LATEX_ACCEPTANCE=20261105-graph-latex-whole-title-prefix DISPLAY="$DISPLAY" \
+     HOME="$APP_HOME" XDG_CONFIG_HOME="$CONFIG_HOME" JAVA_HOME="$JAVA_HOME" \
+     JAVA_OPTS="-Dorg.freeplane.nosplash=true" ./freeplane.sh
    ```
 
-5. In that Freeplane instance, open `/home/henry/Documents/999.notebooks/01.math/00.foundation.of.math/02.set_theory/mindmap/Axiomatic_Set_Theory.mm`, search for `is well-ordered by`, and open the Graph Workspace. A freshly created workspace holds no maps, so **add the opened map to the workspace explicitly** with the Graph Workspace's add-map action and wait for the layout to settle before capturing.
+5. In that Freeplane instance, open `/home/henry/Documents/999.notebooks/01.math/00.foundation.of.math/02.set_theory/mindmap/Axiomatic_Set_Theory.mm`, search for `is well-ordered by`, and open the Graph Workspace. A freshly created workspace holds no maps, so **add the opened map to the workspace explicitly** with the Graph Workspace's add-map action and wait for the layout to settle before capturing. Before adding it, the capture script requires the workspace file to exist and aborts loudly if it contains any map marked `active="true"`.
 6. Only nodes marked as graph groups are projected as discs, so only those carry a node label. The map's eleven marked nodes include the four required ones: `ID_215702338` (`\\latex Theorem: $ON$ is well-ordered by $\\in$`), `ID_297617399` (`\\latex Theorem: Equivalence of $\\leqslant$ and $\\subseteq$`), `ID_1222855984` (`\\latex Theorem: $\\bigcup\\alpha\\leqslant\\alpha$`), and the plain control `ID_1887656421` (`Theorem: initial segement`). Capture the Graph Workspace window with the tools present on this host:
 
    ```sh
-   wid=$(DISPLAY=:99 xdotool search --name 'Graph Workspace' | head -n 1)
-   DISPLAY=:99 xdotool getwindowname "$wid"   # must print exactly: Graph Workspace
-   DISPLAY=:99 xdotool windowsize "$wid" 1600 1000
-   DISPLAY=:99 xwd -id "$wid" -out /tmp/graph-latex-whole-title-acceptance/graph.xwd
-   ffmpeg -y -i /tmp/graph-latex-whole-title-acceptance/graph.xwd \
-     freeplane_plugin_graph/build/evidence/latex-whole-title-acceptance.png
+   wid=$(DISPLAY="$DISPLAY" xdotool search --name 'Graph Workspace' | head -n 1)
+   DISPLAY="$DISPLAY" xdotool getwindowname "$wid"   # must print exactly: Graph Workspace
+   DISPLAY="$DISPLAY" xdotool windowsize "$wid" 1600 1000
+   DISPLAY="$DISPLAY" xwd -id "$wid" -out "$RUN/acceptance-graph.xwd"
+   ffmpeg -y -loglevel error -i "$RUN/acceptance-graph.xwd" -frames:v 1 -update 1 \
+     "$EVIDENCE_DIR/acceptance-graph-workspace.png"
    ```
 
    The workspace window's title is `Graph Workspace`, not `Freeplane`: the main application frame is a different
    window, so searching for `Freeplane` would capture the wrong one. The `getwindowname` check is required before the
    capture. `xdotool`, `xwd`, `ffmpeg` and `Xvfb` are installed; no other capture utility is assumed.
-7. Record the PNG path, jar SHA-256, commit, map SHA-256 `840358a03666d02f445e3aeb5ba84d9852e913318a3bf6c1776f50593aaff08c`, and host/font information from `freeplane_plugin_graph/doc/latex-whole-title/environment.txt`. The expected label font is Sans Serif plain 12; the environment evidence resolves it to Noto Sans.
+7. Record the PNG path `freeplane_plugin_graph/doc/latex-whole-title/acceptance-graph-workspace.png`, jar SHA-256, commit, map SHA-256 `840358a03666d02f445e3aeb5ba84d9852e913318a3bf6c1776f50593aaff08c`, and host/font information from `freeplane_plugin_graph/doc/latex-whole-title/environment.txt`. The PNG is retained outside `BIN` so it survives a distribution rebuild. The expected label font is Sans Serif plain 12; the environment evidence resolves it to Noto Sans.
 
 The four-label capture is an application acceptance check, not a substitute for T1-T13, the module suite, `:freeplane:compileJava`, or `verifyGraphBundle`.
 

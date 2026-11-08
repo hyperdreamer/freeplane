@@ -418,7 +418,7 @@ public class SafeNodeLabelExtractorShould {
     }
 
     @Test
-    public void markdownPatternFormatWithNoDollarBodyIsWrapped() {
+    public void markdownPatternFormatWithNoDollarBodyStaysBare() {
         NodeModel node = new NodeModel("\\latex K", null);
         NodeStyleModel.setNodeFormat(node, "markdownPatternFormat");
         SafeNodeLabel label = extractor.extract(node);

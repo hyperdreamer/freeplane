@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
-RUN=/tmp/fp-latex-whole-title-acceptance
-DISPLAY_NUM=98
+RUN="$(mktemp -d /tmp/fp-latex-whole-title-acceptance.XXXXXX)"
+DISPLAY_NUM="${DISPLAY_NUM:-98}"
 DISPLAY=":${DISPLAY_NUM}"
 APP_HOME="$RUN/home"
 CONFIG_HOME="$RUN/config"
@@ -93,6 +93,20 @@ DISPLAY="$DISPLAY" xdotool mousemove 830 553 click 1
 DISPLAY="$DISPLAY" xdotool type --clearmodifiers --delay 1 "$WORKSPACE"
 DISPLAY="$DISPLAY" xdotool mousemove 980 636 click 1
 sleep 8
+if [ ! -f "$WORKSPACE" ]; then
+    printf 'Graph workspace file was not created: %s\n' "$WORKSPACE" >&2
+    exit 1
+fi
+if grep -Eq '<map[[:space:]][^>]*active="true"' "$WORKSPACE"; then
+    printf 'Refusing to add map: graph workspace already contains an active map: %s\n' "$WORKSPACE" >&2
+    exit 1
+else
+    grep_status=$?
+    if [ "$grep_status" -ne 1 ]; then
+        printf 'Unable to inspect graph workspace for active maps: %s\n' "$WORKSPACE" >&2
+        exit "$grep_status"
+    fi
+fi
 DISPLAY="$DISPLAY" xdotool mousemove 69 717 click 1
 sleep 2
 DISPLAY="$DISPLAY" xdotool mousemove 820 553 click 1
