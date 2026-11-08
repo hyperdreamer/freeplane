@@ -45,6 +45,7 @@ import org.freeplane.main.application.ApplicationResourceController;
 import org.freeplane.main.application.CommandLineParser;
 import org.freeplane.main.headlessmode.FreeplaneHeadlessStarter;
 import org.freeplane.plugin.graph.projection.input.SafeNodeLabel;
+import org.freeplane.plugin.graph.projection.input.TitleText;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -222,6 +223,189 @@ public class SafeNodeLabelExtractorShould {
         assertThat(extractor.extract(idless)).isEqualTo(SafeNodeLabel.of("idless numbered node", "idless numbered node"));
         assertThat(idless.getID()).isNull();
         assertThat(map.registryCalls).isZero();
+    }
+
+    @Test
+    public void latexPrefixedNodeIsOneFormulaRun() {
+        NodeModel node = new NodeModel("\\latex Theorem: $ON$ is well-ordered by $\\in$", null);
+        SafeNodeLabel label = extractor.extract(node);
+        String expected = "Theorem: $ON$ is well-ordered by $\\in$";
+
+        TitleText.Math run = onlyMathRun(label);
+        assertThat(run.source()).isEqualTo(expected);
+        assertThat(run.rawSource()).isEqualTo(expected);
+        assertThat(label.fullText()).isEqualTo(expected);
+        assertThat(label.displayText()).isEqualTo(expected);
+    }
+
+    @Test
+    public void latexPrefixedTextWithoutDelimitersIsWrappedFormula() {
+        NodeModel node = new NodeModel("\\latex K\"onig's Theorem I", null);
+        SafeNodeLabel label = extractor.extract(node);
+
+        TitleText.Math run = onlyMathRun(label);
+        assertThat(run.source()).isEqualTo("\\text{K\"onig's Theorem I}");
+        assertThat(run.rawSource()).isEqualTo("K\"onig's Theorem I");
+        assertThat(label.displayText()).isEqualTo("K\"onig's Theorem I");
+    }
+
+    @Test
+    public void combinedPatternFormatAndPrefixStripsBodyPrefix() {
+        NodeModel node = new NodeModel("\\latex $x_2=3$", null);
+        NodeStyleModel.setNodeFormat(node, "latexPatternFormat");
+        SafeNodeLabel label = extractor.extract(node);
+
+        TitleText.Math run = onlyMathRun(label);
+        assertThat(label.displayText()).isEqualTo("\\latex $x_2=3$");
+        assertThat(run.source()).isEqualTo("$x_2=3$");
+        assertThat(run.rawSource()).isEqualTo("\\latex $x_2=3$");
+    }
+
+    @Test
+    public void plainNodeKeepsInlineParsing() {
+        SafeNodeLabel label = extractor.extract(new NodeModel("$a$ and $b$", null));
+
+        assertThat(label.title().runs()).hasSize(3);
+        assertThat(label.title().runs().get(0)).isInstanceOf(TitleText.Math.class);
+        assertThat(((TitleText.Math) label.title().runs().get(0)).source()).isEqualTo("a");
+        assertThat(((TitleText.Math) label.title().runs().get(0)).rawSource()).isEqualTo("$a$");
+        assertThat(label.title().runs().get(1)).isInstanceOf(TitleText.Plain.class);
+        assertThat(((TitleText.Plain) label.title().runs().get(1)).text()).isEqualTo(" and ");
+        assertThat(label.title().runs().get(2)).isInstanceOf(TitleText.Math.class);
+        assertThat(((TitleText.Math) label.title().runs().get(2)).source()).isEqualTo("b");
+        assertThat(((TitleText.Math) label.title().runs().get(2)).rawSource()).isEqualTo("$b$");
+    }
+
+    @Test
+    public void declarationProvenanceAndFallbacks() {
+        SafeNodeLabel doubled = extractor.extract(new NodeModel("\\latex \\latex $a$", null));
+        assertThat(doubled.fullText()).isEqualTo("\\latex $a$");
+        assertThat(doubled.displayText()).isEqualTo("\\latex $a$");
+        assertThat(onlyMathRun(doubled).source()).isEqualTo("\\latex $a$");
+        assertThat(onlyMathRun(doubled).rawSource()).isEqualTo("\\latex $a$");
+
+        SafeNodeLabel leadingWhitespace = extractor.extract(new NodeModel("  \\latex   $a$", null));
+        assertThat(leadingWhitespace.displayText()).isEqualTo("\\latex $a$");
+        assertThat(onlyMathRun(leadingWhitespace).source()).isEqualTo("$a$");
+        assertThat(onlyMathRun(leadingWhitespace).rawSource()).isEqualTo(leadingWhitespace.displayText());
+
+        SafeNodeLabel stripped = extractor.extract(new NodeModel("\\latex   $a$", null));
+        assertThat(stripped.displayText()).isEqualTo("$a$");
+        assertThat(onlyMathRun(stripped).source()).isEqualTo("$a$");
+        assertThat(onlyMathRun(stripped).rawSource()).isEqualTo("$a$");
+
+        SafeNodeLabel html = extractor.extract(new NodeModel("<html><body>\\latex $a$</body></html>", null));
+        assertThat(html.displayText()).isEqualTo("$a$");
+        assertThat(onlyMathRun(html).source()).isEqualTo("$a$");
+        assertThat(onlyMathRun(html).rawSource()).isEqualTo("$a$");
+
+        String htmlLookingFormula = "<html><body>literal formula source</body></html>";
+        SafeNodeLabel formatted = extractor.extract(
+            new NodeModel(new FormattedFormula(htmlLookingFormula, "ignored"), null));
+        assertThat(formatted.fullText()).isEqualTo(htmlLookingFormula);
+        assertThat(formatted.displayText()).isEqualTo(htmlLookingFormula);
+        assertThat(formatted.title().runs()).hasSize(1);
+        assertThat(formatted.title().runs().get(0)).isInstanceOf(TitleText.Plain.class);
+        assertThat(((TitleText.Plain) formatted.title().runs().get(0)).text()).isEqualTo(htmlLookingFormula);
+    }
+
+    @Test
+    public void emptyPrefixBodyKeepsOrdinaryLabel() {
+        SafeNodeLabel latex = extractor.extract(new NodeModel("\\latex ", null));
+        SafeNodeLabel unparsed = extractor.extract(new NodeModel("\\unparsedlatex ", null));
+        SafeNodeLabel latexTab = extractor.extract(new NodeModel("\\latex \t", null));
+        SafeNodeLabel unparsedSpace = extractor.extract(new NodeModel("\\unparsedlatex\u00A0", null));
+        SafeNodeLabel leadingLatex = extractor.extract(new NodeModel(" \\latex  ", null));
+        SafeNodeLabel leadingUnparsed = extractor.extract(new NodeModel(" \\unparsedlatex  ", null));
+
+        assertThat(latex.fullText()).isEqualTo("Node");
+        assertThat(unparsed.fullText()).isEqualTo("Node");
+        assertThat(latexTab.fullText()).isEqualTo("Node");
+        assertThat(unparsedSpace.fullText()).isEqualTo("Node");
+        assertThat(leadingLatex.displayText()).isEqualTo("\\latex");
+        assertThat(leadingUnparsed.displayText()).isEqualTo("\\unparsedlatex");
+        assertThat(latex.title().hasMath()).isFalse();
+        assertThat(unparsed.title().hasMath()).isFalse();
+        assertThat(latexTab.title().hasMath()).isFalse();
+        assertThat(unparsedSpace.title().hasMath()).isFalse();
+        assertThat(leadingLatex.title().hasMath()).isFalse();
+        assertThat(leadingUnparsed.title().hasMath()).isFalse();
+
+        NodeModel emptyLatexPattern = new NodeModel("", null);
+        NodeStyleModel.setNodeFormat(emptyLatexPattern, "latexPatternFormat");
+        NodeModel emptyUnparsedPattern = new NodeModel("", null);
+        NodeStyleModel.setNodeFormat(emptyUnparsedPattern, "unparsedLatexPatternFormat");
+        NodeModel emptyMarkdownPattern = new NodeModel("", null);
+        NodeStyleModel.setNodeFormat(emptyMarkdownPattern, "markdownPatternFormat");
+        SafeNodeLabel emptyLatex = extractor.extract(emptyLatexPattern);
+        SafeNodeLabel emptyUnparsed = extractor.extract(emptyUnparsedPattern);
+        SafeNodeLabel emptyMarkdown = extractor.extract(emptyMarkdownPattern);
+        SafeNodeLabel nullContent = extractor.extract(new NodeModel(null, null));
+        SafeNodeLabel emptyContent = extractor.extract(new NodeModel("", null));
+        assertThat(emptyLatex.fullText()).isEqualTo("Node");
+        assertThat(emptyUnparsed.fullText()).isEqualTo("Node");
+        assertThat(emptyMarkdown.fullText()).isEqualTo("Node");
+        assertThat(nullContent.fullText()).isEqualTo("Node");
+        assertThat(emptyContent.fullText()).isEqualTo("Node");
+        assertThat(emptyLatex.title().hasMath()).isFalse();
+        assertThat(emptyUnparsed.title().hasMath()).isFalse();
+        assertThat(emptyMarkdown.title().hasMath()).isFalse();
+        assertThat(nullContent.title().hasMath()).isFalse();
+        assertThat(emptyContent.title().hasMath()).isFalse();
+
+        MapModel map = mapWithRoot();
+        NodeModel source = new NodeModel("", map);
+        map.getRootNode().insert(source);
+        NodeLinks.createLinkExtension(source).setLocalHyperlink(source, ID_HIDDEN);
+        SafeNodeLabel linkOnly = extractor.extract(source);
+        assertThat(linkOnly.fullText()).isEqualTo("#ID_HIDDEN");
+        assertThat(linkOnly.title().hasMath()).isFalse();
+
+        TestIcon descriptionlessIcon = new TestIcon("fallback-name", "");
+        NodeModel iconOnly = new NodeModel("", null);
+        iconOnly.addIcon(descriptionlessIcon);
+        SafeNodeLabel iconLabel = extractor.extract(iconOnly);
+        assertThat(iconLabel.fullText()).isEqualTo("fallback-name");
+        assertThat(iconLabel.title().hasMath()).isFalse();
+    }
+
+    @Test
+    public void cappedDisplayTextIsTheBodySource() {
+        StringBuilder bodyBuilder = new StringBuilder();
+        for (int index = 0; index < 76; index++) {
+            bodyBuilder.append('a');
+        }
+        bodyBuilder.append(repeatedEmoji(1)).append("bbbbbbbbbb");
+        String body = bodyBuilder.toString();
+        SafeNodeLabel label = extractor.extract(new NodeModel("\\latex " + body, null));
+        String expectedDisplay = body.substring(0, body.offsetByCodePoints(0, 77)) + "...";
+
+        assertThat(label.fullText()).isEqualTo(body);
+        assertThat(label.displayText()).isEqualTo(expectedDisplay);
+        assertThat(label.displayText().codePointCount(0, label.displayText().length())).isEqualTo(80);
+        assertThat(hasUnpairedSurrogate(label.displayText())).isFalse();
+        TitleText.Math run = onlyMathRun(label);
+        assertThat(run.rawSource()).isEqualTo(label.displayText());
+        assertThat(run.source()).isEqualTo("\\text{" + label.displayText() + "}");
+        assertThat(run.source()).doesNotContain("b");
+    }
+
+    @Test
+    public void markdownPatternFormatWithNoDollarBodyIsWrapped() {
+        NodeModel node = new NodeModel("\\latex K", null);
+        NodeStyleModel.setNodeFormat(node, "markdownPatternFormat");
+        SafeNodeLabel label = extractor.extract(node);
+
+        assertThat(label.fullText()).isEqualTo("\\latex K");
+        assertThat(label.displayText()).isEqualTo("\\latex K");
+        assertThat(onlyMathRun(label).source()).isEqualTo("K");
+        assertThat(onlyMathRun(label).rawSource()).isEqualTo("\\latex K");
+    }
+
+    private TitleText.Math onlyMathRun(SafeNodeLabel label) {
+        assertThat(label.title().runs()).hasSize(1);
+        assertThat(label.title().runs().get(0)).isInstanceOf(TitleText.Math.class);
+        return (TitleText.Math) label.title().runs().get(0);
     }
 
     @Test
