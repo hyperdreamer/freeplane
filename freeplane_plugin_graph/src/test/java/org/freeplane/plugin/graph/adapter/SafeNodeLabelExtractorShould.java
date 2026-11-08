@@ -240,13 +240,40 @@ public class SafeNodeLabelExtractorShould {
 
     @Test
     public void latexPrefixedTextWithoutDelimitersIsWrappedFormula() {
-        NodeModel node = new NodeModel("\\latex K\"onig's Theorem I", null);
+        NodeModel node = new NodeModel("\\latex K\\\"onig's Theorem I", null);
         SafeNodeLabel label = extractor.extract(node);
 
         TitleText.Math run = onlyMathRun(label);
-        assertThat(run.source()).isEqualTo("\\text{K\"onig's Theorem I}");
-        assertThat(run.rawSource()).isEqualTo("K\"onig's Theorem I");
-        assertThat(label.displayText()).isEqualTo("K\"onig's Theorem I");
+        assertThat(run.source()).isEqualTo("\\text{K\\\"onig's Theorem I}");
+        assertThat(run.rawSource()).isEqualTo("K\\\"onig's Theorem I");
+        assertThat(label.displayText()).isEqualTo("K\\\"onig's Theorem I");
+    }
+
+    @Test
+    public void patternFormatsWithoutDollarKeepBareFormulaSources() {
+        NodeModel latexPattern = new NodeModel("latex formula body", null);
+        NodeStyleModel.setNodeFormat(latexPattern, "latexPatternFormat");
+        SafeNodeLabel latex = extractor.extract(latexPattern);
+        TitleText.Math latexRun = onlyMathRun(latex);
+        assertThat(latexRun.source()).isEqualTo("latex formula body");
+        assertThat(latexRun.source()).doesNotStartWith("\\text{");
+        assertThat(latexRun.rawSource()).isEqualTo("latex formula body");
+
+        NodeModel unparsedPattern = new NodeModel("unparsed formula body", null);
+        NodeStyleModel.setNodeFormat(unparsedPattern, "unparsedLatexPatternFormat");
+        SafeNodeLabel unparsed = extractor.extract(unparsedPattern);
+        TitleText.Math unparsedRun = onlyMathRun(unparsed);
+        assertThat(unparsedRun.source()).isEqualTo("unparsed formula body");
+        assertThat(unparsedRun.source()).doesNotStartWith("\\text{");
+        assertThat(unparsedRun.rawSource()).isEqualTo("unparsed formula body");
+
+        NodeModel declaredUnparsedPattern = new NodeModel("\\unparsedlatex unparsed formula body", null);
+        NodeStyleModel.setNodeFormat(declaredUnparsedPattern, "unparsedLatexPatternFormat");
+        SafeNodeLabel declaredUnparsed = extractor.extract(declaredUnparsedPattern);
+        TitleText.Math declaredUnparsedRun = onlyMathRun(declaredUnparsed);
+        assertThat(declaredUnparsedRun.source()).isEqualTo("unparsed formula body");
+        assertThat(declaredUnparsedRun.source()).doesNotStartWith("\\text{");
+        assertThat(declaredUnparsedRun.rawSource()).isEqualTo("\\unparsedlatex unparsed formula body");
     }
 
     @Test

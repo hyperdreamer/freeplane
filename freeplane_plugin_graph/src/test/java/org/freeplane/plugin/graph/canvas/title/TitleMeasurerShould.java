@@ -54,6 +54,8 @@ public class TitleMeasurerShould {
         assertThat(measurer.deferredInLastPass()).isZero();
         assertThat(measurer.pendingCount()).isZero();
         assertThat(measurer.budgetExhaustedInLastPass()).isFalse();
+        assertThat(measurer.stalled()).isFalse();
+        assertThat(measurer.stallDiagnostic()).isNull();
 
         final MeasuredTitle plainTitle = measurer.measure(TitleText.plain(text), FONT);
         assertThat(plainTitle.availability()).isEqualTo(MeasuredTitle.Availability.RENDERED);
